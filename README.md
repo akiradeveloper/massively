@@ -115,7 +115,7 @@ against a compiled Lean oracle with generated property tests.
 The non-specialist summary, exact proof boundary, Lean development, and oracle
 are collected in the [Traversal Algebra artifact](traversal-algebra/). The
 current research paper is also available as a
-[prebuilt PDF](traversal-algebra/paper.pdf).
+[prebuilt PDF](traversal-algebra/paper/paper.pdf).
 
 The graph layer uses the same device storage, lazy expressions, multi-column
 values, and parallel primitives as the vector API. It is part of the main crate
@@ -247,35 +247,34 @@ again.
 
 The `zip2` through `zip12` helpers combine slices or lazy iterators into one
 logical row stream. For example, `zip3(a, b, c)` has item type
-`Tuple3<A, B, C>`.
-The matching `unzip2` through `unzip12` helpers consume a `Zip` and recover its
-individual children. When used on a returned multi-column `MVec`, this moves
-out the owning `DeviceVec` columns without copying or reallocating device data.
-The `Tuple2` through `Tuple12` aliases and `tuple2` through `tuple12`
-constructors create fixed-arity values. `flatten3` through `flatten12`
-destructure them without exposing the internal binary-tree representation.
-The tuple helpers can be called directly from a user-defined CubeCL operation.
+`(A, B, C)`. `zip` is associative at the schema level: both
+`zip2(zip2(a, b), c)` and
+`zip2(a, zip2(b, c))` expose the same flat item type. The internal storage tree
+is not part of the public contract.
+
+For an owned multi-column `MVec`, `MStorage::into_columns` returns a native flat
+tuple of owning `DeviceVec` columns without copying or reallocating device data.
+Tuple types, literals, and destructuring use Rust's native tuple syntax directly,
+including inside a user-defined CubeCL operation.
 
 Conceptually:
 
 ```text
 DeviceSlice<T>                         = MIter<Item = T>
-zip2(a, b)                             = MIter<Item = Tuple2<A, B>>
-zip3(a, b, c)                          = MIter<Item = Tuple3<A, B, C>>
-unzip3(zip3(a, b, c))                  = (a, b, c)
-zip2(out_a, out_b)                     = MIterMut<Item = Tuple2<A, B>>
-tuple3(a, b, c)                        = Tuple3<A, B, C>
-flatten3(value)                        = (A, B, C)
+zip2(a, b)                             = MIter<Item = (A, B)>
+zip3(a, b, c)                          = MIter<Item = (A, B, C)>
+zip2(zip2(a, b), c)                    = MIter<Item = (A, B, C)>
+zip2(a, zip2(b, c))                    = MIter<Item = (A, B, C)>
+zip2(out_a, out_b)                     = MIterMut<Item = (A, B)>
+MStorage::into_columns(output3)        = (DeviceVec<A>, DeviceVec<B>, DeviceVec<C>)
 lazy::transform(input, op)             = fused lazy computation
 lazy::permute(values, indices)         = lazy indexed view
 lazy::reverse(input)                    = lazy reversed view
 ```
 
-General input and output items support up to seven columns. By-key algorithms
-support up to three key columns and seven value columns. Output iterators are
-always created before an algorithm runs. If the ordered leaf types match,
-`WritableFrom` lets an algorithm write a compatible tuple value without the user
-manually matching its internal association.
+Input and output items support up to twelve columns. Output iterators are always
+created before an algorithm runs. An operation that intentionally changes a
+row schema expresses that conversion explicitly with `transform`.
 
 ### Lazy Iterators
 

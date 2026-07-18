@@ -30,7 +30,7 @@ impl UnaryOp<u32> for U32ToUsize {
     }
 }
 
-/// Compile-time unary operation used by [`crate::read::Transform`].
+/// Compile-time unary operation used by [`crate::lazy::Transform`].
 ///
 /// # Examples
 ///

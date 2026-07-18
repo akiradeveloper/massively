@@ -4,7 +4,6 @@ use cubecl::prelude::*;
 
 use crate::{
     A13, Dispatch, Error, Executor, MStorageElement, ReadExpression, S12, StorageLayout, Transform,
-    WritableFrom,
     eval::Eval13,
     op::UnaryOp,
     output::{
@@ -21,8 +20,7 @@ macro_rules! define_padded_materialize_kernel {
     ($name:ident, $eval:ident, $method:ident; [$( $leaf:ident : $slot:ident ),+]) => {
         #[cubecl::cube(launch_unchecked, explicit_define)]
         fn $name<
-            Source: CubeType + Send + Sync + 'static,
-            Target: WritableFrom<Source> + Send + Sync + 'static,
+            Item: CubeType + Send + Sync + 'static,
             $( $leaf: CubePrimitive, )+
             O0: CubePrimitive,
             O1: CubePrimitive,
@@ -41,8 +39,8 @@ macro_rules! define_padded_materialize_kernel {
                     O0 = O0, O1 = O1, O2 = O2, O3 = O3, O4 = O4, O5 = O5,
                     O6 = O6, O7 = O7, O8 = O8, O9 = O9, O10 = O10, O11 = O11,
                 >,
-            Expr: $eval<Source, $( $leaf ),+>,
-            Layout: Decompose<Target, Leaves = Leaves>,
+            Expr: $eval<Item, $( $leaf ),+>,
+            Layout: Decompose<Item, Leaves = Leaves>,
         >(
             $( $slot: &[$leaf], )+
             read_offsets: &[u32],
@@ -63,9 +61,8 @@ macro_rules! define_padded_materialize_kernel {
         ) {
             let index = ABSOLUTE_POS as usize;
             if index < len[0] as usize {
-                let source = Expr::$method($( $slot, )+ read_offsets, index);
-                let target = Target::write_from(source);
-                Layout::decompose(target).store_padded(
+                let value = Expr::$method($( $slot, )+ read_offsets, index);
+                Layout::decompose(value).store_padded(
                     out0, out1, out2, out3, out4, out5, out6, out7, out8, out9, out10, out11,
                     write_offsets, index,
                 );
@@ -84,8 +81,11 @@ pub(crate) fn materialize_fixed<R, Input, Output>(
 where
     R: Runtime,
     Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
-    Output: crate::core::facade::KernelOutput<R>,
-    Output::Item: StorageLayout + WritableFrom<Input::Item>,
+    Input::Item: StorageLayout,
+    <Input::Item as StorageLayout>::StorageLeaves: StorePadded12,
+    <<Input::Item as StorageLayout>::StorageLeaves as CubeType>::ExpandType: StorePadded12Expand,
+    Output: OutputExpression<Item = Input::Item> + LowerOutputExpression + StageOutput<R, Env0>,
+    Output::Slots: PaddedOutputSlots<Leaves = <Input::Item as StorageLayout>::StorageLeaves>,
 {
     let input_len = input.logical_len()?;
     let output_len = output.logical_len()?;
@@ -116,7 +116,6 @@ where
     unsafe {
         materialize_a13::launch_unchecked::<
             Input::Item,
-            Output::Item,
             <Input::Slots as PaddedReadSlots>::L0,
             <Input::Slots as PaddedReadSlots>::L1,
             <Input::Slots as PaddedReadSlots>::L2,
@@ -225,6 +224,7 @@ macro_rules! impl_padded_materialize_dispatch {
                 O0 = O0, O1 = O1, O2 = O2, O3 = O3, O4 = O4, O5 = O5,
                 O6 = O6, O7 = O7, O8 = O8, O9 = O9, O10 = O10, O11 = O11,
             >,
+            <Leaves as CubeType>::ExpandType: StorePadded12Expand,
             Output::Slots: PaddedOutputSlots<Leaves = Leaves>,
             Input: ReadExpression<Item = Source> + LowerReadExpression + StageRead<R, Env0>,
             Input::Slots: PaddedReadSlots<
@@ -243,8 +243,10 @@ macro_rules! impl_padded_materialize_dispatch {
                 L12 = L12,
             >,
             Input::DeviceExpr: $eval<Source, $( $leaf ),+>,
-            Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
-            Output::Item: StorageLayout<StorageLeaves = Leaves> + WritableFrom<Source>,
+            Source: StorageLayout<StorageLeaves = Leaves>,
+            Output: OutputExpression<Item = Source>
+                + LowerOutputExpression
+                + StageOutput<R, Env0>,
             <Output::Item as StorageLayout>::DeviceLayout:
                 Decompose<Output::Item, Leaves = Leaves>,
         {
@@ -266,9 +268,8 @@ pub(crate) fn materialize<R, Input, Output>(
 where
     R: Runtime,
     Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
-    Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
+    Output: OutputExpression<Item = Input::Item> + LowerOutputExpression + StageOutput<R, Env0>,
     Output::Slots: PaddedOutputSlots,
-    Output::Item: WritableFrom<Input::Item>,
     Dispatch<A13, S12>: MaterializeDispatch<
             R,
             Input,
@@ -297,11 +298,13 @@ where
     R: Runtime,
     Input: ReadExpression,
     Op: UnaryOp<Input::Item>,
+    Op::Output: crate::api::iter::KernelRow,
     Transform<Input, Op>:
         ReadExpression<Item = Op::Output> + LowerReadExpression + StageRead<R, Env0>,
-    Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
+    Output: OutputExpression<Item = <Op as UnaryOp<Input::Item>>::Output>
+        + LowerOutputExpression
+        + StageOutput<R, Env0>,
     Output::Slots: PaddedOutputSlots,
-    Output::Item: WritableFrom<<Op as UnaryOp<Input::Item>>::Output>,
     Dispatch<A13, S12>: MaterializeDispatch<
             R,
             Transform<Input, Op>,
@@ -325,11 +328,13 @@ where
     R: Runtime,
     Input: ReadExpression,
     Op: UnaryOp<Input::Item>,
+    Op::Output: crate::api::iter::KernelRow,
     Transform<Input, Op>:
         ReadExpression<Item = Op::Output> + LowerReadExpression + StageRead<R, Env0>,
-    Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
+    Output: OutputExpression<Item = <Op as UnaryOp<Input::Item>>::Output>
+        + LowerOutputExpression
+        + StageOutput<R, Env0>,
     Output::Slots: PaddedOutputSlots<Leaves = <Output::Item as StorageLayout>::StorageLeaves>,
-    Output::Item: WritableFrom<<Op as UnaryOp<Input::Item>>::Output>,
     <Output::Item as StorageLayout>::StorageLeaves: StorePadded12,
     <<Output::Item as StorageLayout>::StorageLeaves as CubeType>::ExpandType: StorePadded12Expand,
 {
@@ -365,7 +370,7 @@ mod tests {
     }
 
     #[test]
-    fn materialize_a3_s3_reassociates_only_at_write_boundary() {
+    fn materialize_a3_s3_writes_flat_rows() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let a = exec.to_device(&[1_u32, 2, 3]);
         let b = exec.to_device(&[10_f32, 20.0, 30.0]);
@@ -387,7 +392,7 @@ mod tests {
     }
 
     #[test]
-    fn materialize_a8_s7_uses_the_canonical_evaluator_and_writer() {
+    fn materialize_a8_s7_uses_the_flat_evaluator_and_writer() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let columns: Vec<_> = (0_u32..7)
             .map(|column| exec.to_device(&[column * 10 + 1, column * 10 + 2, column * 10 + 3]))

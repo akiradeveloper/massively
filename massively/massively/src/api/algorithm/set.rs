@@ -2,10 +2,7 @@
 
 use cubecl::prelude::Runtime;
 
-use crate::{
-    Error, Executor, MIter, MIterMut, MStorage, MVec, ToCanonical, WritableFrom,
-    op::BinaryPredicateOp,
-};
+use crate::{Error, Executor, MItem, MIter, MIterMut, MStorage, MVec, op::BinaryPredicateOp};
 
 macro_rules! set_api {
     ($name:ident, $into_name:ident, $mode:literal, $capacity:expr, $doc:literal) => {
@@ -20,7 +17,7 @@ macro_rules! set_api {
             R: Runtime,
             Left: MIter<R, Item = Item>,
             Right: MIter<R, Item = Item>,
-            Item: ToCanonical<R>,
+            Item: MItem<R>,
             Less: BinaryPredicateOp<Item>,
         {
             let left_len = left.len()? as usize;
@@ -45,10 +42,9 @@ macro_rules! set_api {
             R: Runtime,
             Left: MIter<R>,
             Right: MIter<R, Item = Left::Item>,
-            Left::Item: crate::api::iter::CanonicalAbi<R>,
+            Left::Item: crate::api::iter::MItem<R>,
             Less: BinaryPredicateOp<Left::Item>,
-            Output: MIterMut<R>,
-            Output::Item: WritableFrom<Left::Item>,
+            Output: MIterMut<R, Item = Left::Item>,
         {
             let left = crate::allocation::normalize_lowered(
                 exec,
@@ -58,7 +54,7 @@ macro_rules! set_api {
                 exec,
                 crate::api::iter::lower_fixed::<R, _>(right),
             )?;
-            crate::core::set::set_canonical(exec, &left, &right, less, output.lower_output(), $mode)
+            crate::core::set::set_storage(exec, &left, &right, less, output.lower_output(), $mode)
         }
     };
 }

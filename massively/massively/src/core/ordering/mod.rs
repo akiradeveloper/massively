@@ -5,7 +5,7 @@ use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 use crate::{
-    A13, CanonicalAlloc, DeviceVec, Dispatch, Error, Executor, MStorageElement, ReadExpression,
+    A13, DeviceVec, Dispatch, Error, Executor, MStorageElement, ReadExpression, RowAlloc,
     arg_reduce::{ArgReduceDispatch, ArgReductionOp, arg_reduce},
     eval::Eval13,
     launch::cube_count_1d,
@@ -269,7 +269,7 @@ macro_rules! impl_adjacent_flags_dispatch {
                         right: order.len(),
                     });
                 }
-                let flags = exec.alloc_canonical::<u32>(len);
+                let flags = exec.alloc_row::<u32>(len);
                 if len == 0 {
                     return Ok(flags);
                 }
@@ -439,7 +439,7 @@ macro_rules! impl_sort_control_dispatch {
         {
             fn run(exec: &Executor<R>, input: &Input) -> Result<DeviceVec<R, u32>, Error> {
                 let len = input.logical_len()?;
-                let mut current = exec.alloc_canonical::<u32>(len);
+                let mut current = exec.alloc_row::<u32>(len);
                 if len == 0 {
                     return Ok(current);
                 }
@@ -458,7 +458,7 @@ macro_rules! impl_sort_control_dispatch {
                 if len == 1 {
                     return Ok(current);
                 }
-                let mut next = exec.alloc_canonical::<u32>(len);
+                let mut next = exec.alloc_row::<u32>(len);
                 let mut reads = StagedBindings::new();
                 input.stage_at(exec.client(), exec.id(), &mut reads)?;
                 reads.pad_to_thirteen(exec.client());
@@ -542,8 +542,8 @@ where
 }
 
 /// Public sort capability.  The blanket implementation first normalizes an
-/// arbitrary fixed-ABI semantic expression into canonical storage, then runs
-/// the storage-width sort and materializes its semantic shape into the output.
+/// arbitrary fixed-ABI expression into flat-row storage, then runs the
+/// storage-width sort and materializes it into the output.
 #[doc(hidden)]
 pub trait SortInput<R: Runtime, Less, Output>: ReadExpression + Sized {
     fn sort_into(self, exec: &Executor<R>, output: Output) -> Result<(), Error>;
@@ -554,10 +554,8 @@ where
     R: Runtime,
     Input: crate::allocation::NormalizeInput<R>,
     Less: BinaryPredicateOp<Input::Item>,
-    Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
-    Output::Item: crate::WritableFrom<Input::Item>,
-    Input::Item:
-        CanonicalAlloc<R, CanonicalStorage = Input::Storage> + crate::api::iter::SortAbi<R>,
+    Output: OutputExpression<Item = Input::Item> + LowerOutputExpression + StageOutput<R, Env0>,
+    Input::Item: RowAlloc<R, RowStorage = Input::Storage> + crate::api::iter::SortAbi<R>,
     Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
             R,
             Input::SemanticRead,
@@ -610,10 +608,8 @@ where
     R: Runtime,
     Input: crate::allocation::NormalizeInput<R>,
     Less: BinaryPredicateOp<Input::Item>,
-    Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
-    Output::Item: crate::WritableFrom<Input::Item>,
-    Input::Item:
-        CanonicalAlloc<R, CanonicalStorage = Input::Storage> + crate::api::iter::SortAbi<R>,
+    Output: OutputExpression<Item = Input::Item> + LowerOutputExpression + StageOutput<R, Env0>,
+    Input::Item: RowAlloc<R, RowStorage = Input::Storage> + crate::api::iter::SortAbi<R>,
     Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
             R,
             Input::SemanticRead,
@@ -963,10 +959,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CanonicalStorage, Counting, Permute, Transform, Zip};
+    use crate::{Counting, Permute, RowStorage, Transform, Zip};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
-    type Seven = (u32, (u32, (u32, (u32, (u32, (u32, u32))))));
+    type Seven = (u32, u32, u32, u32, u32, u32, u32);
     struct LexicographicLess;
 
     #[cubecl::cube]
@@ -982,12 +978,12 @@ mod tests {
     impl BinaryPredicateOp<Seven> for EqualSeven {
         fn apply(lhs: Seven, rhs: Seven) -> bool {
             lhs.0 == rhs.0
-                && lhs.1.0 == rhs.1.0
-                && lhs.1.1.0 == rhs.1.1.0
-                && lhs.1.1.1.0 == rhs.1.1.1.0
-                && lhs.1.1.1.1.0 == rhs.1.1.1.1.0
-                && lhs.1.1.1.1.1.0 == rhs.1.1.1.1.1.0
-                && lhs.1.1.1.1.1.1 == rhs.1.1.1.1.1.1
+                && lhs.1 == rhs.1
+                && lhs.2 == rhs.2
+                && lhs.3 == rhs.3
+                && lhs.4 == rhs.4
+                && lhs.5 == rhs.5
+                && lhs.6 == rhs.6
         }
     }
 
@@ -1001,7 +997,7 @@ mod tests {
     }
 
     #[test]
-    fn sorted_queries_dispatch_eval8_without_flattening_items() {
+    fn sorted_queries_dispatch_eval8_with_flat_rows() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let first = exec.to_device(&[1_u32, 1, 2, 2]);
         let second = exec.to_device(&[0_u32, 1, 0, 1]);
@@ -1090,20 +1086,21 @@ mod tests {
             seven,
             Transform::new(Counting::new(0, len), crate::op::U32ToUsize),
         );
-        let output = exec.alloc_canonical::<Seven>(len);
+        let output = exec.alloc_row::<Seven>(len);
 
         sort(&exec, input, LexicographicLess, output.write()).unwrap();
 
-        let sorted_keys = exec.to_host(&output.0.0.0.0.0.0).unwrap();
-        let sorted_rows = exec.to_host(&output.0.0.0.0.0.1).unwrap();
+        let (keys, rows, payload2, _, _, _, payload6) = crate::MStorage::into_columns(output);
+        let sorted_keys = exec.to_host(&keys).unwrap();
+        let sorted_rows = exec.to_host(&rows).unwrap();
         for index in 1..len {
             assert!(sorted_keys[index - 1] <= sorted_keys[index]);
             if sorted_keys[index - 1] == sorted_keys[index] {
                 assert!(sorted_rows[index - 1] < sorted_rows[index]);
             }
         }
-        let sorted_payload2 = exec.to_host(&output.0.0.0.0.1).unwrap();
-        let sorted_payload6 = exec.to_host(&output.1).unwrap();
+        let sorted_payload2 = exec.to_host(&payload2).unwrap();
+        let sorted_payload6 = exec.to_host(&payload6).unwrap();
         for index in 0..len {
             assert_eq!(sorted_payload2[index], sorted_rows[index] + 2_000);
             assert_eq!(sorted_payload6[index], sorted_rows[index] + 6_000);
@@ -1143,12 +1140,12 @@ mod tests {
             adjacent_find(&exec, make_input(), EqualSeven).unwrap(),
             Some(0)
         );
-        let output = exec.alloc_canonical::<Seven>(5);
+        let output = exec.alloc_row::<Seven>(5);
         let count = unique(&exec, make_input(), EqualSeven, output.write()).unwrap();
+        let (first, _, _, _, _, _, _) = crate::MStorage::into_columns(output);
         assert_eq!(count, 3);
         assert_eq!(
-            exec.to_host(&output.0.0.0.0.0.0.slice(..count as usize))
-                .unwrap(),
+            exec.to_host(&first.slice(..count as usize)).unwrap(),
             vec![1, 2, 3]
         );
     }

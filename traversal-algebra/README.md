@@ -16,9 +16,9 @@ and optimize as a family.
 This directory provides mathematical evidence for that design and tests its
 connection to the Rust/GPU implementation.
 
-The latest prebuilt paper is available as [`paper.pdf`](paper.pdf). Its title
-page records the UTC build time as the revision, so it can be read directly
-without installing LaTeX or running Docker.
+The latest prebuilt paper is available as
+[`paper/paper.pdf`](paper/paper.pdf). Its title page records the UTC build date,
+so it can be read directly without installing LaTeX or running Docker.
 
 ## The short version
 
@@ -115,7 +115,7 @@ reproducible.
 Run these commands at the repository root:
 
 ```text
-just ta::paper             rebuild paper.pdf in Docker
+just ta::paper             rebuild paper/paper.pdf in Docker
 just ta::proof             check every Lean definition and theorem in Docker
 just ta::generate          evaluate the Lean model and generate Rust fixtures
 just ta::check-generated   verify that committed fixtures are current

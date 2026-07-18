@@ -4,34 +4,13 @@ use core::marker::PhantomData;
 use cubecl::prelude::{ComputeClient, Runtime};
 use std::ops::RangeBounds;
 
+use crate::storage::{Concat, FlatLeaves, FlatRow, JoinedRow};
 use crate::{
     Column, DeviceSliceMut, Error, MStorageElement, S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11,
     S12, StorageLayout, Zip,
     read::{Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, Env8, Env9, Env10, Env11, Env12},
     storage::StorageArity,
 };
-
-/// Presents a physically compatible output sink as another semantic item
-/// shape. The buffers are unchanged; only the item reconstructed at the write
-/// boundary is different.
-#[doc(hidden)]
-pub struct ReassociatedOutput<Output, Source, Slots> {
-    output: Output,
-    _marker: PhantomData<fn() -> (Source, Slots)>,
-}
-
-impl<Output, Source, Slots> ReassociatedOutput<Output, Source, Slots> {
-    pub fn new(output: Output) -> Self {
-        Self {
-            output,
-            _marker: PhantomData,
-        }
-    }
-
-    pub(crate) fn into_inner(self) -> Output {
-        self.output
-    }
-}
 
 /// A zero-copy mutable subrange tied to the runtime selected by `MIterMut`.
 #[derive(Clone, Copy, Debug)]
@@ -82,47 +61,6 @@ where
 
     fn slice_read<Range: RangeBounds<usize>>(&self, range: Range) -> Self::Read {
         crate::read::Slice::new(self.output.slice_read(range))
-    }
-}
-
-impl<Output, Source, Slots> OutputExpression for ReassociatedOutput<Output, Source, Slots>
-where
-    Output: OutputExpression,
-    Source: StorageLayout,
-    Output::Item: crate::WritableFrom<Source>,
-    Slots: OutputSlotEnvironment<StorageArity = Source::StorageArity>,
-{
-    type Item = Source;
-    type StorageArity = Source::StorageArity;
-
-    fn logical_len(&self) -> Result<usize, Error> {
-        self.output.logical_len()
-    }
-}
-
-impl<Output, Source, Slots> SliceOutput for ReassociatedOutput<Output, Source, Slots>
-where
-    Output: SliceOutput,
-    Source: StorageLayout,
-    Output::Item: crate::WritableFrom<Source>,
-    Slots: OutputSlotEnvironment<StorageArity = Source::StorageArity>,
-{
-    fn slice_output<Range: RangeBounds<usize>>(&self, range: Range) -> Self {
-        Self::new(self.output.slice_output(range))
-    }
-}
-
-impl<Output, Source, Slots> ReadOutput for ReassociatedOutput<Output, Source, Slots>
-where
-    Output: ReadOutput,
-    Source: StorageLayout + crate::WritableFrom<Output::Item>,
-    Output::Item: crate::WritableFrom<Source>,
-    Slots: OutputSlotEnvironment<StorageArity = Source::StorageArity>,
-{
-    type Read = crate::read::Reassociate<Output::Read, Source>;
-
-    fn slice_read<Range: RangeBounds<usize>>(&self, range: Range) -> Self::Read {
-        crate::read::Reassociate::new(self.output.slice_read(range))
     }
 }
 
@@ -183,9 +121,16 @@ impl<Left, Right> OutputExpression for Zip<Left, Right>
 where
     Left: OutputExpression,
     Right: OutputExpression,
-    (Left::Item, Right::Item): StorageLayout,
+    Left::Item: FlatRow,
+    Right::Item: FlatRow,
+    <Left::Item as StorageLayout>::StorageLeaves:
+        FlatLeaves<Item = Left::Item> + Concat<<Right::Item as StorageLayout>::StorageLeaves>,
+    <Right::Item as StorageLayout>::StorageLeaves: FlatLeaves<Item = Right::Item>,
+    <<Left::Item as StorageLayout>::StorageLeaves as Concat<
+        <Right::Item as StorageLayout>::StorageLeaves,
+    >>::Output: FlatLeaves,
 {
-    type Item = (Left::Item, Right::Item);
+    type Item = JoinedRow<Left::Item, Right::Item>;
     type StorageArity = <Self::Item as StorageLayout>::StorageArity;
 
     fn logical_len(&self) -> Result<usize, Error> {
@@ -242,14 +187,6 @@ where
 #[doc(hidden)]
 pub trait BindOutputSlots<Env> {
     type NextEnv;
-}
-
-impl<Output, Source, Slots> BindOutputSlots<Env0> for ReassociatedOutput<Output, Source, Slots>
-where
-    Source: StorageLayout,
-    Slots: OutputSlotEnvironment<StorageArity = Source::StorageArity>,
-{
-    type NextEnv = Slots;
 }
 
 macro_rules! impl_output_leaf_binding {
@@ -459,19 +396,6 @@ impl OutputBindings {
 #[doc(hidden)]
 pub trait StageOutput<R: Runtime, Env>: BindOutputSlots<Env> {
     fn stage_output(&self, owner: u64, bindings: &mut OutputBindings) -> Result<(), Error>;
-}
-
-impl<R, Output, Source, Slots> StageOutput<R, Env0> for ReassociatedOutput<Output, Source, Slots>
-where
-    R: Runtime,
-    Output: OutputExpression + StageOutput<R, Env0>,
-    Source: StorageLayout,
-    Output::Item: crate::WritableFrom<Source>,
-    Slots: OutputSlotEnvironment<StorageArity = Source::StorageArity>,
-{
-    fn stage_output(&self, owner: u64, bindings: &mut OutputBindings) -> Result<(), Error> {
-        self.output.stage_output(owner, bindings)
-    }
 }
 
 macro_rules! impl_output_leaf_staging {

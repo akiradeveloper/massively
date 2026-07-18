@@ -1,9 +1,9 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
-    Executor, lazy,
+    Executor, MStorage, lazy,
     op::{BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp},
-    unzip3, vector,
+    vector,
 };
 
 struct AddOne;
@@ -24,10 +24,10 @@ impl UnaryOp<u32> for AddOne {
 
 #[cubecl::cube]
 impl UnaryOp<u32> for Triple {
-    type Output = (u32, (u32, u32));
+    type Output = (u32, u32, u32);
 
     fn apply(value: u32) -> Self::Output {
-        (value, (value + 10, value + 20))
+        (value, value + 10, value + 20)
     }
 }
 
@@ -145,11 +145,11 @@ fn u32_stencil_transform_treats_every_nonzero_value_as_true() {
 }
 
 #[test]
-fn owned_by_key_and_canonical_tuple_results() {
+fn owned_by_key_and_flat_tuple_results() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let input = exec.to_device(&[1_u32, 2]);
     let triples = vector::transform(&exec, input.slice(..), Triple).unwrap();
-    let (first, second, third) = unzip3(triples);
+    let (first, second, third) = MStorage::into_columns(triples);
     assert_eq!(exec.to_host(&first).unwrap(), vec![1, 2]);
     assert_eq!(exec.to_host(&second).unwrap(), vec![11, 12]);
     assert_eq!(exec.to_host(&third).unwrap(), vec![21, 22]);

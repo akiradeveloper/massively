@@ -2,7 +2,8 @@
 
 use cubecl::prelude::*;
 use massively::{
-    DeviceVec, Executor, MVec, graph, op::Identity, op::ReductionOp, op::UnaryOp, vector, zip2,
+    DeviceVec, Executor, MStorage, MVec, graph, op::Identity, op::ReductionOp, op::UnaryOp, vector,
+    zip2,
 };
 
 use super::common::{self, DeviceCsr};
@@ -19,14 +20,14 @@ impl ReductionOp<(f32, f32)> for SumCoordinates {
 struct UpdateCoordinates;
 
 #[cubecl::cube]
-impl UnaryOp<(((f32, f32), (f32, f32)), (u32, u32))> for UpdateCoordinates {
+impl UnaryOp<(f32, f32, f32, f32, u32, u32)> for UpdateCoordinates {
     type Output = (f32, f32);
 
-    fn apply(input: (((f32, f32), (f32, f32)), (u32, u32))) -> (f32, f32) {
-        let coordinates = input.0.0;
-        let sums = input.0.1;
-        let degree = input.1.0;
-        let known = input.1.1;
+    fn apply(input: (f32, f32, f32, f32, u32, u32)) -> (f32, f32) {
+        let coordinates = (input.0, input.1);
+        let sums = (input.2, input.3);
+        let degree = input.4;
+        let known = input.5;
         if known != 0u32 || degree == 0u32 {
             coordinates
         } else {
@@ -43,27 +44,20 @@ pub fn solve<R: Runtime>(
     iterations: usize,
 ) -> common::Result<MVec<R, (f32, f32)>> {
     let n = graph.vertex_count();
-    assert_eq!(initial.0.len(), n as usize);
-    assert_eq!(initial.1.len(), n as usize);
+    assert_eq!(initial.len()?, n as usize);
     assert_eq!(known.len(), n as usize);
     let degree = common::resident_degrees(exec, graph)?;
     let mut coordinates = initial.clone();
 
     for _ in 0..iterations {
         let sums = graph::traverse(exec, graph.csr(), common::counting_u32(0, n as usize))?
-            .map(
-                graph::destination(zip2(coordinates.0.slice(..), coordinates.1.slice(..))),
-                Identity,
-            )
+            .map(graph::destination(coordinates.slice(..)), Identity)
             .reduce_by_source(exec, (0.0, 0.0), SumCoordinates)?;
 
         coordinates = vector::transform(
             exec,
             zip2(
-                zip2(
-                    zip2(coordinates.0.slice(..), coordinates.1.slice(..)),
-                    zip2(sums.0.slice(..), sums.1.slice(..)),
-                ),
+                zip2(coordinates.slice(..), sums.slice(..)),
                 zip2(degree.slice(..), known.slice(..)),
             ),
             UpdateCoordinates,
@@ -83,13 +77,18 @@ mod tests {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
         let graph = common::CsrGraph::new(vec![0, 2, 3, 4], vec![1, 2, 0, 0]);
         let graph = DeviceCsr::from_host(&exec, &graph).unwrap();
-        let initial = zip2(
-            exec.to_device(&[0.0f32, 0.0, 2.0]),
-            exec.to_device(&[0.0f32, 0.0, 2.0]),
-        );
+        let latitude = exec.to_device(&[0.0f32, 0.0, 2.0]);
+        let longitude = exec.to_device(&[0.0f32, 0.0, 2.0]);
+        let initial = vector::transform(
+            &exec,
+            zip2(latitude.slice(..), longitude.slice(..)),
+            Identity,
+        )
+        .unwrap();
         let known = exec.to_device(&[0u32, 1, 1]);
         let result = solve(&exec, &graph, &initial, &known, 1).unwrap();
-        assert_eq!(exec.to_host(&result.0).unwrap(), vec![1.0, 0.0, 2.0]);
-        assert_eq!(exec.to_host(&result.1).unwrap(), vec![1.0, 0.0, 2.0]);
+        let (latitude, longitude) = MStorage::into_columns(result);
+        assert_eq!(exec.to_host(&latitude).unwrap(), vec![1.0, 0.0, 2.0]);
+        assert_eq!(exec.to_host(&longitude).unwrap(), vec![1.0, 0.0, 2.0]);
     }
 }

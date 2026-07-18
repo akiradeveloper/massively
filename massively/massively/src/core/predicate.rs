@@ -126,7 +126,7 @@ impl UnaryOp<(u32, u32)> for PartitionViolation {
     }
 }
 
-/// Internal capability proving that the input has a canonical predicate kernel.
+/// Internal capability proving that the input has a supported predicate kernel.
 #[doc(hidden)]
 pub trait PredicateInput<R: Runtime, Pred>: ReadExpression + Sized {
     fn predicate_len(&self) -> Result<usize, Error>;
@@ -239,7 +239,7 @@ where
 
     fn predicate_positions(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
         let len = self.logical_len()?;
-        let positions = exec.alloc_canonical::<u32>(len);
+        let positions = exec.alloc_row::<u32>(len);
         inclusive_scan(
             exec,
             Transform::new(self, PredicateMap::<Pred>(PhantomData)),
@@ -251,7 +251,7 @@ where
 
     fn predicate_flags(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
         let len = self.logical_len()?;
-        let flags = exec.alloc_canonical::<u32>(len);
+        let flags = exec.alloc_row::<u32>(len);
         transform(
             exec,
             self,
@@ -347,29 +347,29 @@ mod tests {
     use crate::{Counting, Permute, Zip};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
-    struct NestedMatch;
+    struct MatchTriple;
 
     #[cubecl::cube]
-    impl PredicateOp<(u32, (u32, u32))> for NestedMatch {
-        fn apply(input: (u32, (u32, u32))) -> bool {
-            input.0 + input.1.0 == input.1.1
+    impl PredicateOp<(u32, u32, u32)> for MatchTriple {
+        fn apply(input: (u32, u32, u32)) -> bool {
+            input.0 + input.1 == input.2
         }
     }
 
     #[test]
-    fn predicate_queries_preserve_nested_semantic_shape() {
+    fn predicate_queries_receive_flat_rows() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let a = exec.to_device(&[1_u32, 2, 3, 4]);
         let b = exec.to_device(&[10_u32, 20, 30, 40]);
         let c = exec.to_device(&[11_u32, 0, 33, 0]);
 
         let input = || Zip::new(a.column(), Zip::new(b.column(), c.column()));
-        assert_eq!(count_if(&exec, input(), NestedMatch).unwrap(), 2);
-        assert!(!all_of(&exec, input(), NestedMatch).unwrap());
-        assert!(any_of(&exec, input(), NestedMatch).unwrap());
-        assert!(!none_of(&exec, input(), NestedMatch).unwrap());
-        assert_eq!(find_if(&exec, input(), NestedMatch).unwrap(), Some(0));
-        assert!(!is_partitioned(&exec, input(), NestedMatch).unwrap());
+        assert_eq!(count_if(&exec, input(), MatchTriple).unwrap(), 2);
+        assert!(!all_of(&exec, input(), MatchTriple).unwrap());
+        assert!(any_of(&exec, input(), MatchTriple).unwrap());
+        assert!(!none_of(&exec, input(), MatchTriple).unwrap());
+        assert_eq!(find_if(&exec, input(), MatchTriple).unwrap(), Some(0));
+        assert!(!is_partitioned(&exec, input(), MatchTriple).unwrap());
     }
 
     struct LastLeafIsThree;
@@ -391,7 +391,7 @@ mod tests {
             <_ as PredicateInput<WgpuRuntime, IsEven>>::predicate_flags(input.column(), &exec)
                 .unwrap();
         assert_eq!(exec.to_host(&flags).unwrap(), vec![1, 1]);
-        let violations = exec.alloc_canonical::<u32>(1);
+        let violations = exec.alloc_row::<u32>(1);
         transform(
             &exec,
             Zip::new(flags.slice(..1), flags.slice(1..)),
@@ -417,12 +417,12 @@ mod tests {
         assert!(is_partitioned(&exec, input.column(), IsEven).unwrap());
     }
 
-    type Seven = (u32, (u32, (u32, (u32, (u32, (u32, u32))))));
+    type Seven = (u32, u32, u32, u32, u32, u32, u32);
 
     #[cubecl::cube]
     impl PredicateOp<Seven> for LastLeafIsThree {
         fn apply(input: Seven) -> bool {
-            input.1.1.1.1.1.1 == 3
+            input.6 == 3
         }
     }
 

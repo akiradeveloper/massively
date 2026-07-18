@@ -1,10 +1,10 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
-    Executor,
+    Executor, MStorage,
     graph::{self as gpu_graph, Csr as GpuCsr},
     op::{Identity, ReductionOp, UnaryOp},
-    unzip2, zip2,
+    zip2,
 };
 use proptest::{
     prelude::*,
@@ -384,7 +384,7 @@ fn expected_contexts(
     };
     Ok(values
         .into_iter()
-        .map(|((source, destination), edge)| EdgeContext {
+        .map(|(source, destination, edge)| EdgeContext {
             source,
             destination,
             edge,
@@ -436,8 +436,7 @@ fn compare_core(
         )
         .emit(exec)
         .map_err(|error| gpu_failure("context emit", error))?;
-    let (source_destination, edges) = unzip2(emitted);
-    let (sources, emitted_destinations) = unzip2(source_destination);
+    let (sources, emitted_destinations, edges) = MStorage::into_columns(emitted);
     let actual_edges = exec
         .to_host(&sources)
         .map_err(|error| gpu_failure("source readback", error))?
@@ -618,7 +617,7 @@ fn compare_fine_semantics(
         )
         .emit(exec)
         .map_err(|error| gpu_failure("product emit", error))?;
-    let (actual_pair_left, actual_pair_right) = unzip2(actual_pair);
+    let (actual_pair_left, actual_pair_right) = MStorage::into_columns(actual_pair);
     let actual_pair = exec
         .to_host(&actual_pair_left)
         .map_err(|error| gpu_failure("product-left readback", error))?

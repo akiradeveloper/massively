@@ -276,7 +276,7 @@ macro_rules! impl_pair_code_dispatch {
                 let left_len = left.logical_len()?;
                 let right_len = right.logical_len()?;
                 let len = left_len.min(right_len);
-                let codes = exec.alloc_canonical::<u32>(len);
+                let codes = exec.alloc_row::<u32>(len);
                 if len == 0 {
                     return Ok((codes, None, left_len, right_len));
                 }
@@ -441,7 +441,7 @@ macro_rules! impl_range_query_dispatch {
             ) -> Result<DeviceVec<R, u32>, Error> {
                 let source_len = source.logical_len()?;
                 let value_len = values.logical_len()?;
-                let bounds = exec.alloc_canonical::<u32>(value_len);
+                let bounds = exec.alloc_row::<u32>(value_len);
                 if value_len == 0 {
                     return Ok(bounds);
                 }
@@ -810,7 +810,7 @@ mod tests {
     use crate::{Counting, Permute, Zip};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
-    type Seven = (u32, (u32, (u32, (u32, (u32, (u32, u32))))));
+    type Seven = (u32, u32, u32, u32, u32, u32, u32);
 
     struct EqualSeven;
 
@@ -818,12 +818,12 @@ mod tests {
     impl BinaryPredicateOp<Seven> for EqualSeven {
         fn apply(lhs: Seven, rhs: Seven) -> bool {
             lhs.0 == rhs.0
-                && lhs.1.0 == rhs.1.0
-                && lhs.1.1.0 == rhs.1.1.0
-                && lhs.1.1.1.0 == rhs.1.1.1.0
-                && lhs.1.1.1.1.0 == rhs.1.1.1.1.0
-                && lhs.1.1.1.1.1.0 == rhs.1.1.1.1.1.0
-                && lhs.1.1.1.1.1.1 == rhs.1.1.1.1.1.1
+                && lhs.1 == rhs.1
+                && lhs.2 == rhs.2
+                && lhs.3 == rhs.3
+                && lhs.4 == rhs.4
+                && lhs.5 == rhs.5
+                && lhs.6 == rhs.6
         }
     }
 

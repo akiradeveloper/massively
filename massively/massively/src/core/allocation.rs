@@ -1,59 +1,25 @@
-//! Recursive allocation of canonical left-associated SoA storage.
+//! Recursive allocation of flat-row SoA storage.
 
 use std::ops::RangeBounds;
 
-use cubecl::prelude::{CubeType, Runtime};
+use cubecl::prelude::Runtime;
 
 use crate::{
     Column, DeviceSliceMut, DeviceVec, Dispatch, Error, Executor, MStorageElement, ReadExpression,
     S1, StorageLayout, Zip,
-    api::iter::{CanonicalForm, CanonicalShape, MIterMut, MStorage, ToCanonical},
+    api::iter::{MItem, MIter, MIterMut, MStorage, StorageSlice, StorageSliceMut},
     output::{
         LowerOutputExpression, OutputExpression, PaddedOutputSlots, SliceOutput, StageOutput,
     },
     read::{Env0, LowerReadExpression, SlotEnvironment},
     reduce::StageRead,
     selection::FillOutput,
-    storage::{Concat, Last, More, WritableFrom},
+    storage::{Concat, FlatLeaves, FlatRow, JoinedRow, Last, More},
     transform::{MaterializeDispatch, materialize},
 };
 
-#[doc(hidden)]
-pub trait CanonicalLeaves {
-    type Item;
-}
-
-#[doc(hidden)]
-pub trait FoldCanonical<Accumulator> {
-    type Item;
-}
-
-impl<Item: CubeType> CanonicalLeaves for Last<Item> {
-    type Item = Item;
-}
-
-impl<Head, Tail> CanonicalLeaves for More<Head, Tail>
-where
-    Head: CubeType,
-    Tail: CubeType + FoldCanonical<Head>,
-{
-    type Item = Tail::Item;
-}
-
-impl<Accumulator, Item: CubeType> FoldCanonical<Accumulator> for Last<Item> {
-    type Item = (Accumulator, Item);
-}
-
-impl<Accumulator, Head, Tail> FoldCanonical<Accumulator> for More<Head, Tail>
-where
-    Head: CubeType,
-    Tail: CubeType + FoldCanonical<(Accumulator, Head)>,
-{
-    type Item = Tail::Item;
-}
-
 /// Owned storage that can produce read and mutable output trees.
-pub trait CanonicalStorage<R: Runtime> {
+pub trait RowStorage<R: Runtime> {
     type Item: StorageLayout;
     type ReadSlots: SlotEnvironment + crate::read::PaddedReadSlots;
     type WriteSlots: PaddedOutputSlots<Leaves = <Self::Item as StorageLayout>::StorageLeaves>;
@@ -77,13 +43,13 @@ pub trait CanonicalStorage<R: Runtime> {
     fn read_item(&self, exec: &Executor<R>, index: usize) -> Result<Self::Item, Error>;
 }
 
-/// Copies canonical storage into an equally shaped output tree.
+/// Copies physical row storage into an equally shaped output tree.
 #[doc(hidden)]
-pub trait CopyStorage<R: Runtime>: CanonicalStorage<R> {
+pub trait CopyStorage<R: Runtime>: RowStorage<R> {
     fn copy_storage(&self, exec: &Executor<R>, output: Self::Write) -> Result<(), Error>;
 }
 
-impl<R, T> CanonicalStorage<R> for DeviceVec<R, T>
+impl<R, T> RowStorage<R> for DeviceVec<R, T>
 where
     R: Runtime,
     T: MStorageElement + StorageLayout<StorageArity = S1, StorageLeaves = Last<T>>,
@@ -133,9 +99,7 @@ where
 impl<R, T> CopyStorage<R> for DeviceVec<R, T>
 where
     R: Runtime,
-    T: MStorageElement
-        + StorageLayout<StorageArity = S1, StorageLeaves = Last<T>>
-        + crate::WritableFrom<T>,
+    T: MStorageElement + StorageLayout<StorageArity = S1, StorageLeaves = Last<T>>,
     Column<T>: ReadExpression<Item = T, ReadArity = crate::A1>
         + LowerReadExpression<Slots = crate::read::Env1<T>>
         + StageRead<R, Env0>,
@@ -155,23 +119,32 @@ where
     }
 }
 
-impl<R, Left, Right> CanonicalStorage<R> for Zip<Left, Right>
+impl<R, Left, Right> RowStorage<R> for Zip<Left, Right>
 where
     R: Runtime,
-    Left: CanonicalStorage<R>,
-    Right: CanonicalStorage<R>,
-    (Left::Item, Right::Item): StorageLayout,
-    Zip<Left::Read, Right::Read>:
-        ReadExpression<Item = (Left::Item, Right::Item)> + LowerReadExpression + StageRead<R, Env0>,
-    Zip<Left::Write, Right::Write>: OutputExpression<Item = (Left::Item, Right::Item)>
+    Left: RowStorage<R>,
+    Right: RowStorage<R>,
+    Left::Item: FlatRow,
+    Right::Item: FlatRow,
+    <Left::Item as StorageLayout>::StorageLeaves:
+        FlatLeaves<Item = Left::Item> + Concat<<Right::Item as StorageLayout>::StorageLeaves>,
+    <Right::Item as StorageLayout>::StorageLeaves: FlatLeaves<Item = Right::Item>,
+    <<Left::Item as StorageLayout>::StorageLeaves as Concat<
+        <Right::Item as StorageLayout>::StorageLeaves,
+    >>::Output: FlatLeaves,
+    Zip<Left::Read, Right::Read>: ReadExpression<Item = JoinedRow<Left::Item, Right::Item>>
+        + LowerReadExpression
+        + StageRead<R, Env0>,
+    Zip<Left::Write, Right::Write>: OutputExpression<Item = JoinedRow<Left::Item, Right::Item>>
         + LowerOutputExpression
         + StageOutput<R, Env0>
         + SliceOutput
         + FillOutput<R>,
-    <Zip<Left::Write, Right::Write> as LowerOutputExpression>::Slots:
-        PaddedOutputSlots<Leaves = <(Left::Item, Right::Item) as StorageLayout>::StorageLeaves>,
+    <Zip<Left::Write, Right::Write> as LowerOutputExpression>::Slots: PaddedOutputSlots<
+        Leaves = <JoinedRow<Left::Item, Right::Item> as StorageLayout>::StorageLeaves,
+    >,
 {
-    type Item = (Left::Item, Right::Item);
+    type Item = JoinedRow<Left::Item, Right::Item>;
     type ReadSlots = <Zip<Left::Read, Right::Read> as LowerReadExpression>::Slots;
     type WriteSlots = <Zip<Left::Write, Right::Write> as LowerOutputExpression>::Slots;
     type Read = Zip<Left::Read, Right::Read>;
@@ -199,7 +172,9 @@ where
         Zip::new(self.0.write(), self.1.write())
     }
     fn read_first(&self, exec: &Executor<R>) -> Result<Self::Item, Error> {
-        Ok((self.0.read_first(exec)?, self.1.read_first(exec)?))
+        let left = self.0.read_first(exec)?.into_storage_leaves();
+        let right = self.1.read_first(exec)?.into_storage_leaves();
+        Ok(Self::Item::from_storage_leaves(left.concat(right)))
     }
 
     fn slice<Range: RangeBounds<usize>>(&self, range: Range) -> Self::Read {
@@ -221,10 +196,9 @@ where
     }
 
     fn read_item(&self, exec: &Executor<R>, index: usize) -> Result<Self::Item, Error> {
-        Ok((
-            self.0.read_item(exec, index)?,
-            self.1.read_item(exec, index)?,
-        ))
+        let left = self.0.read_item(exec, index)?.into_storage_leaves();
+        let right = self.1.read_item(exec, index)?.into_storage_leaves();
+        Ok(Self::Item::from_storage_leaves(left.concat(right)))
     }
 }
 
@@ -233,16 +207,25 @@ where
     R: Runtime,
     Left: CopyStorage<R>,
     Right: CopyStorage<R>,
-    (Left::Item, Right::Item): StorageLayout,
-    Zip<Left::Read, Right::Read>:
-        ReadExpression<Item = (Left::Item, Right::Item)> + LowerReadExpression + StageRead<R, Env0>,
-    Zip<Left::Write, Right::Write>: OutputExpression<Item = (Left::Item, Right::Item)>
+    Left::Item: FlatRow,
+    Right::Item: FlatRow,
+    <Left::Item as StorageLayout>::StorageLeaves:
+        FlatLeaves<Item = Left::Item> + Concat<<Right::Item as StorageLayout>::StorageLeaves>,
+    <Right::Item as StorageLayout>::StorageLeaves: FlatLeaves<Item = Right::Item>,
+    <<Left::Item as StorageLayout>::StorageLeaves as Concat<
+        <Right::Item as StorageLayout>::StorageLeaves,
+    >>::Output: FlatLeaves,
+    Zip<Left::Read, Right::Read>: ReadExpression<Item = JoinedRow<Left::Item, Right::Item>>
+        + LowerReadExpression
+        + StageRead<R, Env0>,
+    Zip<Left::Write, Right::Write>: OutputExpression<Item = JoinedRow<Left::Item, Right::Item>>
         + LowerOutputExpression
         + StageOutput<R, Env0>
         + SliceOutput
         + FillOutput<R>,
-    <Zip<Left::Write, Right::Write> as LowerOutputExpression>::Slots:
-        PaddedOutputSlots<Leaves = <(Left::Item, Right::Item) as StorageLayout>::StorageLeaves>,
+    <Zip<Left::Write, Right::Write> as LowerOutputExpression>::Slots: PaddedOutputSlots<
+        Leaves = <JoinedRow<Left::Item, Right::Item> as StorageLayout>::StorageLeaves,
+    >,
 {
     fn copy_storage(&self, exec: &Executor<R>, output: Self::Write) -> Result<(), Error> {
         self.0.copy_storage(exec, output.0)?;
@@ -250,31 +233,21 @@ where
     }
 }
 
-/// Allocates the canonical storage for a semantic item type.
-pub trait CanonicalAlloc<R: Runtime>: StorageLayout + WritableFrom<Self::CanonicalItem> {
-    type CanonicalItem: StorageLayout<StorageArity = Self::StorageArity, StorageLeaves = Self::StorageLeaves>
-        + WritableFrom<Self>;
-    type CanonicalStorage: CanonicalStorage<R, Item = Self::CanonicalItem> + CopyStorage<R>;
-    fn alloc(exec: &Executor<R>, len: usize) -> Self::CanonicalStorage;
+/// Allocates the physical SoA storage for one flat row type.
+pub trait RowAlloc<R: Runtime>: FlatRow {
+    type RowStorage: RowStorage<R, Item = Self> + CopyStorage<R>;
+    fn alloc(exec: &Executor<R>, len: usize) -> Self::RowStorage;
 }
 
 #[doc(hidden)]
 pub trait AllocColumns<R: Runtime> {
-    type Storage: CanonicalStorage<R>;
+    type Storage: RowStorage<R>;
     fn alloc_columns(exec: &Executor<R>, len: usize) -> Self::Storage;
 }
 
-/// Allocates internal canonical scratch storage from an item's physical leaves.
-///
-/// This does not make the semantic item a canonical form. It only gives
-/// fixed-width algorithms temporary SoA columns whose canonical item can cross
-/// the same physical write boundary.
-pub(crate) trait ScratchStorage<R: Runtime>:
-    crate::api::iter::MItem<R> + WritableFrom<Self::ScratchItem>
-{
-    type ScratchItem: WritableFrom<Self>
-        + StorageLayout<StorageArity = Self::StorageArity, StorageLeaves = Self::StorageLeaves>;
-    type Storage: CanonicalStorage<R, Item = Self::ScratchItem>;
+/// Allocates internal scratch columns for one flat row type.
+pub(crate) trait ScratchStorage<R: Runtime>: crate::api::iter::KernelRow + FlatRow {
+    type Storage: RowStorage<R, Item = Self>;
 
     fn alloc_scratch(exec: &Executor<R>, len: usize) -> Self::Storage;
 }
@@ -282,20 +255,10 @@ pub(crate) trait ScratchStorage<R: Runtime>:
 impl<R, Item> ScratchStorage<R> for Item
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R>
-        + WritableFrom<
-            <<<Item as StorageLayout>::StorageLeaves as AllocColumns<R>>::Storage as CanonicalStorage<R>>::Item,
-        >,
-    Item::StorageLeaves: AllocColumns<R>,
-    <<Item::StorageLeaves as AllocColumns<R>>::Storage as CanonicalStorage<R>>::Item:
-        WritableFrom<Item>
-        + StorageLayout<
-            StorageArity = Item::StorageArity,
-            StorageLeaves = Item::StorageLeaves,
-        >,
+    Item: crate::api::iter::KernelRow + FlatRow,
+    Item::StorageLeaves: FlatLeaves<Item = Item> + AllocColumns<R>,
+    <Item::StorageLeaves as AllocColumns<R>>::Storage: RowStorage<R, Item = Item>,
 {
-    type ScratchItem =
-        <<Item::StorageLeaves as AllocColumns<R>>::Storage as CanonicalStorage<R>>::Item;
     type Storage = <Item::StorageLeaves as AllocColumns<R>>::Storage;
 
     fn alloc_scratch(exec: &Executor<R>, len: usize) -> Self::Storage {
@@ -312,7 +275,6 @@ where
     Item: ScratchStorage<R>,
 {
     let storage = Item::alloc_scratch(exec, 1);
-    let value = <Item::ScratchItem as WritableFrom<Item>>::write_from(value);
     storage.write().fill_output(exec, value)?;
     Ok(storage)
 }
@@ -662,154 +624,82 @@ alloc_left!(A10; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,More<L7
 alloc_left!(A11; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,More<L7,More<L8,More<L9,Last<L10>>>>>>>>>>>; Zip<Zip<Zip<Zip<Zip<Zip<Zip<Zip<Zip<Zip<DeviceVec<R, L0>, DeviceVec<R, L1>>, DeviceVec<R, L2>>, DeviceVec<R, L3>>, DeviceVec<R, L4>>, DeviceVec<R, L5>>, DeviceVec<R, L6>>, DeviceVec<R, L7>>, DeviceVec<R, L8>>, DeviceVec<R, L9>>, DeviceVec<R, L10>>; alloc11::<R,L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10>; L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10);
 alloc_left!(A12; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,More<L7,More<L8,More<L9,More<L10,Last<L11>>>>>>>>>>>>; Zip<Zip<Zip<Zip<Zip<Zip<Zip<Zip<Zip<Zip<Zip<DeviceVec<R, L0>, DeviceVec<R, L1>>, DeviceVec<R, L2>>, DeviceVec<R, L3>>, DeviceVec<R, L4>>, DeviceVec<R, L5>>, DeviceVec<R, L6>>, DeviceVec<R, L7>>, DeviceVec<R, L8>>, DeviceVec<R, L9>>, DeviceVec<R, L10>>, DeviceVec<R, L11>>; alloc12::<R,L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11>; L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11);
 
-macro_rules! impl_scalar_canonical_alloc {
-    ($($item:ty),+ $(,)?) => {
-        $(
-            impl<R: Runtime> CanonicalAlloc<R> for $item {
-                type CanonicalItem = $item;
-                type CanonicalStorage = DeviceVec<R, $item>;
-
-                fn alloc(exec: &Executor<R>, len: usize) -> Self::CanonicalStorage {
-                    exec.alloc_column::<$item>(len)
-                }
-            }
-        )+
-    };
-}
-
-impl_scalar_canonical_alloc!(u8, u16, u32, u64, i8, i16, i32, i64, f32, f64);
-
-impl<R, Left, Right> CanonicalAlloc<R> for (Left, Right)
+impl<R, Item> RowAlloc<R> for Item
 where
     R: Runtime,
-    Left: StorageLayout,
-    Right: StorageLayout,
-    (Left, Right): StorageLayout
-        + WritableFrom<
-            <<<(Left, Right) as StorageLayout>::StorageLeaves as AllocColumns<R>>::Storage as CanonicalStorage<R>>::Item,
-        >,
-    <(Left, Right) as StorageLayout>::StorageLeaves: AllocColumns<R>,
-    <<(Left, Right) as StorageLayout>::StorageLeaves as AllocColumns<R>>::Storage: CopyStorage<R>,
-    <<<(Left, Right) as StorageLayout>::StorageLeaves as AllocColumns<R>>::Storage as CanonicalStorage<R>>::Item:
-        WritableFrom<(Left, Right)>
-            + StorageLayout<
-                StorageArity = <(Left, Right) as StorageLayout>::StorageArity,
-                StorageLeaves = <(Left, Right) as StorageLayout>::StorageLeaves,
-            >,
+    Item: FlatRow,
+    Item::StorageLeaves: FlatLeaves<Item = Item> + AllocColumns<R>,
+    <Item::StorageLeaves as AllocColumns<R>>::Storage: RowStorage<R, Item = Item> + CopyStorage<R>,
 {
-    type CanonicalItem =
-        <<<(Left, Right) as StorageLayout>::StorageLeaves as AllocColumns<R>>::Storage as CanonicalStorage<R>>::Item;
-    type CanonicalStorage =
-        <<(Left, Right) as StorageLayout>::StorageLeaves as AllocColumns<R>>::Storage;
+    type RowStorage = <Item::StorageLeaves as AllocColumns<R>>::Storage;
 
-    fn alloc(exec: &Executor<R>, len: usize) -> Self::CanonicalStorage {
-        <(Left, Right) as StorageLayout>::StorageLeaves::alloc_columns(exec, len)
+    fn alloc(exec: &Executor<R>, len: usize) -> Self::RowStorage {
+        Item::StorageLeaves::alloc_columns(exec, len)
     }
 }
 
-#[doc(hidden)]
-pub trait SemanticLeaves {
-    type Leaves: CubeType + CanonicalLeaves;
+/// Appends one owned column to an already-flat column value.
+pub trait AppendColumn<Right> {
+    type Output;
+    fn append_column(self, right: Right) -> Self::Output;
 }
 
-macro_rules! impl_scalar_semantic_leaves {
-    ($($item:ty),+ $(,)?) => {
-        $(
-            impl SemanticLeaves for $item {
-                type Leaves = Last<$item>;
-            }
-        )+
-    };
-}
-
-impl_scalar_semantic_leaves!(u8, u16, u32, u64, i8, i16, i32, i64, f32, f64);
-
-impl<Left, Right> SemanticLeaves for (Left, Right)
-where
-    Left: SemanticLeaves,
-    Right: SemanticLeaves,
-    Left::Leaves: Concat<Right::Leaves>,
-    <Left::Leaves as Concat<Right::Leaves>>::Output: CanonicalLeaves,
-{
-    type Leaves = <Left::Leaves as Concat<Right::Leaves>>::Output;
-}
-
-#[doc(hidden)]
-impl<Item> CanonicalShape for Item
-where
-    Item: StorageLayout + SemanticLeaves,
-    Item::Leaves: CanonicalLeaves,
-    <Item::Leaves as CanonicalLeaves>::Item: CubeType + crate::WritableFrom<Item>,
-{
-    type Canonical = <Item::Leaves as CanonicalLeaves>::Item;
-}
-
-#[doc(hidden)]
-impl<R, Item> CanonicalForm<R> for Item
+impl<R, Left, Right> AppendColumn<DeviceVec<R, Right>> for DeviceVec<R, Left>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R>
-        + CanonicalAlloc<R>
-        + CanonicalShape<Canonical = Item>
-        + MStorageElement
-        + SemanticLeaves<Leaves = Last<Item>>
-        + StorageLayout<StorageArity = S1, StorageLeaves = Last<Item>>,
-    Last<Item>: crate::core::facade::KernelValue,
+    Left: MStorageElement,
+    Right: MStorageElement,
 {
-    type Storage = DeviceVec<R, Item>;
+    type Output = (DeviceVec<R, Left>, DeviceVec<R, Right>);
+
+    fn append_column(self, right: DeviceVec<R, Right>) -> Self::Output {
+        (self, right)
+    }
 }
 
-macro_rules! impl_public_alloc {
-    ($item:ty; $arity:ty; $leaves:ty; $storage:ty; $value:expr; $( $leaf:ident ),+) => {
-        #[doc(hidden)]
-        impl<R, $( $leaf ),+> CanonicalForm<R> for $item
+macro_rules! impl_append_column {
+    ($( $item:ident : $index:tt ),+ $(,)?) => {
+        impl<R, $( $item, )+ Next> AppendColumn<DeviceVec<R, Next>>
+            for ($(DeviceVec<R, $item>,)+)
         where
             R: Runtime,
-            $(
-                $leaf: MStorageElement
-                    + SemanticLeaves<Leaves = Last<$leaf>>
-                    + CanonicalAlloc<
-                        R,
-                        CanonicalItem = $leaf,
-                        CanonicalStorage = DeviceVec<R, $leaf>,
-                    >,
-            )+
-            $item: crate::api::iter::MItem<R>
-                + CanonicalAlloc<R>
-                + CanonicalShape<Canonical = $item>
-                + StorageLayout<StorageArity = $arity, StorageLeaves = $leaves>,
-            $leaves: crate::core::facade::KernelValue,
+            $( $item: MStorageElement, )+
+            Next: MStorageElement,
         {
-            type Storage = $storage;
+            type Output = ($(DeviceVec<R, $item>,)+ DeviceVec<R, Next>);
+
+            fn append_column(self, right: DeviceVec<R, Next>) -> Self::Output {
+                ($(self.$index,)+ right)
+            }
         }
     };
 }
 
-impl_public_alloc!((L0,L1); crate::S2; More<L0,Last<L1>>; Zip<DeviceVec<R,L0>,DeviceVec<R,L1>>; alloc2::<R,L0,L1>; L0,L1);
-impl_public_alloc!(((L0,L1),L2); crate::S3; More<L0,More<L1,Last<L2>>>; Zip<Zip<DeviceVec<R,L0>,DeviceVec<R,L1>>,DeviceVec<R,L2>>; alloc3::<R,L0,L1,L2>; L0,L1,L2);
-impl_public_alloc!((((L0,L1),L2),L3); crate::S4; More<L0,More<L1,More<L2,Last<L3>>>>; Zip<Zip<Zip<DeviceVec<R,L0>,DeviceVec<R,L1>>,DeviceVec<R,L2>>,DeviceVec<R,L3>>; alloc4::<R,L0,L1,L2,L3>; L0,L1,L2,L3);
-impl_public_alloc!(((((L0,L1),L2),L3),L4); crate::S5; More<L0,More<L1,More<L2,More<L3,Last<L4>>>>>; Zip<Zip<Zip<Zip<DeviceVec<R,L0>,DeviceVec<R,L1>>,DeviceVec<R,L2>>,DeviceVec<R,L3>>,DeviceVec<R,L4>>; alloc5::<R,L0,L1,L2,L3,L4>; L0,L1,L2,L3,L4);
-impl_public_alloc!((((((L0,L1),L2),L3),L4),L5); crate::S6; More<L0,More<L1,More<L2,More<L3,More<L4,Last<L5>>>>>>; Zip<Zip<Zip<Zip<Zip<DeviceVec<R,L0>,DeviceVec<R,L1>>,DeviceVec<R,L2>>,DeviceVec<R,L3>>,DeviceVec<R,L4>>,DeviceVec<R,L5>>; alloc6::<R,L0,L1,L2,L3,L4,L5>; L0,L1,L2,L3,L4,L5);
-impl_public_alloc!(((((((L0,L1),L2),L3),L4),L5),L6); crate::S7; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,Last<L6>>>>>>>; Zip<Zip<Zip<Zip<Zip<Zip<DeviceVec<R,L0>,DeviceVec<R,L1>>,DeviceVec<R,L2>>,DeviceVec<R,L3>>,DeviceVec<R,L4>>,DeviceVec<R,L5>>,DeviceVec<R,L6>>; alloc7::<R,L0,L1,L2,L3,L4,L5,L6>; L0,L1,L2,L3,L4,L5,L6);
-impl_public_alloc!((((((((L0,L1),L2),L3),L4),L5),L6),L7); crate::S8; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,Last<L7>>>>>>>>; Zip<Zip<Zip<Zip<Zip<Zip<Zip<DeviceVec<R, L0>, DeviceVec<R, L1>>, DeviceVec<R, L2>>, DeviceVec<R, L3>>, DeviceVec<R, L4>>, DeviceVec<R, L5>>, DeviceVec<R, L6>>, DeviceVec<R, L7>>; alloc8::<R,L0,L1,L2,L3,L4,L5,L6,L7>; L0,L1,L2,L3,L4,L5,L6,L7);
-impl_public_alloc!(((((((((L0,L1),L2),L3),L4),L5),L6),L7),L8); crate::S9; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,More<L7,Last<L8>>>>>>>>>; Zip<Zip<Zip<Zip<Zip<Zip<Zip<Zip<DeviceVec<R, L0>, DeviceVec<R, L1>>, DeviceVec<R, L2>>, DeviceVec<R, L3>>, DeviceVec<R, L4>>, DeviceVec<R, L5>>, DeviceVec<R, L6>>, DeviceVec<R, L7>>, DeviceVec<R, L8>>; alloc9::<R,L0,L1,L2,L3,L4,L5,L6,L7,L8>; L0,L1,L2,L3,L4,L5,L6,L7,L8);
-impl_public_alloc!((((((((((L0,L1),L2),L3),L4),L5),L6),L7),L8),L9); crate::S10; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,More<L7,More<L8,Last<L9>>>>>>>>>>; Zip<Zip<Zip<Zip<Zip<Zip<Zip<Zip<Zip<DeviceVec<R, L0>, DeviceVec<R, L1>>, DeviceVec<R, L2>>, DeviceVec<R, L3>>, DeviceVec<R, L4>>, DeviceVec<R, L5>>, DeviceVec<R, L6>>, DeviceVec<R, L7>>, DeviceVec<R, L8>>, DeviceVec<R, L9>>; alloc10::<R,L0,L1,L2,L3,L4,L5,L6,L7,L8,L9>; L0,L1,L2,L3,L4,L5,L6,L7,L8,L9);
-impl_public_alloc!(((((((((((L0,L1),L2),L3),L4),L5),L6),L7),L8),L9),L10); crate::S11; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,More<L7,More<L8,More<L9,Last<L10>>>>>>>>>>>; Zip<Zip<Zip<Zip<Zip<Zip<Zip<Zip<Zip<Zip<DeviceVec<R, L0>, DeviceVec<R, L1>>, DeviceVec<R, L2>>, DeviceVec<R, L3>>, DeviceVec<R, L4>>, DeviceVec<R, L5>>, DeviceVec<R, L6>>, DeviceVec<R, L7>>, DeviceVec<R, L8>>, DeviceVec<R, L9>>, DeviceVec<R, L10>>; alloc11::<R,L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10>; L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10);
-impl_public_alloc!((((((((((((L0,L1),L2),L3),L4),L5),L6),L7),L8),L9),L10),L11); crate::S12; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,More<L7,More<L8,More<L9,More<L10,Last<L11>>>>>>>>>>>>; Zip<Zip<Zip<Zip<Zip<Zip<Zip<Zip<Zip<Zip<Zip<DeviceVec<R, L0>, DeviceVec<R, L1>>, DeviceVec<R, L2>>, DeviceVec<R, L3>>, DeviceVec<R, L4>>, DeviceVec<R, L5>>, DeviceVec<R, L6>>, DeviceVec<R, L7>>, DeviceVec<R, L8>>, DeviceVec<R, L9>>, DeviceVec<R, L10>>, DeviceVec<R, L11>>; alloc12::<R,L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11>; L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11);
+impl_append_column!(A: 0, B: 1);
+impl_append_column!(A: 0, B: 1, C: 2);
+impl_append_column!(A: 0, B: 1, C: 2, D: 3);
+impl_append_column!(A: 0, B: 1, C: 2, D: 3, E: 4);
+impl_append_column!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5);
+impl_append_column!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6);
+impl_append_column!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7);
+impl_append_column!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7, I: 8);
+impl_append_column!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7, I: 8, J: 9);
+impl_append_column!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7, I: 8, J: 9, K: 10);
 
 #[doc(hidden)]
 #[allow(opaque_hidden_inferred_bound)]
 impl<R, T> MStorage<R> for DeviceVec<R, T>
 where
     R: Runtime,
-    T: CanonicalForm<R, Storage = Self>
-        + MStorageElement
-        + StorageLayout<StorageArity = S1, StorageLeaves = Last<T>>,
+    T: MStorageElement + StorageLayout<StorageArity = S1, StorageLeaves = Last<T>>,
     Last<T>: crate::core::facade::KernelValue,
     Column<T>: crate::api::iter::MIter<R, Item = T>,
     DeviceSliceMut<T>: crate::api::iter::MIterMut<R, Item = T>,
 {
     type Item = T;
+    type Columns = Self;
+    type Slice<'a> = crate::DeviceSlice<T>;
+    type SliceMut<'a> = DeviceSliceMut<T>;
 
     fn allocate(exec: &Executor<R>, len: usize) -> Self {
         exec.alloc_column::<T>(len)
@@ -823,10 +713,11 @@ where
         DeviceVec::truncate(self, len);
     }
 
-    fn slice<Bounds>(
-        &self,
-        range: Bounds,
-    ) -> impl crate::api::iter::MIter<R, Item = Self::Item> + '_
+    fn into_columns(self) -> Self::Columns {
+        self
+    }
+
+    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
     where
         Bounds: RangeBounds<usize>,
     {
@@ -834,10 +725,7 @@ where
         self.slice(start..start + count)
     }
 
-    fn slice_mut<Bounds>(
-        &self,
-        range: Bounds,
-    ) -> impl crate::api::iter::MIterMut<R, Item = Self::Item> + '_
+    fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
     where
         Bounds: RangeBounds<usize>,
     {
@@ -852,23 +740,34 @@ where
     R: Runtime,
     Left: MStorage<R>,
     Right: MStorage<R>,
-    Self: CanonicalStorage<R>,
-    <Self as CanonicalStorage<R>>::Item: CanonicalForm<R, Storage = Self> + ScratchStorage<R>,
-    <<Self as CanonicalStorage<R>>::Item as StorageLayout>::StorageLeaves:
+    Self: RowStorage<R>,
+    <Self as RowStorage<R>>::Item: ScratchStorage<R>,
+    <<Self as RowStorage<R>>::Item as StorageLayout>::StorageLeaves:
         crate::core::facade::KernelValue,
-    <Self as CanonicalStorage<R>>::Read:
-        crate::api::iter::MIter<R, Item = <Self as CanonicalStorage<R>>::Item>,
-    <Self as CanonicalStorage<R>>::Write:
-        crate::api::iter::MIterMut<R, Item = <Self as CanonicalStorage<R>>::Item>,
+    <Self as RowStorage<R>>::Read: crate::api::iter::MIter<R, Item = <Self as RowStorage<R>>::Item>,
+    <Self as RowStorage<R>>::Write:
+        crate::api::iter::MIterMut<R, Item = <Self as RowStorage<R>>::Item>,
+    Left::Columns: AppendColumn<Right::Columns>,
+    for<'a> StorageSlice<'a, R, Self>: MIter<R, Item = <Self as RowStorage<R>>::Item>,
+    for<'a> StorageSliceMut<'a, R, Self>: MIterMut<R, Item = <Self as RowStorage<R>>::Item>,
 {
-    type Item = <Self as CanonicalStorage<R>>::Item;
+    type Item = <Self as RowStorage<R>>::Item;
+    type Columns = <Left::Columns as AppendColumn<Right::Columns>>::Output;
+    type Slice<'a>
+        = StorageSlice<'a, R, Self>
+    where
+        Self: 'a;
+    type SliceMut<'a>
+        = StorageSliceMut<'a, R, Self>
+    where
+        Self: 'a;
 
     fn allocate(exec: &Executor<R>, len: usize) -> Self {
         Zip::new(Left::allocate(exec, len), Right::allocate(exec, len))
     }
 
     fn len(&self) -> Result<usize, Error> {
-        CanonicalStorage::len(self)
+        RowStorage::len(self)
     }
 
     fn truncate(&mut self, len: usize) {
@@ -876,36 +775,31 @@ where
         self.1.truncate(len);
     }
 
-    fn slice<Bounds>(
-        &self,
-        range: Bounds,
-    ) -> impl crate::api::iter::MIter<R, Item = Self::Item> + '_
-    where
-        Bounds: RangeBounds<usize>,
-    {
-        let len = MStorage::len(self).expect("storage columns have equal lengths");
-        let (start, count) = crate::api::iter::resolve_iter_range(len, range);
-        CanonicalStorage::slice(self, start..start + count)
+    fn into_columns(self) -> Self::Columns {
+        self.0.into_columns().append_column(self.1.into_columns())
     }
 
-    fn slice_mut<Bounds>(
-        &self,
-        range: Bounds,
-    ) -> impl crate::api::iter::MIterMut<R, Item = Self::Item> + '_
+    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
     where
         Bounds: RangeBounds<usize>,
     {
         let len = MStorage::len(self).expect("storage columns have equal lengths");
         let (start, count) = crate::api::iter::resolve_iter_range(len, range);
-        CanonicalStorage::slice_mut(self, start..start + count)
+        StorageSlice::new(self, start, count)
+    }
+
+    fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
+    where
+        Bounds: RangeBounds<usize>,
+    {
+        let len = MStorage::len(self).expect("storage columns have equal lengths");
+        let (start, count) = crate::api::iter::resolve_iter_range(len, range);
+        StorageSliceMut::new(self, start, count)
     }
 }
 
 impl<R: Runtime> Executor<R> {
-    /// Allocates uninitialized canonical device storage for `len` logical items.
-    ///
-    /// `Item` may use any supported semantic tuple association. Its returned
-    /// storage always uses [`crate::ToCanonical::Canonical`].
+    /// Allocates uninitialized device storage for `len` flat rows.
     ///
     /// The storage must be completely written before it is read.
     ///
@@ -928,21 +822,18 @@ impl<R: Runtime> Executor<R> {
     ///
     /// assert_eq!(exec.to_host(&output).unwrap(), vec![7, 7, 7, 7]);
     /// ```
-    pub fn alloc<Item: ToCanonical<R>>(&self, len: usize) -> crate::MVec<R, Item> {
+    pub fn alloc<Item: MItem<R>>(&self, len: usize) -> crate::MVec<R, Item> {
         <crate::MVec<R, Item> as MStorage<R>>::allocate(self, len)
     }
 
-    pub(crate) fn alloc_canonical<Item: CanonicalAlloc<R>>(
+    pub(crate) fn alloc_row<Item: RowAlloc<R>>(
         &self,
         len: usize,
-    ) -> <Item as CanonicalAlloc<R>>::CanonicalStorage {
-        <Item as CanonicalAlloc<R>>::alloc(self, len)
+    ) -> <Item as RowAlloc<R>>::RowStorage {
+        <Item as RowAlloc<R>>::alloc(self, len)
     }
 
-    /// Allocates canonical storage and fills every logical item with `value`.
-    ///
-    /// The value is converted through [`crate::WritableFrom`] when its semantic
-    /// tuple association differs from the canonical storage item.
+    /// Allocates storage and fills every logical item with `value`.
     ///
     /// # Examples
     ///
@@ -957,10 +848,9 @@ impl<R: Runtime> Executor<R> {
     /// ```
     pub fn full<Item>(&self, len: usize, value: Item) -> Result<crate::MVec<R, Item>, Error>
     where
-        Item: ToCanonical<R>,
+        Item: MItem<R>,
     {
         let storage = self.alloc::<Item>(len);
-        let value = <Item::Canonical as WritableFrom<Item>>::write_from(value);
         storage.slice_mut(..).fill_with(self, value)?;
         Ok(storage)
     }
@@ -969,44 +859,36 @@ impl<R: Runtime> Executor<R> {
 pub(crate) fn singleton<R, Item>(
     exec: &Executor<R>,
     value: Item,
-) -> Result<<Item as CanonicalAlloc<R>>::CanonicalStorage, Error>
+) -> Result<<Item as RowAlloc<R>>::RowStorage, Error>
 where
     R: Runtime,
-    Item: CanonicalAlloc<R>,
-    <Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
-    <<Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item:
-        WritableFrom<Item>,
-    <<Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write: FillOutput<R>,
+    Item: RowAlloc<R>,
+    <Item as RowAlloc<R>>::RowStorage: RowStorage<R, Item = Item>,
+    <<Item as RowAlloc<R>>::RowStorage as RowStorage<R>>::Write: FillOutput<R>,
 {
-    let storage = exec.alloc_canonical::<Item>(1);
-    let value =
-        <<Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item::write_from(
-            value,
-        );
+    let storage = exec.alloc_row::<Item>(1);
     storage.write().fill_output(exec, value)?;
     Ok(storage)
 }
 
-/// Normalizes an arbitrary read expression into canonical left-associated
-/// storage without changing its semantic item type.
+/// Normalizes an arbitrary read expression into owned flat-row storage.
 ///
 /// Consumers that need to add another read leaf (for example a permutation)
 /// use this boundary to turn an `A13` expression back into at most twelve
-/// physical payload leaves.  The semantic view is recovered with
-/// [`Reassociate`], so input tuple association is not leaked into storage.
+/// physical payload leaves.
 #[doc(hidden)]
 pub trait NormalizeInput<R: Runtime>: ReadExpression + Sized {
-    type Storage: CanonicalStorage<R>;
+    type Storage: RowStorage<R>;
     type SemanticRead: ReadExpression<Item = Self::Item> + LowerReadExpression + StageRead<R, Env0>;
 
     fn normalize(self, exec: &Executor<R>) -> Result<Self::Storage, Error>;
 
-    fn normalize_canonical(
+    fn normalize_row(
         self,
         exec: &Executor<R>,
-    ) -> Result<<Self::Item as CanonicalAlloc<R>>::CanonicalStorage, Error>
+    ) -> Result<<Self::Item as RowAlloc<R>>::RowStorage, Error>
     where
-        Self::Item: CanonicalAlloc<R>;
+        Self::Item: RowAlloc<R>;
 
     fn semantic_read(storage: &Self::Storage) -> Self::SemanticRead;
 }
@@ -1021,16 +903,15 @@ impl<R, Input> PrependInput<R> for Input
 where
     R: Runtime,
     Input: NormalizeInput<R>,
-    Input::Item: CanonicalAlloc<R, CanonicalStorage = Input::Storage>,
+    Input::Item: RowAlloc<R, RowStorage = Input::Storage>,
     Input::Storage: CopyStorage<R>,
-    <Input::Storage as CanonicalStorage<R>>::Item: crate::WritableFrom<Input::Item>,
-    <Input::Storage as CanonicalStorage<R>>::Write: crate::selection::FillOutput<R>,
+    Input::Storage: RowStorage<R, Item = Input::Item>,
+    <Input::Storage as RowStorage<R>>::Write: crate::selection::FillOutput<R>,
 {
     fn prepend(self, exec: &Executor<R>, prefix: Self::Item) -> Result<Self::Storage, Error> {
         let values = self.normalize(exec)?;
         let len = values.len()?;
-        let prefixed = exec.alloc_canonical::<Input::Item>(len + 1);
-        let prefix = <Input::Storage as CanonicalStorage<R>>::Item::write_from(prefix);
+        let prefixed = exec.alloc_row::<Input::Item>(len + 1);
         prefixed.slice_mut(..1).fill_output(exec, prefix)?;
         values.copy_storage(exec, prefixed.slice_mut(1..))?;
         Ok(prefixed)
@@ -1041,53 +922,47 @@ impl<R, Input> NormalizeInput<R> for Input
 where
     R: Runtime,
     Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
-    Input::Item: CanonicalAlloc<R>
-        + crate::WritableFrom<
-            <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item,
-        >,
+    Input::Item: RowAlloc<R>,
     <Input::Item as StorageLayout>::StorageLeaves: crate::storage::StorePadded12,
-    <Input::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
-    <<<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as OutputExpression>::Item:
-        crate::WritableFrom<Input::Item>,
+    <Input::Item as RowAlloc<R>>::RowStorage: RowStorage<R>,
+    <<Input::Item as RowAlloc<R>>::RowStorage as RowStorage<R>>::Write:
+        OutputExpression<Item = Input::Item>,
     Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
             R,
             Input,
-            <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write,
+            <<Input::Item as RowAlloc<R>>::RowStorage as RowStorage<R>>::Write,
             crate::read::KernelReadSlots<Input::Slots>,
             crate::output::KernelOutputSlots<
-                <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::WriteSlots,
+                <<Input::Item as RowAlloc<R>>::RowStorage as RowStorage<R>>::WriteSlots,
             >,
         >,
 {
-    type Storage = <Input::Item as CanonicalAlloc<R>>::CanonicalStorage;
-    type SemanticRead = crate::read::FixedReassociate<
-        <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read,
-        Input::Item,
-    >;
+    type Storage = <Input::Item as RowAlloc<R>>::RowStorage;
+    type SemanticRead = <<Input::Item as RowAlloc<R>>::RowStorage as RowStorage<R>>::Read;
 
     fn normalize(self, exec: &Executor<R>) -> Result<Self::Storage, Error> {
         let len = self.logical_len()?;
-        let storage = exec.alloc_canonical::<Input::Item>(len);
+        let storage = exec.alloc_row::<Input::Item>(len);
         materialize(exec, self, storage.write())?;
         Ok(storage)
     }
 
-    fn normalize_canonical(
+    fn normalize_row(
         self,
         exec: &Executor<R>,
-    ) -> Result<<Self::Item as CanonicalAlloc<R>>::CanonicalStorage, Error>
+    ) -> Result<<Self::Item as RowAlloc<R>>::RowStorage, Error>
     where
-        Self::Item: CanonicalAlloc<R>,
+        Self::Item: RowAlloc<R>,
     {
         self.normalize(exec)
     }
 
     fn semantic_read(storage: &Self::Storage) -> Self::SemanticRead {
-        crate::read::FixedReassociate::new(storage.read())
+        storage.read()
     }
 }
 
-/// Materializes a fixed-ABI read expression into its canonical owned storage.
+/// Materializes a fixed-ABI read expression into its owned flat-row storage.
 ///
 /// Unlike [`NormalizeInput`], this path derives the output layout from the
 /// semantic item's physical leaves.  It therefore needs no arity-specific
@@ -1095,24 +970,17 @@ where
 pub(crate) fn normalize_lowered<R, Input>(
     exec: &Executor<R>,
     input: Input,
-) -> Result<<Input::Item as CanonicalAlloc<R>>::CanonicalStorage, Error>
+) -> Result<<Input::Item as RowAlloc<R>>::RowStorage, Error>
 where
     R: Runtime,
     Input: crate::core::facade::KernelInput<R>,
-    Input::Item: crate::api::iter::MItem<R> + CanonicalAlloc<R>,
+    Input::Item: crate::api::iter::MItem<R> + RowAlloc<R>,
     <Input::Item as StorageLayout>::StorageLeaves: crate::core::facade::KernelValue,
-    <Input::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
-    <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item:
-        crate::WritableFrom<Input::Item>,
+    <Input::Item as RowAlloc<R>>::RowStorage: RowStorage<R, Item = Input::Item>,
 {
     let len = input.logical_len()?;
-    let storage = exec.alloc_canonical::<Input::Item>(len);
-    let output = crate::output::ReassociatedOutput::<
-        _,
-        Input::Item,
-        <<Input::Item as StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
-    >::new(storage.write());
-    crate::transform::materialize_fixed(exec, &input, &output)?;
+    let storage = exec.alloc_row::<Input::Item>(len);
+    crate::transform::materialize_fixed(exec, &input, &storage.write())?;
     Ok(storage)
 }
 
@@ -1128,15 +996,11 @@ where
     R: Runtime,
     Input: crate::core::facade::KernelInput<R>,
     Input::Item: ScratchStorage<R>,
+    <Input::Item as ScratchStorage<R>>::Storage: RowStorage<R, Item = Input::Item>,
 {
     let len = input.logical_len()?;
     let storage = Input::Item::alloc_scratch(exec, len);
-    let output = crate::output::ReassociatedOutput::<
-        _,
-        Input::Item,
-        <<Input::Item as StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
-    >::new(storage.write());
-    crate::transform::materialize_fixed(exec, &input, &output)?;
+    crate::transform::materialize_fixed(exec, &input, &storage.write())?;
     Ok(storage)
 }
 
@@ -1147,74 +1011,41 @@ mod tests {
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
     use static_assertions::{assert_impl_all, assert_not_impl_any};
 
-    type LeftAssociated = ((u32, f32), i32);
-    type RightAssociated = (u32, (f32, i32));
+    type FlatRow3 = (u32, f32, i32);
+    type NestedRow3 = (u32, (f32, i32));
 
-    assert_impl_all!(LeftAssociated: CanonicalForm<WgpuRuntime>);
-    assert_impl_all!(LeftAssociated: ToCanonical<WgpuRuntime>);
-    assert_impl_all!(RightAssociated: ToCanonical<WgpuRuntime>);
-    assert_not_impl_any!(RightAssociated: CanonicalForm<WgpuRuntime>);
+    assert_impl_all!(FlatRow3: MItem<WgpuRuntime>);
+    assert_not_impl_any!(NestedRow3: MItem<WgpuRuntime>);
 
     #[test]
-    fn to_canonical_selects_the_left_associated_form() {
-        fn assert_canonical<Item, Canonical>()
-        where
-            Item: ToCanonical<WgpuRuntime, Canonical = Canonical>,
-            Canonical: CanonicalForm<WgpuRuntime>,
-        {
-        }
-
-        assert_canonical::<u32, u32>();
-        assert_canonical::<(u32, (f32, i32)), ((u32, f32), i32)>();
-    }
-
-    #[test]
-    fn alloc_normalizes_right_associated_item_to_left_storage() {
+    fn alloc_stores_a_flat_row_in_independent_columns() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let a = exec.to_device(&[1_u32, 2, 3]);
         let b = exec.to_device(&[10_f32, 20.0, 30.0]);
         let c = exec.to_device(&[-1_i32, -2, -3]);
-        let storage = exec.alloc_canonical::<(u32, (f32, i32))>(3);
+        let storage = exec.alloc_row::<FlatRow3>(3);
 
-        materialize(
-            &exec,
-            Zip::new(a.column(), Zip::new(b.column(), c.column())),
-            storage.write(),
-        )
-        .unwrap();
+        let input = crate::api::iter::lower::<WgpuRuntime, _>(crate::zip3(
+            a.column(),
+            b.column(),
+            c.column(),
+        ));
+        materialize(&exec, input, storage.write()).unwrap();
 
-        assert_eq!(exec.to_host(&storage.0.0).unwrap(), vec![1, 2, 3]);
-        assert_eq!(exec.to_host(&storage.0.1).unwrap(), vec![10.0, 20.0, 30.0]);
-        assert_eq!(exec.to_host(&storage.1).unwrap(), vec![-1, -2, -3]);
-        let sliced = CanonicalStorage::slice(&storage, 1..);
-        assert_eq!(sliced.0.0.len(), 2);
+        let (a, b, c) = MStorage::into_columns(storage);
+        assert_eq!(exec.to_host(&a).unwrap(), vec![1, 2, 3]);
+        assert_eq!(exec.to_host(&b).unwrap(), vec![10.0, 20.0, 30.0]);
+        assert_eq!(exec.to_host(&c).unwrap(), vec![-1, -2, -3]);
     }
 
     #[test]
-    fn mvec_derives_left_associated_storage_from_a_semantic_item() {
+    fn full_writes_and_exposes_flat_columns() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-        let mut storage: crate::MVec<WgpuRuntime, RightAssociated> =
-            exec.alloc::<RightAssociated>(4);
+        let storage = exec.full::<FlatRow3>(2, (7, 3.5, -2)).unwrap();
+        let (a, b, c) = storage.into_columns();
 
-        let _: &Zip<
-            Zip<DeviceVec<WgpuRuntime, u32>, DeviceVec<WgpuRuntime, f32>>,
-            DeviceVec<WgpuRuntime, i32>,
-        > = &storage;
-        MStorage::truncate(&mut storage, 2);
-
-        assert_eq!(MStorage::len(&storage).unwrap(), 2);
-        assert_eq!(storage.0.0.len(), 2);
-        assert_eq!(storage.0.1.len(), 2);
-        assert_eq!(storage.1.len(), 2);
-    }
-
-    #[test]
-    fn full_writes_a_semantic_item_into_canonical_storage() {
-        let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-        let storage = exec.full::<RightAssociated>(2, (7, (3.5, -2))).unwrap();
-
-        assert_eq!(exec.to_host(&storage.0.0).unwrap(), vec![7, 7]);
-        assert_eq!(exec.to_host(&storage.0.1).unwrap(), vec![3.5, 3.5]);
-        assert_eq!(exec.to_host(&storage.1).unwrap(), vec![-2, -2]);
+        assert_eq!(exec.to_host(&a).unwrap(), vec![7, 7]);
+        assert_eq!(exec.to_host(&b).unwrap(), vec![3.5, 3.5]);
+        assert_eq!(exec.to_host(&c).unwrap(), vec![-2, -2]);
     }
 }

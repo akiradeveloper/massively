@@ -5,10 +5,13 @@ use cubecl::prelude::*;
 use std::rc::Rc;
 
 use crate::{
+    StorageLayout,
     op::{IndexedBinaryOp, IndexedUnaryOp, UnaryOp},
     reduce::ReductionOp,
     seg::{Segment, SegmentExpand, SegmentReader},
-    storage::{Decompose, Recompose, SelectLeaves},
+    storage::{
+        Concat, ConcatExpand, Decompose, FlatLeaves, FlatRow, JoinedRow, Recompose, SelectLeaves,
+    },
 };
 
 /// A type-level device expression producing `Item`.
@@ -105,14 +108,18 @@ define_slots!(
 
 /// Device expression for a binary zip.
 #[doc(hidden)]
-pub struct ZipExpr<Left, Right> {
-    _marker: PhantomData<fn() -> (Left, Right)>,
+pub struct ZipExpr<Left, Right, LeftItem, RightItem> {
+    _marker: PhantomData<fn() -> (Left, Right, LeftItem, RightItem)>,
 }
 
-impl<Left, Right, LeftItem, RightItem> DeviceExpr<(LeftItem, RightItem)> for ZipExpr<Left, Right>
+impl<Left, Right, LeftItem, RightItem> DeviceExpr<JoinedRow<LeftItem, RightItem>>
+    for ZipExpr<Left, Right, LeftItem, RightItem>
 where
-    LeftItem: CubeType + 'static,
-    RightItem: CubeType + 'static,
+    LeftItem: FlatRow + 'static,
+    RightItem: FlatRow + 'static,
+    LeftItem::StorageLeaves: FlatLeaves<Item = LeftItem> + Concat<RightItem::StorageLeaves>,
+    RightItem::StorageLeaves: FlatLeaves<Item = RightItem>,
+    <LeftItem::StorageLeaves as Concat<RightItem::StorageLeaves>>::Output: FlatLeaves,
     Left: DeviceExpr<LeftItem>,
     Right: DeviceExpr<RightItem>,
 {
@@ -193,22 +200,6 @@ where
 {
 }
 
-#[doc(hidden)]
-pub struct ReassociateExpr<InputExpr, InputItem, OutputItem, InputLayout, OutputLayout> {
-    _marker: PhantomData<fn() -> (InputExpr, InputItem, OutputItem, InputLayout, OutputLayout)>,
-}
-
-impl<InputExpr, InputItem, OutputItem, InputLayout, OutputLayout> DeviceExpr<OutputItem>
-    for ReassociateExpr<InputExpr, InputItem, OutputItem, InputLayout, OutputLayout>
-where
-    InputItem: CubeType + 'static,
-    OutputItem: CubeType + 'static,
-    InputExpr: DeviceExpr<InputItem>,
-    InputLayout: Decompose<InputItem>,
-    OutputLayout: Recompose<OutputItem, Leaves = InputLayout::Leaves>,
-{
-}
-
 macro_rules! define_eval {
     ($trait_name:ident, $method:ident; $( $leaf:ident : $slot:ident ),+ $(,)?) => {
         #[doc = concat!("Evaluates a device expression using `", stringify!($trait_name), "` staged leaves.")]
@@ -223,10 +214,15 @@ macro_rules! define_eval {
 
         #[cubecl::cube]
         impl<LeftItem, RightItem, LeftExpr, RightExpr, $( $leaf ),+>
-            $trait_name<(LeftItem, RightItem), $( $leaf ),+> for ZipExpr<LeftExpr, RightExpr>
+            $trait_name<JoinedRow<LeftItem, RightItem>, $( $leaf ),+>
+            for ZipExpr<LeftExpr, RightExpr, LeftItem, RightItem>
         where
-            LeftItem: CubeType + 'static,
-            RightItem: CubeType + 'static,
+            LeftItem: FlatRow + 'static,
+            RightItem: FlatRow + 'static,
+            LeftItem::StorageLeaves:
+                FlatLeaves<Item = LeftItem> + Concat<RightItem::StorageLeaves>,
+            RightItem::StorageLeaves: FlatLeaves<Item = RightItem>,
+            <LeftItem::StorageLeaves as Concat<RightItem::StorageLeaves>>::Output: FlatLeaves,
             $( $leaf: CubePrimitive, )+
             LeftExpr: $trait_name<LeftItem, $( $leaf ),+>,
             RightExpr: $trait_name<RightItem, $( $leaf ),+>,
@@ -235,11 +231,16 @@ macro_rules! define_eval {
                 $( $slot: &[$leaf], )+
                 slot_offsets: &[u32],
                 index: usize,
-            ) -> (LeftItem, RightItem) {
-                (
+            ) -> JoinedRow<LeftItem, RightItem> {
+                let left = LeftItem::DeviceLayout::decompose(
                     LeftExpr::$method($( $slot, )+ slot_offsets, index),
+                );
+                let right = RightItem::DeviceLayout::decompose(
                     RightExpr::$method($( $slot, )+ slot_offsets, index),
-                )
+                );
+                <<JoinedRow<LeftItem, RightItem> as StorageLayout>::DeviceLayout as Recompose<
+                    JoinedRow<LeftItem, RightItem>,
+                >>::recompose(left.concat(right))
             }
         }
 
@@ -359,27 +360,6 @@ macro_rules! define_eval {
             }
         }
 
-        #[cubecl::cube]
-        impl<InputItem, OutputItem, InputExpr, InputLayout, OutputLayout, $( $leaf ),+>
-            $trait_name<OutputItem, $( $leaf ),+>
-            for ReassociateExpr<InputExpr, InputItem, OutputItem, InputLayout, OutputLayout>
-        where
-            InputItem: CubeType + 'static,
-            OutputItem: CubeType + 'static,
-            $( $leaf: CubePrimitive, )+
-            InputExpr: $trait_name<InputItem, $( $leaf ),+>,
-            InputLayout: Decompose<InputItem>,
-            OutputLayout: Recompose<OutputItem, Leaves = InputLayout::Leaves>,
-        {
-            fn $method(
-                $( $slot: &[$leaf], )+
-                slot_offsets: &[u32],
-                index: usize,
-            ) -> OutputItem {
-                let input = InputExpr::$method($( $slot, )+ slot_offsets, index);
-                OutputLayout::recompose(InputLayout::decompose(input))
-            }
-        }
     };
 }
 

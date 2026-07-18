@@ -10,14 +10,14 @@ use crate::{
     eval::{
         AdjacentExpr, AdjacentIndexedTransformExpr, Broadcast, Count, DeviceExpr, Direct, Eval1,
         Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8, Eval9, Eval10, Eval11, Eval12, Eval13,
-        IndexedTransformExpr, PermuteExpr, ReassociateExpr, ReverseCount, SegmentIteratorExpr,
-        Slot0, Slot1, Slot2, Slot3, Slot4, Slot5, Slot6, Slot7, Slot8, Slot9, Slot10, Slot11,
-        Slot12, TransformExpr, ZipExpr,
+        IndexedTransformExpr, PermuteExpr, ReverseCount, SegmentIteratorExpr, Slot0, Slot1, Slot2,
+        Slot3, Slot4, Slot5, Slot6, Slot7, Slot8, Slot9, Slot10, Slot11, Slot12, TransformExpr,
+        ZipExpr,
     },
     op::{IndexedBinaryOp, IndexedUnaryOp, UnaryOp},
     reduce::ReductionOp,
     seg::Segment,
-    storage::{StorageLayout, WritableFrom},
+    storage::{Concat, FlatLeaves, FlatRow, JoinedRow, StorageLayout},
     value::MStorageElement,
 };
 
@@ -312,6 +312,10 @@ impl<Input, Op> Adjacent<Input, Op> {
 
 impl<Input, Op> Transform<Input, Op> {
     pub fn new(input: Input, _op: Op) -> Self {
+        Self::from_input(input)
+    }
+
+    pub(crate) fn from_input(input: Input) -> Self {
         Self {
             input,
             _op: PhantomData,
@@ -350,13 +354,6 @@ impl<Values, Indices> Permute<Values, Indices> {
     }
 }
 
-#[doc(hidden)]
-#[derive(Debug)]
-pub struct Reassociate<Input, Output> {
-    pub input: Input,
-    _output: PhantomData<fn() -> Output>,
-}
-
 /// A zero-copy logical subrange of a read expression.
 ///
 /// The contained expression has already been sliced according to its own
@@ -373,23 +370,6 @@ impl<Runtime, Input> Slice<Runtime, Input> {
         Self {
             input,
             _runtime: PhantomData,
-        }
-    }
-}
-
-impl<Input: Clone, Output> Clone for Reassociate<Input, Output> {
-    fn clone(&self) -> Self {
-        Self::new(self.input.clone())
-    }
-}
-
-impl<Input: Copy, Output> Copy for Reassociate<Input, Output> {}
-
-impl<Input, Output> Reassociate<Input, Output> {
-    pub fn new(input: Input) -> Self {
-        Self {
-            input,
-            _output: PhantomData,
         }
     }
 }
@@ -439,9 +419,16 @@ where
     Left: ReadExpression,
     Right: ReadExpression,
     Left::ReadArity: AddArity<Right::ReadArity>,
-    (Left::Item, Right::Item): CubeType,
+    Left::Item: FlatRow,
+    Right::Item: FlatRow,
+    <Left::Item as StorageLayout>::StorageLeaves:
+        FlatLeaves<Item = Left::Item> + Concat<<Right::Item as StorageLayout>::StorageLeaves>,
+    <Right::Item as StorageLayout>::StorageLeaves: FlatLeaves<Item = Right::Item>,
+    <<Left::Item as StorageLayout>::StorageLeaves as Concat<
+        <Right::Item as StorageLayout>::StorageLeaves,
+    >>::Output: FlatLeaves,
 {
-    type Item = (Left::Item, Right::Item);
+    type Item = JoinedRow<Left::Item, Right::Item>;
     type ReadArity = <Left::ReadArity as AddArity<Right::ReadArity>>::Output;
 }
 
@@ -501,16 +488,6 @@ where
     type ReadArity = <Values::ReadArity as AddArity<A1>>::Output;
 }
 
-impl<Input, Output> ReadExpression for Reassociate<Input, Output>
-where
-    Input: ReadExpression,
-    Input::Item: StorageLayout,
-    Output: StorageLayout + WritableFrom<Input::Item> + 'static,
-{
-    type Item = Output;
-    type ReadArity = Input::ReadArity;
-}
-
 impl<Runtime, Input> ReadExpression for Slice<Runtime, Input>
 where
     Input: ReadExpression,
@@ -519,7 +496,7 @@ where
     type ReadArity = Input::ReadArity;
 }
 
-impl<Values, Offsets> ReadExpression for crate::seg::SegmentIterator<Values, Offsets>
+impl<Values, Offsets> ReadExpression for crate::seg::SegmentRead<Values, Offsets>
 where
     Values: ReadExpression,
     Offsets: ReadExpression<Item = u32>,
@@ -678,17 +655,6 @@ where
     }
 }
 
-impl<Input, Output> SliceExpression for Reassociate<Input, Output>
-where
-    Input: SliceExpression,
-    Input::Item: StorageLayout,
-    Output: StorageLayout + WritableFrom<Input::Item> + 'static,
-{
-    fn slice_expression(&self, start: usize, len: usize) -> Self {
-        Reassociate::new(self.input.slice_expression(start, len))
-    }
-}
-
 impl<Runtime, Input> SliceExpression for Slice<Runtime, Input>
 where
     Input: SliceExpression,
@@ -698,15 +664,15 @@ where
     }
 }
 
-impl<Values, Offsets> SliceExpression for crate::seg::SegmentIterator<Values, Offsets>
+impl<Values, Offsets> SliceExpression for crate::seg::SegmentRead<Values, Offsets>
 where
     Values: ReadExpression + Clone,
     Offsets: SliceExpression<Item = u32>,
-    crate::seg::SegmentIterator<Values, Offsets>: ReadExpression,
+    crate::seg::SegmentRead<Values, Offsets>: ReadExpression,
 {
     fn slice_expression(&self, start: usize, len: usize) -> Self {
         let offset_len = len.checked_add(1).expect("segmented slice length overflow");
-        crate::seg::SegmentIterator::new(
+        crate::seg::SegmentRead::new(
             self.values().clone(),
             self.offsets().slice_expression(start, offset_len),
         )
@@ -815,10 +781,10 @@ where
 
 impl<Left, Right, Env> BindSlots<Env> for Zip<Left, Right>
 where
-    Left: BindSlots<Env>,
-    Right: BindSlots<Left::NextEnv>,
+    Left: ReadExpression + BindSlots<Env>,
+    Right: ReadExpression + BindSlots<Left::NextEnv>,
 {
-    type Expr = ZipExpr<Left::Expr, Right::Expr>;
+    type Expr = ZipExpr<Left::Expr, Right::Expr, Left::Item, Right::Item>;
     type NextEnv = Right::NextEnv;
 }
 
@@ -891,22 +857,6 @@ where
     type NextEnv = <ReverseCounting as BindSlots<Values::NextEnv>>::NextEnv;
 }
 
-impl<Input, Output, Env> BindSlots<Env> for Reassociate<Input, Output>
-where
-    Input: ReadExpression + BindSlots<Env>,
-    Input::Item: StorageLayout,
-    Output: StorageLayout + WritableFrom<Input::Item> + 'static,
-{
-    type Expr = ReassociateExpr<
-        Input::Expr,
-        Input::Item,
-        Output,
-        <Input::Item as StorageLayout>::DeviceLayout,
-        <Output as StorageLayout>::DeviceLayout,
-    >;
-    type NextEnv = Input::NextEnv;
-}
-
 impl<Runtime, Input, Env> BindSlots<Env> for Slice<Runtime, Input>
 where
     Input: BindSlots<Env>,
@@ -915,7 +865,7 @@ where
     type NextEnv = Input::NextEnv;
 }
 
-impl<Values, Offsets, Env> BindSlots<Env> for crate::seg::SegmentIterator<Values, Offsets>
+impl<Values, Offsets, Env> BindSlots<Env> for crate::seg::SegmentRead<Values, Offsets>
 where
     Values: BindSlots<Env>,
     Offsets: BindSlots<Values::NextEnv>,
@@ -1248,82 +1198,6 @@ where
     }
 }
 
-/// Reassociates a canonical storage item to its semantic item while erasing
-/// the physical input arity behind the fixed thirteen-slot kernel ABI.
-///
-/// Keeping both operations at this boundary avoids asking the type solver to
-/// reconstruct the canonical read arity through the reassociation wrapper.
-#[doc(hidden)]
-pub struct FixedReassociate<Input, Output> {
-    input: Input,
-    _output: PhantomData<fn() -> Output>,
-}
-
-impl<Input: Clone, Output> Clone for FixedReassociate<Input, Output> {
-    fn clone(&self) -> Self {
-        Self::new(self.input.clone())
-    }
-}
-
-impl<Input, Output> FixedReassociate<Input, Output> {
-    pub fn new(input: Input) -> Self {
-        Self {
-            input,
-            _output: PhantomData,
-        }
-    }
-}
-
-impl<Input, Output> ReadExpression for FixedReassociate<Input, Output>
-where
-    Input: LowerReadExpression,
-    Input::Item: StorageLayout,
-    Output: StorageLayout + WritableFrom<Input::Item> + 'static,
-{
-    type Item = Output;
-    type ReadArity = A13;
-}
-
-impl<Input, Output> BindSlots<Env0> for FixedReassociate<Input, Output>
-where
-    Input: LowerReadExpression,
-    Input::Slots: PaddedReadSlots,
-    Input::Item: StorageLayout,
-    Output: StorageLayout + WritableFrom<Input::Item> + 'static,
-{
-    type Expr = ReassociateExpr<
-        Input::DeviceExpr,
-        Input::Item,
-        Output,
-        <Input::Item as StorageLayout>::DeviceLayout,
-        <Output as StorageLayout>::DeviceLayout,
-    >;
-    type NextEnv = KernelReadSlots<Input::Slots>;
-}
-
-impl<R, Input, Output> crate::reduce::StageRead<R, Env0> for FixedReassociate<Input, Output>
-where
-    R: cubecl::prelude::Runtime,
-    Input: LowerReadExpression + crate::reduce::StageRead<R, Env0>,
-    Input::Item: StorageLayout,
-    Output: StorageLayout + WritableFrom<Input::Item> + 'static,
-{
-    fn logical_len(&self) -> Result<usize, crate::Error> {
-        crate::reduce::StageRead::logical_len(&self.input)
-    }
-
-    fn stage_at(
-        &self,
-        client: &ComputeClient<R>,
-        owner: u64,
-        bindings: &mut crate::reduce::StagedBindings,
-    ) -> Result<(), crate::Error> {
-        crate::reduce::StageRead::stage_at(&self.input, client, owner, bindings)?;
-        bindings.pad_to_thirteen(client);
-        Ok(())
-    }
-}
-
 macro_rules! impl_padded_read_slots {
     ($env:ty; [$($actual:ident),+]; [$($padded:ty),+]) => {
         impl<$($actual: MStorageElement),+> PaddedReadSlots for $env {
@@ -1465,14 +1339,14 @@ mod tests {
     };
     use static_assertions::assert_impl_all;
 
-    type Seven = Zip<
-        Column<u8>,
-        Zip<
-            Column<u16>,
-            Zip<Column<u32>, Zip<Column<u64>, Zip<Column<i8>, Zip<Column<i16>, Column<i32>>>>>,
-        >,
-    >;
-    type SevenItem = (u8, (u16, (u32, (u64, (i8, (i16, i32))))));
+    type One = Column<u8>;
+    type Two = Zip<One, Column<u16>>;
+    type Three = Zip<Two, Column<u32>>;
+    type Four = Zip<Three, Column<u64>>;
+    type Five = Zip<Four, Column<i8>>;
+    type Six = Zip<Five, Column<i16>>;
+    type Seven = Zip<Six, Column<i32>>;
+    type SevenItem = (u8, u16, u32, u64, i8, i16, i32);
     type Indices = Transform<Counting, crate::op::U32ToUsize>;
     type Lazified = Transform<Permute<Seven, Indices>, Identity>;
     type Nine = Transform<Permute<Lazified, Indices>, Identity>;
@@ -1480,26 +1354,12 @@ mod tests {
     type Eleven = Transform<Permute<Ten, Indices>, Identity>;
     type Twelve = Transform<Permute<Eleven, Indices>, Identity>;
     type Thirteen = Transform<Permute<Twelve, Indices>, Identity>;
-    type One = Column<u8>;
-    type Two = Zip<Column<u8>, Column<u16>>;
-    type Three = Zip<Two, Column<u32>>;
-    type Four = Zip<Three, Column<u64>>;
-    type Five = Zip<Four, Column<i8>>;
-    type Six = Zip<Five, Column<i16>>;
-
-    type SevenDevice = ZipExpr<
-        Slot0<u8, Direct>,
-        ZipExpr<
-            Slot1<u16, Direct>,
-            ZipExpr<
-                Slot2<u32, Direct>,
-                ZipExpr<
-                    Slot3<u64, Direct>,
-                    ZipExpr<Slot4<i8, Direct>, ZipExpr<Slot5<i16, Direct>, Slot6<i32, Direct>>>,
-                >,
-            >,
-        >,
-    >;
+    type Device2 = ZipExpr<Slot0<u8, Direct>, Slot1<u16, Direct>, u8, u16>;
+    type Device3 = ZipExpr<Device2, Slot2<u32, Direct>, (u8, u16), u32>;
+    type Device4 = ZipExpr<Device3, Slot3<u64, Direct>, (u8, u16, u32), u64>;
+    type Device5 = ZipExpr<Device4, Slot4<i8, Direct>, (u8, u16, u32, u64), i8>;
+    type Device6 = ZipExpr<Device5, Slot5<i16, Direct>, (u8, u16, u32, u64, i8), i16>;
+    type SevenDevice = ZipExpr<Device6, Slot6<i32, Direct>, (u8, u16, u32, u64, i8, i16), i32>;
     type LazifiedDevice = TransformExpr<
         PermuteExpr<SevenDevice, TransformExpr<Slot7<u32, Count>, u32, crate::op::U32ToUsize>>,
         SevenItem,
@@ -1507,20 +1367,15 @@ mod tests {
     >;
     type LazifiedSlots = Env8<u8, u16, u32, u64, i8, i16, i32, u32>;
 
-    type RuntimeSevenItem = (u32, (u32, (u32, (u32, (u32, (u32, u32))))));
-    type RuntimeSevenDevice = ZipExpr<
-        Slot0<u32, Direct>,
-        ZipExpr<
-            Slot1<u32, Direct>,
-            ZipExpr<
-                Slot2<u32, Direct>,
-                ZipExpr<
-                    Slot3<u32, Direct>,
-                    ZipExpr<Slot4<u32, Direct>, ZipExpr<Slot5<u32, Direct>, Slot6<u32, Direct>>>,
-                >,
-            >,
-        >,
-    >;
+    type RuntimeSevenItem = (u32, u32, u32, u32, u32, u32, u32);
+    type RuntimeDevice2 = ZipExpr<Slot0<u32, Direct>, Slot1<u32, Direct>, u32, u32>;
+    type RuntimeDevice3 = ZipExpr<RuntimeDevice2, Slot2<u32, Direct>, (u32, u32), u32>;
+    type RuntimeDevice4 = ZipExpr<RuntimeDevice3, Slot3<u32, Direct>, (u32, u32, u32), u32>;
+    type RuntimeDevice5 = ZipExpr<RuntimeDevice4, Slot4<u32, Direct>, (u32, u32, u32, u32), u32>;
+    type RuntimeDevice6 =
+        ZipExpr<RuntimeDevice5, Slot5<u32, Direct>, (u32, u32, u32, u32, u32), u32>;
+    type RuntimeSevenDevice =
+        ZipExpr<RuntimeDevice6, Slot6<u32, Direct>, (u32, u32, u32, u32, u32, u32), u32>;
     type RuntimeLazifiedDevice = TransformExpr<
         PermuteExpr<
             RuntimeSevenDevice,
@@ -1529,8 +1384,11 @@ mod tests {
         RuntimeSevenItem,
         Identity,
     >;
-    type RuntimeMixedDevice =
-        TransformExpr<ZipExpr<Slot0<u32, Broadcast>, Slot1<u32, Count>>, (u32, u32), AddPair>;
+    type RuntimeMixedDevice = TransformExpr<
+        ZipExpr<Slot0<u32, Broadcast>, Slot1<u32, Count>, u32, u32>,
+        (u32, u32),
+        AddPair,
+    >;
 
     struct AddPair;
 
@@ -1561,8 +1419,8 @@ mod tests {
         }
 
         type Pair = Zip<Column<u32>, Column<u32>>;
-        type Segments = crate::seg::SegmentIterator<Column<u32>, Column<u32>>;
-        type ByteSegments = crate::seg::SegmentIterator<Column<u8>, Column<u32>>;
+        type Segments = crate::seg::SegmentRead<Column<u32>, Column<u32>>;
+        type ByteSegments = crate::seg::SegmentRead<Column<u8>, Column<u32>>;
         assert_arity::<One, A1>();
         assert_arity::<Two, A2>();
         assert_arity::<Three, A3>();
@@ -1591,14 +1449,14 @@ mod tests {
         assert_binding::<Lazified, LazifiedDevice, LazifiedSlots>();
 
         type Mixed = Zip<Constant<u16>, Counting>;
-        type MixedDevice = ZipExpr<Slot0<u16, Broadcast>, Slot1<u32, Count>>;
+        type MixedDevice = ZipExpr<Slot0<u16, Broadcast>, Slot1<u32, Count>, u16, u32>;
         assert_binding::<Mixed, MixedDevice, Env2<u16, u32>>();
 
-        type Segments = crate::seg::SegmentIterator<Column<u32>, Column<u32>>;
+        type Segments = crate::seg::SegmentRead<Column<u32>, Column<u32>>;
         type SegmentsDevice = SegmentIteratorExpr<Slot0<u32, Direct>, Slot1<u32, Direct>>;
         assert_binding::<Segments, SegmentsDevice, Env2<u32, u32>>();
 
-        type ByteSegments = crate::seg::SegmentIterator<Column<u8>, Column<u32>>;
+        type ByteSegments = crate::seg::SegmentRead<Column<u8>, Column<u32>>;
         type ByteSegmentsDevice = SegmentIteratorExpr<Slot0<u8, Direct>, Slot1<u32, Direct>>;
         assert_binding::<ByteSegments, ByteSegmentsDevice, Env2<u8, u32>>();
     }
@@ -1640,13 +1498,7 @@ mod tests {
             let value = RuntimeLazifiedDevice::eval8(
                 slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, offsets, index,
             );
-            output[index] = value.0
-                + value.1.0
-                + value.1.1.0
-                + value.1.1.1.0
-                + value.1.1.1.1.0
-                + value.1.1.1.1.1.0
-                + value.1.1.1.1.1.1;
+            output[index] = value.0 + value.1 + value.2 + value.3 + value.4 + value.5 + value.6;
         }
     }
 

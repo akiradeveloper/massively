@@ -237,14 +237,14 @@ impl UnaryOp<(f32, u32)> for DanglingRank {
 struct RankContribution;
 
 #[cubecl::cube]
-impl UnaryOp<((f32, u32), f32)> for RankContribution {
+impl UnaryOp<(f32, u32, f32)> for RankContribution {
     type Output = f32;
 
-    fn apply(input: ((f32, u32), f32)) -> f32 {
-        if input.0.1 == 0u32 {
+    fn apply(input: (f32, u32, f32)) -> f32 {
+        if input.1 == 0u32 {
             0.0f32
         } else {
-            input.0.0 * input.1 / input.0.1 as f32
+            input.0 * input.2 / input.1 as f32
         }
     }
 }

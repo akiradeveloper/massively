@@ -7,11 +7,11 @@ use proptest::prelude::*;
 use super::common::*;
 
 type Two = (u32, u32);
-type Three = (Two, u32);
-type Four = (Three, u32);
-type Five = (Four, u32);
-type Six = (Five, u32);
-type Seven = (Six, u32);
+type Three = (u32, u32, u32);
+type Four = (u32, u32, u32, u32);
+type Five = (u32, u32, u32, u32, u32);
+type Six = (u32, u32, u32, u32, u32, u32);
+type Seven = (u32, u32, u32, u32, u32, u32, u32);
 
 struct MaxItem;
 struct EvenItem;
@@ -26,19 +26,19 @@ macro_rules! splat {
         ($value, $value)
     };
     (3, $value:expr) => {
-        (splat!(2, $value), $value)
+        ($value, $value, $value)
     };
     (4, $value:expr) => {
-        (splat!(3, $value), $value)
+        ($value, $value, $value, $value)
     };
     (5, $value:expr) => {
-        (splat!(4, $value), $value)
+        ($value, $value, $value, $value, $value)
     };
     (6, $value:expr) => {
-        (splat!(5, $value), $value)
+        ($value, $value, $value, $value, $value, $value)
     };
     (7, $value:expr) => {
-        (splat!(6, $value), $value)
+        ($value, $value, $value, $value, $value, $value, $value)
     };
 }
 
@@ -114,29 +114,29 @@ impl_item_ops!(Two;
     pair |lhs, rhs| lhs.0, rhs.0
 );
 impl_item_ops!(Three;
-    reduce |lhs, rhs| ((lhs.0.0.max(rhs.0.0), lhs.0.1.max(rhs.0.1)), lhs.1.max(rhs.1));
-    first |input| input.0.0;
-    pair |lhs, rhs| lhs.0.0, rhs.0.0
+    reduce |lhs, rhs| (lhs.0.max(rhs.0), lhs.1.max(rhs.1), lhs.2.max(rhs.2));
+    first |input| input.0;
+    pair |lhs, rhs| lhs.0, rhs.0
 );
 impl_item_ops!(Four;
-    reduce |lhs, rhs| (((lhs.0.0.0.max(rhs.0.0.0), lhs.0.0.1.max(rhs.0.0.1)), lhs.0.1.max(rhs.0.1)), lhs.1.max(rhs.1));
-    first |input| input.0.0.0;
-    pair |lhs, rhs| lhs.0.0.0, rhs.0.0.0
+    reduce |lhs, rhs| (lhs.0.max(rhs.0), lhs.1.max(rhs.1), lhs.2.max(rhs.2), lhs.3.max(rhs.3));
+    first |input| input.0;
+    pair |lhs, rhs| lhs.0, rhs.0
 );
 impl_item_ops!(Five;
-    reduce |lhs, rhs| ((((lhs.0.0.0.0.max(rhs.0.0.0.0), lhs.0.0.0.1.max(rhs.0.0.0.1)), lhs.0.0.1.max(rhs.0.0.1)), lhs.0.1.max(rhs.0.1)), lhs.1.max(rhs.1));
-    first |input| input.0.0.0.0;
-    pair |lhs, rhs| lhs.0.0.0.0, rhs.0.0.0.0
+    reduce |lhs, rhs| (lhs.0.max(rhs.0), lhs.1.max(rhs.1), lhs.2.max(rhs.2), lhs.3.max(rhs.3), lhs.4.max(rhs.4));
+    first |input| input.0;
+    pair |lhs, rhs| lhs.0, rhs.0
 );
 impl_item_ops!(Six;
-    reduce |lhs, rhs| (((((lhs.0.0.0.0.0.max(rhs.0.0.0.0.0), lhs.0.0.0.0.1.max(rhs.0.0.0.0.1)), lhs.0.0.0.1.max(rhs.0.0.0.1)), lhs.0.0.1.max(rhs.0.0.1)), lhs.0.1.max(rhs.0.1)), lhs.1.max(rhs.1));
-    first |input| input.0.0.0.0.0;
-    pair |lhs, rhs| lhs.0.0.0.0.0, rhs.0.0.0.0.0
+    reduce |lhs, rhs| (lhs.0.max(rhs.0), lhs.1.max(rhs.1), lhs.2.max(rhs.2), lhs.3.max(rhs.3), lhs.4.max(rhs.4), lhs.5.max(rhs.5));
+    first |input| input.0;
+    pair |lhs, rhs| lhs.0, rhs.0
 );
 impl_item_ops!(Seven;
-    reduce |lhs, rhs| ((((((lhs.0.0.0.0.0.0.max(rhs.0.0.0.0.0.0), lhs.0.0.0.0.0.1.max(rhs.0.0.0.0.0.1)), lhs.0.0.0.0.1.max(rhs.0.0.0.0.1)), lhs.0.0.0.1.max(rhs.0.0.0.1)), lhs.0.0.1.max(rhs.0.0.1)), lhs.0.1.max(rhs.0.1)), lhs.1.max(rhs.1));
-    first |input| input.0.0.0.0.0.0;
-    pair |lhs, rhs| lhs.0.0.0.0.0.0, rhs.0.0.0.0.0.0
+    reduce |lhs, rhs| (lhs.0.max(rhs.0), lhs.1.max(rhs.1), lhs.2.max(rhs.2), lhs.3.max(rhs.3), lhs.4.max(rhs.4), lhs.5.max(rhs.5), lhs.6.max(rhs.6));
+    first |input| input.0;
+    pair |lhs, rhs| lhs.0, rhs.0
 );
 
 fn seven_columns(seed: &[u32]) -> [Vec<u32>; 7] {
@@ -158,14 +158,16 @@ macro_rules! rows {
     };
     (3, $columns:expr) => {
         (0..$columns[0].len())
-            .map(|i| (($columns[0][i], $columns[1][i]), $columns[2][i]))
+            .map(|i| ($columns[0][i], $columns[1][i], $columns[2][i]))
             .collect::<Vec<Three>>()
     };
     (4, $columns:expr) => {
         (0..$columns[0].len())
             .map(|i| {
                 (
-                    (($columns[0][i], $columns[1][i]), $columns[2][i]),
+                    $columns[0][i],
+                    $columns[1][i],
+                    $columns[2][i],
                     $columns[3][i],
                 )
             })
@@ -175,10 +177,10 @@ macro_rules! rows {
         (0..$columns[0].len())
             .map(|i| {
                 (
-                    (
-                        (($columns[0][i], $columns[1][i]), $columns[2][i]),
-                        $columns[3][i],
-                    ),
+                    $columns[0][i],
+                    $columns[1][i],
+                    $columns[2][i],
+                    $columns[3][i],
                     $columns[4][i],
                 )
             })
@@ -188,13 +190,11 @@ macro_rules! rows {
         (0..$columns[0].len())
             .map(|i| {
                 (
-                    (
-                        (
-                            (($columns[0][i], $columns[1][i]), $columns[2][i]),
-                            $columns[3][i],
-                        ),
-                        $columns[4][i],
-                    ),
+                    $columns[0][i],
+                    $columns[1][i],
+                    $columns[2][i],
+                    $columns[3][i],
+                    $columns[4][i],
                     $columns[5][i],
                 )
             })
@@ -204,16 +204,12 @@ macro_rules! rows {
         (0..$columns[0].len())
             .map(|i| {
                 (
-                    (
-                        (
-                            (
-                                (($columns[0][i], $columns[1][i]), $columns[2][i]),
-                                $columns[3][i],
-                            ),
-                            $columns[4][i],
-                        ),
-                        $columns[5][i],
-                    ),
+                    $columns[0][i],
+                    $columns[1][i],
+                    $columns[2][i],
+                    $columns[3][i],
+                    $columns[4][i],
+                    $columns[5][i],
                     $columns[6][i],
                 )
             })
@@ -346,85 +342,79 @@ macro_rules! row_column {
         $rows.iter().map(|row| row.1).collect::<Vec<u32>>()
     };
     (3, $rows:expr, 0) => {
-        $rows.iter().map(|row| row.0.0).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.0).collect::<Vec<u32>>()
     };
     (3, $rows:expr, 1) => {
-        $rows.iter().map(|row| row.0.1).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.1).collect::<Vec<u32>>()
     };
     (3, $rows:expr, 2) => {
-        $rows.iter().map(|row| row.1).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.2).collect::<Vec<u32>>()
     };
     (4, $rows:expr, 0) => {
-        $rows.iter().map(|row| row.0.0.0).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.0).collect::<Vec<u32>>()
     };
     (4, $rows:expr, 1) => {
-        $rows.iter().map(|row| row.0.0.1).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.1).collect::<Vec<u32>>()
     };
     (4, $rows:expr, 2) => {
-        $rows.iter().map(|row| row.0.1).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.2).collect::<Vec<u32>>()
     };
     (4, $rows:expr, 3) => {
-        $rows.iter().map(|row| row.1).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.3).collect::<Vec<u32>>()
     };
     (5, $rows:expr, 0) => {
-        $rows.iter().map(|row| row.0.0.0.0).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.0).collect::<Vec<u32>>()
     };
     (5, $rows:expr, 1) => {
-        $rows.iter().map(|row| row.0.0.0.1).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.1).collect::<Vec<u32>>()
     };
     (5, $rows:expr, 2) => {
-        $rows.iter().map(|row| row.0.0.1).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.2).collect::<Vec<u32>>()
     };
     (5, $rows:expr, 3) => {
-        $rows.iter().map(|row| row.0.1).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.3).collect::<Vec<u32>>()
     };
     (5, $rows:expr, 4) => {
-        $rows.iter().map(|row| row.1).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.4).collect::<Vec<u32>>()
     };
     (6, $rows:expr, 0) => {
-        $rows.iter().map(|row| row.0.0.0.0.0).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.0).collect::<Vec<u32>>()
     };
     (6, $rows:expr, 1) => {
-        $rows.iter().map(|row| row.0.0.0.0.1).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.1).collect::<Vec<u32>>()
     };
     (6, $rows:expr, 2) => {
-        $rows.iter().map(|row| row.0.0.0.1).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.2).collect::<Vec<u32>>()
     };
     (6, $rows:expr, 3) => {
-        $rows.iter().map(|row| row.0.0.1).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.3).collect::<Vec<u32>>()
     };
     (6, $rows:expr, 4) => {
-        $rows.iter().map(|row| row.0.1).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.4).collect::<Vec<u32>>()
     };
     (6, $rows:expr, 5) => {
-        $rows.iter().map(|row| row.1).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.5).collect::<Vec<u32>>()
     };
     (7, $rows:expr, 0) => {
-        $rows
-            .iter()
-            .map(|row| row.0.0.0.0.0.0)
-            .collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.0).collect::<Vec<u32>>()
     };
     (7, $rows:expr, 1) => {
-        $rows
-            .iter()
-            .map(|row| row.0.0.0.0.0.1)
-            .collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.1).collect::<Vec<u32>>()
     };
     (7, $rows:expr, 2) => {
-        $rows.iter().map(|row| row.0.0.0.0.1).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.2).collect::<Vec<u32>>()
     };
     (7, $rows:expr, 3) => {
-        $rows.iter().map(|row| row.0.0.0.1).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.3).collect::<Vec<u32>>()
     };
     (7, $rows:expr, 4) => {
-        $rows.iter().map(|row| row.0.0.1).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.4).collect::<Vec<u32>>()
     };
     (7, $rows:expr, 5) => {
-        $rows.iter().map(|row| row.0.1).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.5).collect::<Vec<u32>>()
     };
     (7, $rows:expr, 6) => {
-        $rows.iter().map(|row| row.1).collect::<Vec<u32>>()
+        $rows.iter().map(|row| row.6).collect::<Vec<u32>>()
     };
 }
 
@@ -492,112 +482,60 @@ macro_rules! assert_output {
     }};
 }
 
-macro_rules! mvec_column {
-    (1, $output:expr, 0) => {
-        &$output
-    };
-    (2, $output:expr, 0) => {
-        &$output.0
-    };
-    (2, $output:expr, 1) => {
-        &$output.1
-    };
-    (3, $output:expr, 0) => {
-        &$output.0.0
-    };
-    (3, $output:expr, 1) => {
-        &$output.0.1
-    };
-    (3, $output:expr, 2) => {
-        &$output.1
-    };
-    (4, $output:expr, 0) => {
-        &$output.0.0.0
-    };
-    (4, $output:expr, 1) => {
-        &$output.0.0.1
-    };
-    (4, $output:expr, 2) => {
-        &$output.0.1
-    };
-    (4, $output:expr, 3) => {
-        &$output.1
-    };
-    (5, $output:expr, 0) => {
-        &$output.0.0.0.0
-    };
-    (5, $output:expr, 1) => {
-        &$output.0.0.0.1
-    };
-    (5, $output:expr, 2) => {
-        &$output.0.0.1
-    };
-    (5, $output:expr, 3) => {
-        &$output.0.1
-    };
-    (5, $output:expr, 4) => {
-        &$output.1
-    };
-    (6, $output:expr, 0) => {
-        &$output.0.0.0.0.0
-    };
-    (6, $output:expr, 1) => {
-        &$output.0.0.0.0.1
-    };
-    (6, $output:expr, 2) => {
-        &$output.0.0.0.1
-    };
-    (6, $output:expr, 3) => {
-        &$output.0.0.1
-    };
-    (6, $output:expr, 4) => {
-        &$output.0.1
-    };
-    (6, $output:expr, 5) => {
-        &$output.1
-    };
-    (7, $output:expr, 0) => {
-        &$output.0.0.0.0.0.0
-    };
-    (7, $output:expr, 1) => {
-        &$output.0.0.0.0.0.1
-    };
-    (7, $output:expr, 2) => {
-        &$output.0.0.0.0.1
-    };
-    (7, $output:expr, 3) => {
-        &$output.0.0.0.1
-    };
-    (7, $output:expr, 4) => {
-        &$output.0.0.1
-    };
-    (7, $output:expr, 5) => {
-        &$output.0.1
-    };
-    (7, $output:expr, 6) => {
-        &$output.1
-    };
-}
-
 macro_rules! assert_mvec {
     ($arity:tt, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{
         let expected = &$expected;
-        assert_mvec_columns!($arity, $exec, $output, expected, $len);
+        assert_flat_mvec_columns!($arity, $exec, $output, expected, $len);
     }};
 }
 
-macro_rules! assert_mvec_columns {
-    (1, $exec:expr, $output:expr, $expected:expr, $len:expr) => { assert_mvec_columns!(@one 1, 0, $exec, $output, $expected, $len) };
-    (2, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{ assert_mvec_columns!(@one 2, 0, $exec, $output, $expected, $len); assert_mvec_columns!(@one 2, 1, $exec, $output, $expected, $len); }};
-    (3, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{ assert_mvec_columns!(@one 3, 0, $exec, $output, $expected, $len); assert_mvec_columns!(@one 3, 1, $exec, $output, $expected, $len); assert_mvec_columns!(@one 3, 2, $exec, $output, $expected, $len); }};
-    (4, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{ assert_mvec_columns!(@one 4, 0, $exec, $output, $expected, $len); assert_mvec_columns!(@one 4, 1, $exec, $output, $expected, $len); assert_mvec_columns!(@one 4, 2, $exec, $output, $expected, $len); assert_mvec_columns!(@one 4, 3, $exec, $output, $expected, $len); }};
-    (5, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{ assert_mvec_columns!(@one 5, 0, $exec, $output, $expected, $len); assert_mvec_columns!(@one 5, 1, $exec, $output, $expected, $len); assert_mvec_columns!(@one 5, 2, $exec, $output, $expected, $len); assert_mvec_columns!(@one 5, 3, $exec, $output, $expected, $len); assert_mvec_columns!(@one 5, 4, $exec, $output, $expected, $len); }};
-    (6, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{ assert_mvec_columns!(@one 6, 0, $exec, $output, $expected, $len); assert_mvec_columns!(@one 6, 1, $exec, $output, $expected, $len); assert_mvec_columns!(@one 6, 2, $exec, $output, $expected, $len); assert_mvec_columns!(@one 6, 3, $exec, $output, $expected, $len); assert_mvec_columns!(@one 6, 4, $exec, $output, $expected, $len); assert_mvec_columns!(@one 6, 5, $exec, $output, $expected, $len); }};
-    (7, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{ assert_mvec_columns!(@one 7, 0, $exec, $output, $expected, $len); assert_mvec_columns!(@one 7, 1, $exec, $output, $expected, $len); assert_mvec_columns!(@one 7, 2, $exec, $output, $expected, $len); assert_mvec_columns!(@one 7, 3, $exec, $output, $expected, $len); assert_mvec_columns!(@one 7, 4, $exec, $output, $expected, $len); assert_mvec_columns!(@one 7, 5, $exec, $output, $expected, $len); assert_mvec_columns!(@one 7, 6, $exec, $output, $expected, $len); }};
-    (@one $arity:tt, $column:tt, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{
-        let actual = $exec.to_host(mvec_column!($arity, $output, $column)).unwrap();
-        let expected_column = row_column!($arity, $expected, $column);
-        prop_assert_eq!(&actual[..$len], &expected_column[..$len]);
+macro_rules! assert_flat_mvec_columns {
+    (1, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{
+        let actual = $exec.to_host(&$output).unwrap();
+        let expected = row_column!(1, $expected, 0);
+        prop_assert_eq!(&actual[..$len], &expected[..$len]);
+    }};
+    (2, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{
+        let output = MStorage::into_columns($output);
+        let actual = [&output.0, &output.1];
+        let expected = [row_column!(2, $expected, 0), row_column!(2, $expected, 1)];
+        assert_flat_mvec_columns!(@all $exec, actual, expected, $len);
+    }};
+    (3, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{
+        let output = MStorage::into_columns($output);
+        let actual = [&output.0, &output.1, &output.2];
+        let expected = [row_column!(3, $expected, 0), row_column!(3, $expected, 1), row_column!(3, $expected, 2)];
+        assert_flat_mvec_columns!(@all $exec, actual, expected, $len);
+    }};
+    (4, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{
+        let output = MStorage::into_columns($output);
+        let actual = [&output.0, &output.1, &output.2, &output.3];
+        let expected = [row_column!(4, $expected, 0), row_column!(4, $expected, 1), row_column!(4, $expected, 2), row_column!(4, $expected, 3)];
+        assert_flat_mvec_columns!(@all $exec, actual, expected, $len);
+    }};
+    (5, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{
+        let output = MStorage::into_columns($output);
+        let actual = [&output.0, &output.1, &output.2, &output.3, &output.4];
+        let expected = [row_column!(5, $expected, 0), row_column!(5, $expected, 1), row_column!(5, $expected, 2), row_column!(5, $expected, 3), row_column!(5, $expected, 4)];
+        assert_flat_mvec_columns!(@all $exec, actual, expected, $len);
+    }};
+    (6, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{
+        let output = MStorage::into_columns($output);
+        let actual = [&output.0, &output.1, &output.2, &output.3, &output.4, &output.5];
+        let expected = [row_column!(6, $expected, 0), row_column!(6, $expected, 1), row_column!(6, $expected, 2), row_column!(6, $expected, 3), row_column!(6, $expected, 4), row_column!(6, $expected, 5)];
+        assert_flat_mvec_columns!(@all $exec, actual, expected, $len);
+    }};
+    (7, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{
+        let output = MStorage::into_columns($output);
+        let actual = [&output.0, &output.1, &output.2, &output.3, &output.4, &output.5, &output.6];
+        let expected = [row_column!(7, $expected, 0), row_column!(7, $expected, 1), row_column!(7, $expected, 2), row_column!(7, $expected, 3), row_column!(7, $expected, 4), row_column!(7, $expected, 5), row_column!(7, $expected, 6)];
+        assert_flat_mvec_columns!(@all $exec, actual, expected, $len);
+    }};
+    (@all $exec:expr, $actual:expr, $expected:expr, $len:expr) => {{
+        for (actual, expected) in $actual.into_iter().zip($expected) {
+            let actual = $exec.to_host(actual).unwrap();
+            prop_assert_eq!(&actual[..$len], &expected[..$len]);
+        }
     }};
 }
 

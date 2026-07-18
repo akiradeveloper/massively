@@ -7,7 +7,7 @@
 
 use cubecl::prelude::*;
 use massively::{
-    DeviceVec, Executor, graph, lazy,
+    DeviceVec, Executor, MStorage, graph, lazy,
     op::{BinaryPredicateOp, Identity, ReductionOp, UnaryOp},
     vector, zip2,
 };
@@ -55,11 +55,11 @@ impl UnaryOp<(u32, u32)> for Different {
 struct GainScore;
 
 #[cubecl::cube]
-impl UnaryOp<(((u32, u32), u32), u32)> for GainScore {
+impl UnaryOp<(u32, u32, u32, u32)> for GainScore {
     type Output = f32;
 
-    fn apply(input: (((u32, u32), u32), u32)) -> f32 {
-        input.0.0.0 as f32 - input.0.0.1 as f32 * input.0.1 as f32 / input.1 as f32
+    fn apply(input: (u32, u32, u32, u32)) -> f32 {
+        input.0 as f32 - input.1 as f32 * input.2 as f32 / input.3 as f32
     }
 }
 
@@ -338,16 +338,17 @@ fn contract<R: Runtime>(
     let sorted_weights = vector::sort_by_key(exec, pair_keys, graph.weights().slice(..), PairLess)?;
     let (pairs, weights) = vector::reduce_by_key(
         exec,
-        zip2(sorted_pairs.0.slice(..), sorted_pairs.1.slice(..)),
+        sorted_pairs.slice(..),
         sorted_weights.slice(..),
         PairEqual,
         0,
         SumU32,
     )?;
+    let (pair_sources, pair_destinations) = MStorage::into_columns(pairs);
     let edge_count = weights.len() as u32;
     let (row_ids, row_counts) = vector::reduce_by_key(
         exec,
-        pairs.0.slice(..),
+        pair_sources.slice(..),
         lazy::constant(1u32).take(edge_count as usize),
         EqualU32,
         0,
@@ -368,7 +369,7 @@ fn contract<R: Runtime>(
         common::indices(common::counting_u32(1, community_count as usize)),
         offsets.slice_mut(..),
     )?;
-    let topology = DeviceCsr::from_parts(pairs.1, offsets)?;
+    let topology = DeviceCsr::from_parts(pair_destinations, offsets)?;
     DeviceWeightedCsr::from_parts(topology, weights)
 }
 

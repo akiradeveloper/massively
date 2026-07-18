@@ -6,7 +6,8 @@
 //! materialization remain private and can be replaced by fused kernels without changing this API.
 
 mod control;
-mod expr;
+#[doc(hidden)]
+pub mod expr;
 mod intersection;
 mod traversal;
 

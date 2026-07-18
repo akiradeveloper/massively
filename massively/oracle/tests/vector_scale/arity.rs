@@ -6,25 +6,25 @@ use super::common::exec;
 
 const A13_SCALE_LEN: usize = 65_537;
 
-type Twelve = Tuple12<u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32>;
+type Twelve = (u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32);
 
 struct MaxTwelve;
 
 macro_rules! max_twelve {
     ($lhs:ident, $rhs:ident) => {
-        tuple12(
-            $lhs.0.0.0.0.0.0.0.0.0.0.0.max($rhs.0.0.0.0.0.0.0.0.0.0.0),
-            $lhs.0.0.0.0.0.0.0.0.0.0.1.max($rhs.0.0.0.0.0.0.0.0.0.0.1),
-            $lhs.0.0.0.0.0.0.0.0.0.1.max($rhs.0.0.0.0.0.0.0.0.0.1),
-            $lhs.0.0.0.0.0.0.0.0.1.max($rhs.0.0.0.0.0.0.0.0.1),
-            $lhs.0.0.0.0.0.0.0.1.max($rhs.0.0.0.0.0.0.0.1),
-            $lhs.0.0.0.0.0.0.1.max($rhs.0.0.0.0.0.0.1),
-            $lhs.0.0.0.0.0.1.max($rhs.0.0.0.0.0.1),
-            $lhs.0.0.0.0.1.max($rhs.0.0.0.0.1),
-            $lhs.0.0.0.1.max($rhs.0.0.0.1),
-            $lhs.0.0.1.max($rhs.0.0.1),
-            $lhs.0.1.max($rhs.0.1),
+        (
+            $lhs.0.max($rhs.0),
             $lhs.1.max($rhs.1),
+            $lhs.2.max($rhs.2),
+            $lhs.3.max($rhs.3),
+            $lhs.4.max($rhs.4),
+            $lhs.5.max($rhs.5),
+            $lhs.6.max($rhs.6),
+            $lhs.7.max($rhs.7),
+            $lhs.8.max($rhs.8),
+            $lhs.9.max($rhs.9),
+            $lhs.10.max($rhs.10),
+            $lhs.11.max($rhs.11),
         )
     };
 }
@@ -32,9 +32,9 @@ macro_rules! max_twelve {
 #[cubecl::cube]
 impl ReductionOp<Twelve> for MaxTwelve {
     fn apply(lhs: Twelve, rhs: Twelve) -> Twelve {
-        let (l0, l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11) = flatten12(lhs);
-        let (r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11) = flatten12(rhs);
-        tuple12(
+        let (l0, l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11) = lhs;
+        let (r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11) = rhs;
+        (
             l0.max(r0),
             l1.max(r1),
             l2.max(r2),
@@ -66,7 +66,7 @@ fn lazify_reduce_at_read_arity_13() {
     });
     let aos: Vec<Twelve> = (0..A13_SCALE_LEN)
         .map(|index| {
-            tuple12(
+            (
                 columns[0][index],
                 columns[1][index],
                 columns[2][index],
@@ -104,7 +104,7 @@ fn lazify_reduce_at_read_arity_13() {
         ),
         lazy::counting(0).take(A13_SCALE_LEN),
     ));
-    let zero = tuple12(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    let zero = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
     assert_eq!(
         massively::vector::reduce(&exec, lazified, zero, MaxTwelve).unwrap(),

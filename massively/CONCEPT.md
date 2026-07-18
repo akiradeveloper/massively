@@ -73,6 +73,7 @@ Massivelyの基本的な設計コンセプトについて記述する。
 - partition(xs: &[a], p: a->bool) -> ([a], idx)
 - reduce(xs: &[a], zero: a, sum: a->a->a) -> a
 - reduce_by_key(keys: &[k], values: &[a], eq: k->k->bool, zero: a, sum: a->a->a) -> ([k], [a])
+- radix_sort_by_key(keys: &[radix k], values: &[a]) -> [a]
 - remove_where(xs: &[a], stencil: &[bool]) -> [a]
 - replace_where(v: a, stencil: &[bool], out: &mut[a])
 - reverse(xs: &[a]) -> [a]

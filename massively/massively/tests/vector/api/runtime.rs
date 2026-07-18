@@ -1,13 +1,20 @@
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::*;
-use static_assertions::assert_impl_all;
 
-type LeftAssociatedOutput = Zip<Zip<DeviceSliceMut<u32>, DeviceSliceMut<u32>>, DeviceSliceMut<u32>>;
-type RightAssociatedOutput =
-    Zip<DeviceSliceMut<u32>, Zip<DeviceSliceMut<u32>, DeviceSliceMut<u32>>>;
+fn assert_flat_triple<I: MIterMut<WgpuRuntime, Item = (u32, u32, u32)>>(_value: &I) {}
 
-assert_impl_all!(LeftAssociatedOutput: MIterMut<WgpuRuntime>);
-assert_impl_all!(RightAssociatedOutput: MIterMut<WgpuRuntime>);
+#[test]
+fn zip_tree_type_is_opaque_but_its_flat_row_contract_is_public() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let a = exec.alloc::<u32>(1);
+    let b = exec.alloc::<u32>(1);
+    let c = exec.alloc::<u32>(1);
+
+    let left = zip2(zip2(a.slice_mut(..), b.slice_mut(..)), c.slice_mut(..));
+    let right = zip2(a.slice_mut(..), zip2(b.slice_mut(..), c.slice_mut(..)));
+    assert_flat_triple(&left);
+    assert_flat_triple(&right);
+}
 
 #[test]
 fn public_device_slice_methods_return_public_view_types() {

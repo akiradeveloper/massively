@@ -15,11 +15,11 @@ pub use segment::Segment;
 pub(crate) use segment::{SegmentExpand, SegmentReader};
 
 use cubecl::prelude::*;
-use std::marker::PhantomData;
+use std::{marker::PhantomData, ops::RangeBounds};
 
 use crate::{
-    CanonicalForm, Error, Executor, MIter, MIterMut, MStorage, MVec, ToCanonical, WritableFrom,
-    op::BinaryPredicateOp, op::PredicateOp, op::ReductionOp, op::UnaryOp,
+    Error, Executor, MItem, MIter, MIterMut, MStorage, MVec, op::BinaryPredicateOp,
+    op::PredicateOp, op::ReductionOp, op::UnaryOp,
 };
 
 /// A flat value stream and the offsets delimiting its segments.
@@ -53,6 +53,64 @@ impl<Values, Offsets> SegmentIterator<Values, Offsets> {
     /// Decomposes this input into its flat values and offsets.
     pub fn into_parts(self) -> (Values, Offsets) {
         (self.values, self.offsets)
+    }
+}
+
+/// Physical segmented read created when a logical [`SegmentIterator`] is consumed.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug)]
+pub struct SegmentRead<Values, Offsets> {
+    values: Values,
+    offsets: Offsets,
+}
+
+impl<Values, Offsets> SegmentRead<Values, Offsets> {
+    pub(crate) const fn new(values: Values, offsets: Offsets) -> Self {
+        Self { values, offsets }
+    }
+
+    pub(crate) const fn values(&self) -> &Values {
+        &self.values
+    }
+
+    pub(crate) const fn offsets(&self) -> &Offsets {
+        &self.offsets
+    }
+}
+
+#[doc(hidden)]
+impl<R, Values, Offsets> MIter<R> for SegmentIterator<Values, Offsets>
+where
+    R: Runtime,
+    Values: MIter<R>,
+    Offsets: MIter<R, Item = u32>,
+    SegmentRead<Values::Read, Offsets::Read>: crate::core::facade::KernelInput<R, Item = Segment<Values::Item>>
+        + crate::core::facade::IterLength
+        + crate::read::SliceExpression,
+{
+    type Item = Segment<Values::Item>;
+    type Read = SegmentRead<Values::Read, Offsets::Read>;
+    type Slice = crate::read::Slice<R, Self::Read>;
+
+    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice
+    where
+        Bounds: RangeBounds<usize>,
+    {
+        let input = self.clone().lower_read();
+        let len = crate::core::facade::IterLength::logical_len(&input)
+            .expect("cannot slice segmented input with an invalid length");
+        let (start, count) = crate::api::iter::resolve_iter_range(len, range);
+        crate::read::Slice::new(crate::read::SliceExpression::slice_expression(
+            &input, start, count,
+        ))
+    }
+
+    fn len(&self) -> Result<usize, Error> {
+        Ok(MIter::len(&self.offsets)?.saturating_sub(1))
+    }
+
+    fn lower_read(self) -> Self::Read {
+        SegmentRead::new(self.values.lower_read(), self.offsets.lower_read())
     }
 }
 
@@ -235,7 +293,7 @@ where
     Input: MIter<R>,
     InputOffsets: MIter<R, Item = u32>,
     Op: UnaryOp<Input::Item>,
-    Op::Output: ToCanonical<R>,
+    Op::Output: MItem<R>,
 {
     type Output = SegmentIterator<MVec<R, Op::Output>, InputOffsets>;
 
@@ -257,9 +315,9 @@ where
     R: Runtime,
     Input: MIter<R>,
     InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
+    Output: MIterMut<R, Item = <Op as UnaryOp<Input::Item>>::Output>,
     Op: UnaryOp<Input::Item>,
-    Output::Item: WritableFrom<<Op as UnaryOp<Input::Item>>::Output>,
+    Op::Output: MItem<R>,
 {
     fn run_into(
         self,
@@ -278,10 +336,10 @@ impl<R, Input, InputOffsets, Output, Less>
 where
     R: Runtime,
     Input: MIter<R>,
+    Input::Item: MItem<R>,
     InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
+    Output: MIterMut<R, Item = Input::Item>,
     Less: BinaryPredicateOp<Input::Item>,
-    Output::Item: WritableFrom<Input::Item>,
 {
     fn run_into(
         self,
@@ -326,12 +384,10 @@ impl<R, Input, InputOffsets, Output, Op>
 where
     R: Runtime,
     Input: MIter<R> + Clone,
-    Input::Item: crate::StorageLayout,
+    Input::Item: MItem<R>,
     InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Input::Item>,
-    Output::SliceMut: MIterMut<R>,
-    <Output::SliceMut as MIterMut<R>>::Item: WritableFrom<Input::Item>,
+    Output: MIterMut<R, Item = Input::Item>,
+    Output::SliceMut: MIterMut<R, Item = Input::Item>,
     Op: ReductionOp<Input::Item>,
 {
     fn run_into(
@@ -360,11 +416,10 @@ impl<R, Input, InputOffsets, Output, Op>
 where
     R: Runtime,
     Input: MIter<R>,
-    Input::Item: crate::api::iter::ScratchAbi<R>,
+    Input::Item: MItem<R> + crate::api::iter::ScratchAbi<R>,
     InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
+    Output: MIterMut<R, Item = Input::Item>,
     Op: ReductionOp<Input::Item>,
-    Output::Item: WritableFrom<Input::Item>,
 {
     fn run_into(
         self,
@@ -393,10 +448,9 @@ where
     R: Runtime,
     Input: MIter<R, Item = Init>,
     InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
-    Init: crate::api::iter::ScratchAbi<R>,
+    Output: MIterMut<R, Item = Init>,
+    Init: MItem<R> + crate::api::iter::ScratchAbi<R>,
     Op: ReductionOp<Init>,
-    Output::Item: WritableFrom<Input::Item>,
 {
     fn run_into(
         self,
@@ -424,9 +478,9 @@ impl<R, Input, InputOffsets, Output> LengthPreservingExecutableInto<R, Input, In
 where
     R: Runtime,
     Input: MIter<R>,
+    Input::Item: MItem<R>,
     InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Input::Item>,
+    Output: MIterMut<R, Item = Input::Item>,
 {
     fn run_into(
         self,
@@ -447,11 +501,11 @@ impl<R, Input, InputOffsets, Output, OutputOffsets, Equal>
 where
     R: Runtime,
     Input: MIter<R>,
+    Input::Item: MItem<R>,
     InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
+    Output: MIterMut<R, Item = Input::Item>,
     OutputOffsets: MIterMut<R, Item = u32>,
     Equal: BinaryPredicateOp<Input::Item>,
-    Output::Item: WritableFrom<Input::Item>,
 {
     fn run_into(
         self,
@@ -533,20 +587,17 @@ pub(crate) fn reduce_segments<R, Values, Offsets, Output, Op>(
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: CanonicalForm<R> + crate::api::iter::ScratchAbi<R> + Copy,
+    Values::Item: MItem<R> + crate::api::iter::ScratchAbi<R> + Copy,
     Offsets: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Values::Item>,
+    Output: MIterMut<R, Item = Values::Item>,
     Op: ReductionOp<Values::Item>,
 {
     let (values, offsets) = input.into_parts();
     let value_len = values.len()? as usize;
     let control = control::SegmentControl::new(exec, offsets, value_len)?;
     let keys = exec.alloc::<u32>(control.segment_count);
-    let reduced = <<Values::Item as CanonicalForm<R>>::Storage as MStorage<R>>::allocate(
-        exec,
-        control.segment_count,
-    );
+    let reduced =
+        <<Values::Item as MItem<R>>::Storage as MStorage<R>>::allocate(exec, control.segment_count);
     let count = crate::vector::reduce_by_key_into(
         exec,
         control.ids.slice(..),
@@ -558,10 +609,8 @@ where
         reduced.slice_mut(..),
     )?;
 
-    let result = <<Values::Item as CanonicalForm<R>>::Storage as MStorage<R>>::allocate(
-        exec,
-        control.segment_count,
-    );
+    let result =
+        <<Values::Item as MItem<R>>::Storage as MStorage<R>>::allocate(exec, control.segment_count);
     result.slice_mut(..).fill_with(exec, init)?;
     if count != 0 {
         let indices = exec.alloc::<u32>(count as usize);
@@ -592,11 +641,11 @@ impl<R, Input, InputOffsets, Output, OutputOffsets, Pred>
 where
     R: Runtime,
     Input: MIter<R> + Clone,
+    Input::Item: MItem<R>,
     InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
+    Output: MIterMut<R, Item = Input::Item>,
     OutputOffsets: MIterMut<R, Item = u32>,
     Pred: PredicateOp<Input::Item>,
-    Output::Item: WritableFrom<Input::Item>,
 {
     fn run_into(
         self,
@@ -631,10 +680,9 @@ where
     R: Runtime,
     Input: MIter<R, Item = Init>,
     InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
-    Init: CubeType + CanonicalForm<R> + crate::api::iter::ScratchAbi<R> + Copy,
+    Output: MIterMut<R, Item = Init>,
+    Init: CubeType + MItem<R> + crate::api::iter::ScratchAbi<R> + Copy,
     Op: ReductionOp<Input::Item>,
-    Output::Item: WritableFrom<Input::Item>,
 {
     fn run_into(
         self,
@@ -656,9 +704,8 @@ macro_rules! impl_predicate_summary {
             R: Runtime,
             Input: MIter<R>,
             InputOffsets: MIter<R, Item = u32>,
-            Output: MIterMut<R>,
+            Output: MIterMut<R, Item = u32>,
             Pred: PredicateOp<Input::Item>,
-            Output::Item: WritableFrom<u32>,
         {
             fn run_into(
                 self,
@@ -698,9 +745,8 @@ where
     R: Runtime,
     Input: MIter<R>,
     InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
+    Output: MIterMut<R, Item = u32>,
     Less: BinaryPredicateOp<Input::Item>,
-    Output::Item: WritableFrom<u32>,
 {
     fn run_into(
         self,
@@ -740,9 +786,8 @@ where
     R: Runtime,
     Input: MIter<R>,
     InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
+    Output: MIterMut<R, Item = u32>,
     Less: BinaryPredicateOp<Input::Item>,
-    Output::Item: WritableFrom<u32>,
 {
     fn run_into(
         self,
@@ -784,7 +829,7 @@ macro_rules! impl_owned_length_preserving_input {
         where
             R: Runtime,
             Input: MIter<R>,
-            Input::Item: ToCanonical<R>,
+            Input::Item: MItem<R>,
             InputOffsets: MIter<R, Item = u32>,
             $( $bound )+
         {
@@ -820,7 +865,7 @@ where
     R: Runtime,
     Input: MIter<R, Item = Init>,
     InputOffsets: MIter<R, Item = u32>,
-    Init: ToCanonical<R>,
+    Init: MItem<R>,
     Op: ReductionOp<Init>,
 {
     type Output = SegmentIterator<MVec<R, Input::Item>, InputOffsets>;
@@ -846,7 +891,7 @@ impl<R, Input, InputOffsets> Executable<R, Input, InputOffsets> for ForEachSegme
 where
     R: Runtime,
     Input: MIter<R>,
-    Input::Item: ToCanonical<R>,
+    Input::Item: MItem<R>,
     InputOffsets: MIter<R, Item = u32>,
 {
     type Output = SegmentIterator<MVec<R, Input::Item>, InputOffsets>;
@@ -873,7 +918,7 @@ impl<R, Input, InputOffsets, Op> Executable<R, Input, InputOffsets>
 where
     R: Runtime,
     Input: MIter<R> + Clone,
-    Input::Item: ToCanonical<R>,
+    Input::Item: MItem<R>,
     InputOffsets: MIter<R, Item = u32>,
     Op: ReductionOp<Input::Item>,
 {
@@ -906,7 +951,7 @@ macro_rules! impl_owned_compacting {
         where
             R: Runtime,
             Input: MIter<R> + Clone,
-            Input::Item: ToCanonical<R>,
+            Input::Item: MItem<R>,
             InputOffsets: MIter<R, Item = u32>,
             $( $bound )+
         {
@@ -941,7 +986,7 @@ where
     R: Runtime,
     Input: MIter<R, Item = Init>,
     InputOffsets: MIter<R, Item = u32>,
-    Init: CanonicalForm<R> + ToCanonical<R> + Copy,
+    Init: MItem<R> + MItem<R> + Copy,
     Op: ReductionOp<Init>,
 {
     type Output = MVec<R, Input::Item>;

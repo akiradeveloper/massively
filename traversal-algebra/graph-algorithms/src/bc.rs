@@ -26,30 +26,26 @@ impl UnaryOp<(u32, u32)> for IsDepth {
 struct PathContribution;
 
 #[cubecl::cube]
-impl UnaryOp<((u32, f32), u32)> for PathContribution {
+impl UnaryOp<(u32, f32, u32)> for PathContribution {
     type Output = f32;
 
-    fn apply(input: ((u32, f32), u32)) -> f32 {
-        if input.0.0 == input.1 {
-            input.0.1
-        } else {
-            0.0f32
-        }
+    fn apply(input: (u32, f32, u32)) -> f32 {
+        if input.0 == input.2 { input.1 } else { 0.0f32 }
     }
 }
 
 struct DependencyContribution;
 
 #[cubecl::cube]
-impl UnaryOp<((((f32, f32), f32), u32), u32)> for DependencyContribution {
+impl UnaryOp<(f32, f32, f32, u32, u32)> for DependencyContribution {
     type Output = f32;
 
-    fn apply(input: ((((f32, f32), f32), u32), u32)) -> f32 {
-        let source_paths = input.0.0.0.0;
-        let destination_paths = input.0.0.0.1;
-        let destination_dependency = input.0.0.1;
-        let source_distance = input.0.1;
-        let destination_distance = input.1;
+    fn apply(input: (f32, f32, f32, u32, u32)) -> f32 {
+        let source_paths = input.0;
+        let destination_paths = input.1;
+        let destination_dependency = input.2;
+        let source_distance = input.3;
+        let destination_distance = input.4;
         if destination_distance == source_distance + 1u32 && destination_paths != 0.0f32 {
             source_paths / destination_paths * (1.0f32 + destination_dependency)
         } else {
@@ -61,14 +57,14 @@ impl UnaryOp<((((f32, f32), f32), u32), u32)> for DependencyContribution {
 struct AccumulateCentrality;
 
 #[cubecl::cube]
-impl UnaryOp<((f32, f32), (u32, u32))> for AccumulateCentrality {
+impl UnaryOp<(f32, f32, u32, u32)> for AccumulateCentrality {
     type Output = f32;
 
-    fn apply(input: ((f32, f32), (u32, u32))) -> f32 {
-        if input.1.0 == input.1.1 {
-            input.0.0
+    fn apply(input: (f32, f32, u32, u32)) -> f32 {
+        if input.2 == input.3 {
+            input.0
         } else {
-            input.0.0 + input.0.1
+            input.0 + input.1
         }
     }
 }

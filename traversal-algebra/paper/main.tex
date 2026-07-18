@@ -20,12 +20,9 @@
 \newcommand{\reduceSrc}{\mathsf{reduceSrc}}
 \newcommand{\reduceDst}{\mathsf{reduceDst}}
 \newcommand{\denote}[1]{\lbrack\!\lbrack #1 \rbrack\!\rbrack}
-\newcommand{\PaperRevision}{unversioned build}
-\InputIfFileExists{build/revision.tex}{}{}
-
 \title{Traversal Algebra:\\A Pull--Map--Push Calculus for Parallel Graph Programs}
 \author{Akira Hayakawa}
-\date{Research draft\\Revision: \PaperRevision}
+\date{\today}
 
 \begin{document}
 
@@ -36,8 +33,8 @@ We develop \TA, a small algebra for expressing frontier-oriented graph
 programs independently of a particular GPU execution strategy.  A traversal
 pulls vertex and edge data to an ordered stream of edge contexts, a pure map
 constructs messages, and monoidal terminals either emit the stream or push
-messages back to source or destination vertices.  This draft fixes the finite
-ordered multigraph semantics and proves the foundational sequence and fusion
+messages back to source or destination vertices.  We fix the finite
+ordered multigraph semantics and prove the foundational sequence and fusion
 laws.  The definitions and theorems in this slice are checked in Lean~4, and
 the executable Lean semantics generates conformance cases for the Massively
 GPU implementation.  We additionally define Monoidal Frontier BSP as an

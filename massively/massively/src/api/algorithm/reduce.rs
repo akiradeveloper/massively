@@ -2,7 +2,7 @@
 
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MIter, ToCanonical, op::ReductionOp};
+use crate::{Error, Executor, MItem, MIter, op::ReductionOp};
 
 /// Reduces all input items, starting from `init`.
 ///
@@ -38,7 +38,7 @@ pub fn reduce<R, Input, Op>(
 where
     R: Runtime,
     Input: MIter<R>,
-    Input::Item: ToCanonical<R>,
+    Input::Item: MItem<R>,
     Op: ReductionOp<Input::Item>,
 {
     crate::reduce::reduce(exec, crate::api::iter::lower_fixed::<R, _>(input), init, op)

@@ -2,10 +2,7 @@
 
 use cubecl::prelude::Runtime;
 
-use crate::{
-    Error, Executor, MIter, MIterMut, MStorage, MVec, ToCanonical, WritableFrom,
-    op::BinaryPredicateOp,
-};
+use crate::{Error, Executor, MItem, MIter, MIterMut, MStorage, MVec, op::BinaryPredicateOp};
 
 /// Stably sorts an input and returns owned device storage.
 ///
@@ -39,7 +36,7 @@ pub fn sort<R, Input, Item, Less>(
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
-    Item: ToCanonical<R>,
+    Item: MItem<R>,
     Less: BinaryPredicateOp<Item>,
 {
     let len = input.len()? as usize;
@@ -60,8 +57,7 @@ where
     R: Runtime,
     Input: MIter<R>,
     Input::Item: crate::api::iter::SortAbi<R>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Input::Item>,
+    Output: MIterMut<R, Item = Input::Item>,
     Less: BinaryPredicateOp<Input::Item>,
 {
     let input = crate::api::iter::lower_fixed::<R, _>(input);
@@ -138,7 +134,7 @@ pub fn unique<R, Input, Item, Equal>(
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
-    Item: ToCanonical<R>,
+    Item: MItem<R>,
     Equal: BinaryPredicateOp<Item>,
 {
     let capacity = input.len()? as usize;
@@ -161,8 +157,8 @@ pub(crate) fn unique_into<R, Input, Output, Equal>(
 where
     R: Runtime,
     Input: MIter<R>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Input::Item>,
+    Input::Item: MItem<R>,
+    Output: MIterMut<R, Item = Input::Item>,
     Equal: BinaryPredicateOp<Input::Item>,
 {
     crate::ordering::unique(

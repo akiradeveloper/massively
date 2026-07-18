@@ -98,14 +98,14 @@ impl ReductionOp<f32> for SumF32 {
 struct Conductance;
 
 #[cubecl::cube]
-impl UnaryOp<((f32, f32), f32)> for Conductance {
+impl UnaryOp<(f32, f32, f32)> for Conductance {
     type Output = f32;
 
-    fn apply(input: ((f32, f32), f32)) -> f32 {
-        let complement = input.1 - input.0.1;
-        let denominator = f32::min(input.0.1, complement);
+    fn apply(input: (f32, f32, f32)) -> f32 {
+        let complement = input.2 - input.1;
+        let denominator = f32::min(input.1, complement);
         if denominator > 0.0f32 {
-            input.0.0 / denominator
+            input.0 / denominator
         } else {
             f32::MAX
         }

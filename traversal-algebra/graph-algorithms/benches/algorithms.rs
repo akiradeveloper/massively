@@ -6,7 +6,7 @@ use graph_algorithms::{
     CsrGraph, DeviceCsr, DeviceWeightedCsr, bc, bfs, cc, color, forman_ricci, geo, hits, kcore,
     louvain, mst, ppr, pr, pr_nibble, rw, sm, spgemm, spmv, sssp, tc,
 };
-use massively::{Executor, zip2};
+use massively::{Executor, op::Identity, vector, zip2};
 
 fn bench_single_pass(c: &mut Criterion, exec: &Executor<WgpuRuntime>) {
     let mut group = c.benchmark_group("graph_device_resident_single_pass");
@@ -50,22 +50,26 @@ fn bench_iterative(c: &mut Criterion, exec: &Executor<WgpuRuntime>) {
         let weighted_graph =
             DeviceWeightedCsr::from_parts(graph.clone(), exec.to_device(&fixture.weights_u32))
                 .unwrap();
-        let coordinates = zip2(
-            exec.to_device(
-                &fixture
-                    .coordinates
-                    .iter()
-                    .map(|coordinate| coordinate.0)
-                    .collect::<Vec<_>>(),
-            ),
-            exec.to_device(
-                &fixture
-                    .coordinates
-                    .iter()
-                    .map(|coordinate| coordinate.1)
-                    .collect::<Vec<_>>(),
-            ),
+        let latitude = exec.to_device(
+            &fixture
+                .coordinates
+                .iter()
+                .map(|coordinate| coordinate.0)
+                .collect::<Vec<_>>(),
         );
+        let longitude = exec.to_device(
+            &fixture
+                .coordinates
+                .iter()
+                .map(|coordinate| coordinate.1)
+                .collect::<Vec<_>>(),
+        );
+        let coordinates = vector::transform(
+            exec,
+            zip2(latitude.slice(..), longitude.slice(..)),
+            Identity,
+        )
+        .unwrap();
         let known = exec.to_device(
             &fixture
                 .known

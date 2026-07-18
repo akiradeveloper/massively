@@ -99,6 +99,22 @@ by_key_case!(sort_by_key, |exec, keys, values, key_gpu, value_gpu| {
     prop_assert_eq!(exec.to_host(&output).unwrap(), expected_values);
 });
 
+by_key_case!(
+    radix_sort_by_key,
+    |exec, keys, values, key_gpu, value_gpu| {
+        let output = massively::vector::radix_sort_by_key(
+            &exec,
+            lazify(key_gpu.slice(..)),
+            lazify(value_gpu.slice(..)),
+        )
+        .unwrap();
+        let mut order: Vec<_> = (0..keys.len()).collect();
+        order.sort_by_key(|&index| keys[index]);
+        let expected_values: Vec<_> = order.into_iter().map(|index| values[index]).collect();
+        prop_assert_eq!(exec.to_host(&output).unwrap(), expected_values);
+    }
+);
+
 by_key_case!(merge_by_key, |exec, keys, values, _key_gpu, _value_gpu| {
     let split = keys.len() / 2;
     let (left_keys, left_values) = reference::sort_by_key(&keys[..split], &values[..split], Less);

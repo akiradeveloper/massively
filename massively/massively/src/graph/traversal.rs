@@ -6,14 +6,18 @@
 use cubecl::prelude::*;
 
 use crate::{
-    CanonicalForm, Error, Executor, MIter, MIterMut, MStorage, MVec, ToCanonical, WritableFrom,
+    Error, Executor, MItem, MIter, MIterMut, MStorage, MVec,
     op::BinaryPredicateOp,
     op::ReductionOp,
     op::UnaryOp,
     seg::{ForEachSegment, Reduce, SegmentIterator, SummarizingExecutableInto},
 };
 
-use super::{Csr, EdgeExpr, control::TraversalControl, expr::EdgeExprImpl};
+use super::{
+    Csr,
+    control::TraversalControl,
+    expr::{EdgeExpr, EdgeExprImpl},
+};
 
 struct IndexLess;
 
@@ -118,7 +122,7 @@ where
     R: Runtime,
     Expr: EdgeExpr<R> + EdgeExprImpl<R>,
     Map: UnaryOp<Expr::Item>,
-    Map::Output: ToCanonical<R> + Copy,
+    Map::Output: MItem<R> + Copy,
 {
     /// Returns one mapped item per traversed edge.
     pub fn emit(self, exec: &Executor<R>) -> Result<MVec<R, Map::Output>, Error> {
@@ -130,8 +134,7 @@ where
     /// Writes one mapped item per traversed edge into caller-provided storage.
     fn emit_into<Output>(self, exec: &Executor<R>, output: Output) -> Result<(), Error>
     where
-        Output: MIterMut<R>,
-        Output::Item: WritableFrom<Map::Output>,
+        Output: MIterMut<R, Item = Map::Output>,
     {
         let input = self.expr.materialize(exec, &self.traversal.control)?;
         crate::vector::transform_into(exec, input.slice(..), self.map, output)
@@ -143,7 +146,7 @@ where
     R: Runtime,
     Expr: EdgeExpr<R> + EdgeExprImpl<R>,
     Map: UnaryOp<Expr::Item>,
-    Map::Output: CanonicalForm<R> + ToCanonical<R, Canonical = Map::Output> + Copy,
+    Map::Output: MItem<R> + Copy,
 {
     /// Maps every selected edge and reduces results independently for each input source.
     pub fn reduce_by_source<ReduceOp>(
@@ -169,8 +172,7 @@ where
         output: Output,
     ) -> Result<(), Error>
     where
-        Output: MIterMut<R>,
-        Output::Item: WritableFrom<Map::Output>,
+        Output: MIterMut<R, Item = Map::Output>,
         ReduceOp: ReductionOp<Map::Output>,
     {
         let input = self.expr.materialize(exec, &self.traversal.control)?;
@@ -262,8 +264,7 @@ where
         Map: UnaryOp<Expr::Item, Output = u32>,
         State: MIter<R, Item = u32>,
         StateOutput: MIterMut<R, Item = u32>,
-        u32: crate::CanonicalAlloc<R, CanonicalStorage = crate::DeviceVec<R, u32>>
-            + ToCanonical<R, Canonical = u32>,
+        u32: crate::RowAlloc<R, RowStorage = crate::DeviceVec<R, u32>> + MItem<R>,
     {
         let capacity = self.traversal.control.output_len as usize;
         let mut next = exec.alloc::<u32>(capacity);
@@ -292,7 +293,7 @@ where
         State: MIter<R, Item = u32>,
         StateOutput: MIterMut<R, Item = u32>,
         Next: MIterMut<R, Item = u32>,
-        u32: crate::CanonicalAlloc<R, CanonicalStorage = crate::DeviceVec<R, u32>>,
+        u32: crate::RowAlloc<R, RowStorage = crate::DeviceVec<R, u32>>,
     {
         let edge_count = self.traversal.control.output_len;
         if edge_count == 0 {

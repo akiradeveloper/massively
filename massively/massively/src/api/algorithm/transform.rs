@@ -1,8 +1,6 @@
 use cubecl::prelude::Runtime;
 
-use crate::{
-    Error, Executor, MIter, MIterMut, MStorage, MVec, ToCanonical, WritableFrom, op::UnaryOp,
-};
+use crate::{Error, Executor, MItem, MIter, MIterMut, MStorage, MVec, op::UnaryOp};
 
 /// Copies every input row into caller-provided storage.
 ///
@@ -24,8 +22,8 @@ pub fn copy<R, Input, Output>(exec: &Executor<R>, input: Input, output: Output) 
 where
     R: Runtime,
     Input: MIter<R>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Input::Item>,
+    Input::Item: MItem<R>,
+    Output: MIterMut<R, Item = Input::Item>,
 {
     transform_into(exec, input, crate::op::Identity, output)
 }
@@ -65,7 +63,7 @@ where
     R: Runtime,
     Input: MIter<R>,
     Op: UnaryOp<Input::Item>,
-    Op::Output: ToCanonical<R>,
+    Op::Output: MItem<R>,
 {
     let len = input.len()? as usize;
     let output = exec.alloc::<Op::Output>(len);
@@ -84,9 +82,9 @@ pub(crate) fn transform_into<R, Input, Output, Op>(
 where
     R: Runtime,
     Input: MIter<R>,
-    Output: MIterMut<R>,
+    Output: MIterMut<R, Item = <Op as UnaryOp<Input::Item>>::Output>,
     Op: UnaryOp<Input::Item>,
-    Output::Item: WritableFrom<<Op as UnaryOp<Input::Item>>::Output>,
+    Op::Output: MItem<R>,
 {
     crate::transform::transform_fixed(
         exec,

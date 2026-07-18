@@ -10,7 +10,7 @@ use massively::{
 
 const SIZES: &[usize] = &[1 << 20, 1 << 24];
 
-type Seven = ((((((usize, usize), usize), usize), usize), usize), usize);
+type Seven = (usize, usize, usize, usize, usize, usize, usize);
 
 struct LessU32;
 struct FirstLeafLess;
@@ -25,7 +25,7 @@ impl BinaryPredicateOp<usize> for LessU32 {
 #[cubecl::cube]
 impl BinaryPredicateOp<Seven> for FirstLeafLess {
     fn apply(lhs: Seven, rhs: Seven) -> bool {
-        lhs.0.0.0.0.0.0 < rhs.0.0.0.0.0.0
+        lhs.0 < rhs.0
     }
 }
 

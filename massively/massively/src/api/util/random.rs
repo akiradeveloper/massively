@@ -65,18 +65,22 @@ macro_rules! uniform_stream {
         }
 
         impl crate::read::TakenSource for $stream {
-            type Read = lazy::Transform<RandomInput<$item>, $op>;
+            type Read = crate::read::Transform<RandomInput<$item>, $op>;
 
             fn lower(&self, offset: usize, len: usize) -> Self::Read {
                 crate::read::Transform::new(
-                    crate::zip4(
-                        crate::read::Counting::new(
-                            u32::try_from(offset)
-                                .expect("random stream offset exceeds device u32 range"),
-                            len,
+                    Zip::new(
+                        Zip::new(
+                            Zip::new(
+                                crate::read::Counting::new(
+                                    u32::try_from(offset)
+                                        .expect("random stream offset exceeds device u32 range"),
+                                    len,
+                                ),
+                                crate::read::Constant::new(self.min, len),
+                            ),
+                            crate::read::Constant::new(self.max, len),
                         ),
-                        crate::read::Constant::new(self.min, len),
-                        crate::read::Constant::new(self.max, len),
                         crate::read::Constant::new(self.key, len),
                     ),
                     $op,
@@ -192,18 +196,22 @@ macro_rules! normal_stream {
         }
 
         impl crate::read::TakenSource for $stream {
-            type Read = lazy::Transform<RandomInput<$item>, $op>;
+            type Read = crate::read::Transform<RandomInput<$item>, $op>;
 
             fn lower(&self, offset: usize, len: usize) -> Self::Read {
                 crate::read::Transform::new(
-                    crate::zip4(
-                        crate::read::Counting::new(
-                            u32::try_from(offset)
-                                .expect("random stream offset exceeds device u32 range"),
-                            len,
+                    Zip::new(
+                        Zip::new(
+                            Zip::new(
+                                crate::read::Counting::new(
+                                    u32::try_from(offset)
+                                        .expect("random stream offset exceeds device u32 range"),
+                                    len,
+                                ),
+                                crate::read::Constant::new(self.mean, len),
+                            ),
+                            crate::read::Constant::new(self.stddev, len),
                         ),
-                        crate::read::Constant::new(self.mean, len),
-                        crate::read::Constant::new(self.stddev, len),
                         crate::read::Constant::new(self.key, len),
                     ),
                     $op,
@@ -261,17 +269,17 @@ pub struct NormalF32Op;
 #[doc(hidden)]
 pub struct NormalF64Op;
 
-type RandomU32Args = (((u32, u32), u32), u32);
-type RandomU64Args = (((u32, u64), u64), u32);
-type RandomF32Args = (((u32, f32), f32), u32);
-type RandomF64Args = (((u32, f64), f64), u32);
+type RandomU32Args = (u32, u32, u32, u32);
+type RandomU64Args = (u32, u64, u64, u32);
+type RandomF32Args = (u32, f32, f32, u32);
+type RandomF64Args = (u32, f64, f64, u32);
 
 #[cubecl::cube]
 impl crate::op::UnaryOp<RandomU32Args> for UniformU32Op {
     type Output = u32;
 
     fn apply(input: RandomU32Args) -> u32 {
-        uniform_u32_value(input.0.0.1, input.0.1, input.1, input.0.0.0)
+        uniform_u32_value(input.1, input.2, input.3, input.0)
     }
 }
 
@@ -280,7 +288,7 @@ impl crate::op::UnaryOp<RandomU64Args> for UniformU64Op {
     type Output = u64;
 
     fn apply(input: RandomU64Args) -> u64 {
-        uniform_u64_value(input.0.0.1, input.0.1, input.1, input.0.0.0)
+        uniform_u64_value(input.1, input.2, input.3, input.0)
     }
 }
 
@@ -289,7 +297,7 @@ impl crate::op::UnaryOp<RandomF32Args> for UniformF32Op {
     type Output = f32;
 
     fn apply(input: RandomF32Args) -> f32 {
-        uniform_f32_value(input.0.0.1, input.0.1, input.1, input.0.0.0)
+        uniform_f32_value(input.1, input.2, input.3, input.0)
     }
 }
 
@@ -298,7 +306,7 @@ impl crate::op::UnaryOp<RandomF64Args> for UniformF64Op {
     type Output = f64;
 
     fn apply(input: RandomF64Args) -> f64 {
-        uniform_f64_value(input.0.0.1, input.0.1, input.1, input.0.0.0)
+        uniform_f64_value(input.1, input.2, input.3, input.0)
     }
 }
 
@@ -307,7 +315,7 @@ impl crate::op::UnaryOp<RandomF32Args> for NormalF32Op {
     type Output = f32;
 
     fn apply(input: RandomF32Args) -> f32 {
-        normal_f32_value(input.0.0.1, input.0.1, input.1, input.0.0.0)
+        normal_f32_value(input.1, input.2, input.3, input.0)
     }
 }
 
@@ -316,7 +324,7 @@ impl crate::op::UnaryOp<RandomF64Args> for NormalF64Op {
     type Output = f64;
 
     fn apply(input: RandomF64Args) -> f64 {
-        normal_f64_value(input.0.0.1, input.0.1, input.1, input.0.0.0)
+        normal_f64_value(input.1, input.2, input.3, input.0)
     }
 }
 

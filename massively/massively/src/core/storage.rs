@@ -124,6 +124,31 @@ pub struct More<Head: CubeType, Tail: CubeType> {
     pub(crate) tail: Tail,
 }
 
+#[doc(hidden)]
+pub type Leaves2<A, B> = More<A, Last<B>>;
+#[doc(hidden)]
+pub type Leaves3<A, B, C> = More<A, Leaves2<B, C>>;
+#[doc(hidden)]
+pub type Leaves4<A, B, C, D> = More<A, Leaves3<B, C, D>>;
+#[doc(hidden)]
+pub type Leaves5<A, B, C, D, E> = More<A, Leaves4<B, C, D, E>>;
+#[doc(hidden)]
+pub type Leaves6<A, B, C, D, E, F> = More<A, Leaves5<B, C, D, E, F>>;
+#[doc(hidden)]
+pub type Leaves7<A, B, C, D, E, F, G> = More<A, Leaves6<B, C, D, E, F, G>>;
+#[doc(hidden)]
+pub type Leaves8<A, B, C, D, E, F, G, H> = More<A, Leaves7<B, C, D, E, F, G, H>>;
+#[doc(hidden)]
+pub type Leaves9<A, B, C, D, E, F, G, H, I> = More<A, Leaves8<B, C, D, E, F, G, H, I>>;
+#[doc(hidden)]
+pub type Leaves10<A, B, C, D, E, F, G, H, I, J> = More<A, Leaves9<B, C, D, E, F, G, H, I, J>>;
+#[doc(hidden)]
+pub type Leaves11<A, B, C, D, E, F, G, H, I, J, K> =
+    More<A, Leaves10<B, C, D, E, F, G, H, I, J, K>>;
+#[doc(hidden)]
+pub type Leaves12<A, B, C, D, E, F, G, H, I, J, K, L> =
+    More<A, Leaves11<B, C, D, E, F, G, H, I, J, K, L>>;
+
 #[cubecl::cube]
 impl<Head: CubeType, Tail: CubeType> More<Head, Tail> {
     #[allow(dead_code)]
@@ -219,7 +244,32 @@ macro_rules! impl_scalar_layout {
     };
 }
 
-impl_scalar_layout!(u8, u16, u32, u64, i8, i16, i32, i64, f32, f64);
+impl_scalar_layout!(bool, usize, u8, u16, u32, u64, i8, i16, i32, i64, f32, f64);
+
+/// A scalar that may participate in a flat logical row.
+///
+/// Unlike [`crate::MStorageElement`], this includes read-only semantic values
+/// such as `bool` and `usize` that cannot own a device column.
+#[doc(hidden)]
+pub trait FlatElement:
+    CubePrimitive
+    + StorageLayout<StorageArity = S1, StorageLeaves = Last<Self>>
+    + Copy
+    + Send
+    + Sync
+    + 'static
+{
+}
+
+impl<T> FlatElement for T where
+    T: CubePrimitive
+        + StorageLayout<StorageArity = S1, StorageLeaves = Last<Self>>
+        + Copy
+        + Send
+        + Sync
+        + 'static
+{
+}
 
 impl<Left, Right> StorageLayout for (Left, Right)
 where
@@ -249,59 +299,180 @@ where
     }
 }
 
-/// Converts a semantic value when it crosses an output write boundary.
-///
-/// This trait belongs to the output item.  An implementation exists only when
-/// source and output have the same storage arity and exactly the same ordered
-/// storage-leaf types.  Their tuple association may differ.
-///
-/// Algorithms apply this conversion automatically. In this example the input item is
-/// `(u32, (u32, u32))`, while [`crate::zip3`] exposes the output item in canonical
-/// left-associated form `((u32, u32), u32)`:
-///
-/// ```
-/// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, op, vector::transform, zip2};
-///
-/// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-/// let a = exec.to_device(&[1_u32, 2]);
-/// let b = exec.to_device(&[10_u32, 20]);
-/// let c = exec.to_device(&[100_u32, 200]);
-/// let input = zip2(a.slice(..), zip2(b.slice(..), c.slice(..)));
-/// let output = transform(&exec, input, op::Identity).unwrap();
-///
-/// assert_eq!(exec.to_host(&output.0.0).unwrap(), vec![1, 2]);
-/// assert_eq!(exec.to_host(&output.0.1).unwrap(), vec![10, 20]);
-/// assert_eq!(exec.to_host(&output.1).unwrap(), vec![100, 200]);
-/// ```
-#[cubecl::cube]
-pub trait WritableFrom<Source: CubeType>: CubeType {
-    fn write_from(source: Source) -> Self;
+macro_rules! impl_flat_tuple_layout {
+    (
+        $arity:ty;
+        ($( $leaf:ident : $value:ident ),+);
+        $leaves:ty;
+        $build:expr;
+        $source:ident => $rebuild:expr
+    ) => {
+        impl<$( $leaf ),+> StorageLayout for ($( $leaf, )+)
+        where
+            $( $leaf: FlatElement, )+
+        {
+            type StorageArity = $arity;
+            type StorageLeaves = $leaves;
+            type DeviceLayout = FlatTupleLayout<($( $leaf, )+)>;
 
-    #[doc(hidden)]
-    fn read_source(output: Self) -> Source;
+            fn into_storage_leaves(self) -> Self::StorageLeaves {
+                let ($( $value, )+) = self;
+                $build
+            }
+
+            fn from_storage_leaves($source: Self::StorageLeaves) -> Self {
+                $rebuild
+            }
+        }
+
+        #[cubecl::cube]
+        impl<$( $leaf: CubeType + 'static ),+> Decompose<($( $leaf, )+)>
+            for FlatTupleLayout<($( $leaf, )+)>
+        {
+            type Leaves = $leaves;
+
+            fn decompose(item: ($( $leaf, )+)) -> Self::Leaves {
+                let ($( $value, )+) = item;
+                $build
+            }
+        }
+
+        #[cubecl::cube]
+        impl<$( $leaf: CubeType + 'static ),+> Recompose<($( $leaf, )+)>
+            for FlatTupleLayout<($( $leaf, )+)>
+        {
+            type Leaves = $leaves;
+
+            fn recompose($source: Self::Leaves) -> ($( $leaf, )+) {
+                $rebuild
+            }
+        }
+    };
 }
 
-#[cubecl::cube]
+impl_flat_tuple_layout!(
+    S3;
+    (A:a, B:b, C:c);
+    Leaves3<A, B, C>;
+    Leaves3::<A, B, C> { head: a, tail: Leaves2::<B, C> { head: b, tail: Last::<C> { value: c } } };
+    leaves => (leaves.head, leaves.tail.head, leaves.tail.tail.value)
+);
+impl_flat_tuple_layout!(
+    S4;
+    (A:a, B:b, C:c, D:d);
+    Leaves4<A, B, C, D>;
+    Leaves4::<A, B, C, D> { head: a, tail: Leaves3::<B, C, D> { head: b, tail: Leaves2::<C, D> { head: c, tail: Last::<D> { value: d } } } };
+    leaves => (leaves.head, leaves.tail.head, leaves.tail.tail.head, leaves.tail.tail.tail.value)
+);
+impl_flat_tuple_layout!(
+    S5;
+    (A:a, B:b, C:c, D:d, E:e);
+    Leaves5<A, B, C, D, E>;
+    Leaves5::<A, B, C, D, E> { head: a, tail: Leaves4::<B, C, D, E> { head: b, tail: Leaves3::<C, D, E> { head: c, tail: Leaves2::<D, E> { head: d, tail: Last::<E> { value: e } } } } };
+    leaves => (leaves.head, leaves.tail.head, leaves.tail.tail.head, leaves.tail.tail.tail.head, leaves.tail.tail.tail.tail.value)
+);
+impl_flat_tuple_layout!(
+    S6;
+    (A:a, B:b, C:c, D:d, E:e, F:f);
+    Leaves6<A, B, C, D, E, F>;
+    Leaves6::<A, B, C, D, E, F> { head: a, tail: Leaves5::<B, C, D, E, F> { head: b, tail: Leaves4::<C, D, E, F> { head: c, tail: Leaves3::<D, E, F> { head: d, tail: Leaves2::<E, F> { head: e, tail: Last::<F> { value: f } } } } } };
+    leaves => (leaves.head, leaves.tail.head, leaves.tail.tail.head, leaves.tail.tail.tail.head, leaves.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.value)
+);
+impl_flat_tuple_layout!(
+    S7;
+    (A:a, B:b, C:c, D:d, E:e, F:f, G:g);
+    Leaves7<A, B, C, D, E, F, G>;
+    Leaves7::<A, B, C, D, E, F, G> { head: a, tail: Leaves6::<B, C, D, E, F, G> { head: b, tail: Leaves5::<C, D, E, F, G> { head: c, tail: Leaves4::<D, E, F, G> { head: d, tail: Leaves3::<E, F, G> { head: e, tail: Leaves2::<F, G> { head: f, tail: Last::<G> { value: g } } } } } } };
+    leaves => (leaves.head, leaves.tail.head, leaves.tail.tail.head, leaves.tail.tail.tail.head, leaves.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.value)
+);
+impl_flat_tuple_layout!(
+    S8;
+    (A:a, B:b, C:c, D:d, E:e, F:f, G:g, H:h);
+    Leaves8<A, B, C, D, E, F, G, H>;
+    Leaves8::<A, B, C, D, E, F, G, H> { head: a, tail: Leaves7::<B, C, D, E, F, G, H> { head: b, tail: Leaves6::<C, D, E, F, G, H> { head: c, tail: Leaves5::<D, E, F, G, H> { head: d, tail: Leaves4::<E, F, G, H> { head: e, tail: Leaves3::<F, G, H> { head: f, tail: Leaves2::<G, H> { head: g, tail: Last::<H> { value: h } } } } } } } };
+    leaves => (leaves.head, leaves.tail.head, leaves.tail.tail.head, leaves.tail.tail.tail.head, leaves.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.tail.value)
+);
+impl_flat_tuple_layout!(
+    S9;
+    (A:a, B:b, C:c, D:d, E:e, F:f, G:g, H:h, I:i);
+    Leaves9<A, B, C, D, E, F, G, H, I>;
+    Leaves9::<A, B, C, D, E, F, G, H, I> { head: a, tail: Leaves8::<B, C, D, E, F, G, H, I> { head: b, tail: Leaves7::<C, D, E, F, G, H, I> { head: c, tail: Leaves6::<D, E, F, G, H, I> { head: d, tail: Leaves5::<E, F, G, H, I> { head: e, tail: Leaves4::<F, G, H, I> { head: f, tail: Leaves3::<G, H, I> { head: g, tail: Leaves2::<H, I> { head: h, tail: Last::<I> { value: i } } } } } } } } };
+    leaves => (leaves.head, leaves.tail.head, leaves.tail.tail.head, leaves.tail.tail.tail.head, leaves.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.tail.tail.value)
+);
+impl_flat_tuple_layout!(
+    S10;
+    (A:a, B:b, C:c, D:d, E:e, F:f, G:g, H:h, I:i, J:j);
+    Leaves10<A, B, C, D, E, F, G, H, I, J>;
+    Leaves10::<A, B, C, D, E, F, G, H, I, J> { head: a, tail: Leaves9::<B, C, D, E, F, G, H, I, J> { head: b, tail: Leaves8::<C, D, E, F, G, H, I, J> { head: c, tail: Leaves7::<D, E, F, G, H, I, J> { head: d, tail: Leaves6::<E, F, G, H, I, J> { head: e, tail: Leaves5::<F, G, H, I, J> { head: f, tail: Leaves4::<G, H, I, J> { head: g, tail: Leaves3::<H, I, J> { head: h, tail: Leaves2::<I, J> { head: i, tail: Last::<J> { value: j } } } } } } } } } };
+    leaves => (leaves.head, leaves.tail.head, leaves.tail.tail.head, leaves.tail.tail.tail.head, leaves.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.tail.tail.tail.value)
+);
+impl_flat_tuple_layout!(
+    S11;
+    (A:a, B:b, C:c, D:d, E:e, F:f, G:g, H:h, I:i, J:j, K:k);
+    Leaves11<A, B, C, D, E, F, G, H, I, J, K>;
+    Leaves11::<A, B, C, D, E, F, G, H, I, J, K> { head: a, tail: Leaves10::<B, C, D, E, F, G, H, I, J, K> { head: b, tail: Leaves9::<C, D, E, F, G, H, I, J, K> { head: c, tail: Leaves8::<D, E, F, G, H, I, J, K> { head: d, tail: Leaves7::<E, F, G, H, I, J, K> { head: e, tail: Leaves6::<F, G, H, I, J, K> { head: f, tail: Leaves5::<G, H, I, J, K> { head: g, tail: Leaves4::<H, I, J, K> { head: h, tail: Leaves3::<I, J, K> { head: i, tail: Leaves2::<J, K> { head: j, tail: Last::<K> { value: k } } } } } } } } } } };
+    leaves => (leaves.head, leaves.tail.head, leaves.tail.tail.head, leaves.tail.tail.tail.head, leaves.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.tail.tail.tail.tail.value)
+);
+impl_flat_tuple_layout!(
+    S12;
+    (A:a, B:b, C:c, D:d, E:e, F:f, G:g, H:h, I:i, J:j, K:k, L:l);
+    Leaves12<A, B, C, D, E, F, G, H, I, J, K, L>;
+    Leaves12::<A, B, C, D, E, F, G, H, I, J, K, L> { head: a, tail: Leaves11::<B, C, D, E, F, G, H, I, J, K, L> { head: b, tail: Leaves10::<C, D, E, F, G, H, I, J, K, L> { head: c, tail: Leaves9::<D, E, F, G, H, I, J, K, L> { head: d, tail: Leaves8::<E, F, G, H, I, J, K, L> { head: e, tail: Leaves7::<F, G, H, I, J, K, L> { head: f, tail: Leaves6::<G, H, I, J, K, L> { head: g, tail: Leaves5::<H, I, J, K, L> { head: h, tail: Leaves4::<I, J, K, L> { head: i, tail: Leaves3::<J, K, L> { head: j, tail: Leaves2::<K, L> { head: k, tail: Last::<L> { value: l } } } } } } } } } } } };
+    leaves => (leaves.head, leaves.tail.head, leaves.tail.tail.head, leaves.tail.tail.tail.head, leaves.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.tail.tail.tail.tail.head, leaves.tail.tail.tail.tail.tail.tail.tail.tail.tail.tail.tail.value)
+);
+
+/// Maps an ordered physical leaf list to its unique flat logical row type.
 #[doc(hidden)]
-impl<Source, Output> WritableFrom<Source> for Output
-where
-    Source: StorageLayout,
-    Output:
-        StorageLayout<StorageArity = Source::StorageArity, StorageLeaves = Source::StorageLeaves>,
-    Source::DeviceLayout: Decompose<Source, Leaves = Source::StorageLeaves>,
-    Output::DeviceLayout: Recompose<Output, Leaves = Source::StorageLeaves>,
-{
-    fn write_from(source: Source) -> Output {
-        let leaves = Source::DeviceLayout::decompose(source);
-        Output::DeviceLayout::recompose(leaves)
-    }
-
-    fn read_source(output: Output) -> Source {
-        let leaves = Output::DeviceLayout::decompose(output);
-        Source::DeviceLayout::recompose(leaves)
-    }
+pub trait FlatLeaves: CubeType {
+    type Item: StorageLayout<StorageLeaves = Self>;
 }
+
+impl<T> FlatLeaves for Last<T>
+where
+    T: FlatElement,
+{
+    type Item = T;
+}
+
+macro_rules! impl_flat_leaves {
+    ($leaves:ty => ($( $leaf:ident ),+)) => {
+        impl<$( $leaf ),+> FlatLeaves for $leaves
+        where
+            $( $leaf: FlatElement, )+
+        {
+            type Item = ($( $leaf, )+);
+        }
+    };
+}
+
+impl_flat_leaves!(Leaves2<A, B> => (A, B));
+impl_flat_leaves!(Leaves3<A, B, C> => (A, B, C));
+impl_flat_leaves!(Leaves4<A, B, C, D> => (A, B, C, D));
+impl_flat_leaves!(Leaves5<A, B, C, D, E> => (A, B, C, D, E));
+impl_flat_leaves!(Leaves6<A, B, C, D, E, F> => (A, B, C, D, E, F));
+impl_flat_leaves!(Leaves7<A, B, C, D, E, F, G> => (A, B, C, D, E, F, G));
+impl_flat_leaves!(Leaves8<A, B, C, D, E, F, G, H> => (A, B, C, D, E, F, G, H));
+impl_flat_leaves!(Leaves9<A, B, C, D, E, F, G, H, I> => (A, B, C, D, E, F, G, H, I));
+impl_flat_leaves!(Leaves10<A, B, C, D, E, F, G, H, I, J> => (A, B, C, D, E, F, G, H, I, J));
+impl_flat_leaves!(Leaves11<A, B, C, D, E, F, G, H, I, J, K> => (A, B, C, D, E, F, G, H, I, J, K));
+impl_flat_leaves!(Leaves12<A, B, C, D, E, F, G, H, I, J, K, L> => (A, B, C, D, E, F, G, H, I, J, K, L));
+
+/// A scalar or native tuple whose public shape already is flat.
+#[doc(hidden)]
+pub trait FlatRow: StorageLayout<StorageLeaves: FlatLeaves<Item = Self>> {}
+
+impl<Item> FlatRow for Item
+where
+    Item: StorageLayout,
+    Item::StorageLeaves: FlatLeaves<Item = Item>,
+{
+}
+
+/// The flat logical row obtained by concatenating two flat row schemas.
+#[doc(hidden)]
+pub type JoinedRow<Left, Right> = <<<Left as StorageLayout>::StorageLeaves as Concat<
+    <Right as StorageLayout>::StorageLeaves,
+>>::Output as FlatLeaves>::Item;
 
 /// Device-side layout marker for one physical leaf.
 #[doc(hidden)]
@@ -313,6 +484,12 @@ pub struct ScalarLayout<T> {
 #[doc(hidden)]
 pub struct PairLayout<Left, Right> {
     _marker: core::marker::PhantomData<fn() -> (Left, Right)>,
+}
+
+/// Device-side layout marker for one native, flat tuple.
+#[doc(hidden)]
+pub struct FlatTupleLayout<Item> {
+    _marker: core::marker::PhantomData<fn() -> Item>,
 }
 
 /// Decomposes a semantic value into its ordered physical leaves in device code.
@@ -1293,21 +1470,15 @@ mod private {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use static_assertions::{assert_impl_all, assert_not_impl_any};
+    use static_assertions::assert_impl_all;
 
-    type RightAssociated3 = (u32, (f32, i16));
-    type LeftAssociated3 = ((u32, f32), i16);
-    type WrongOrder3 = ((u32, i16), f32);
-    type WrongArity2 = (u32, f32);
-    type Supported12 = (
-        u8,
-        (u8, (u8, (u8, (u8, (u8, (u8, (u8, (u8, (u8, (u8, u8)))))))))),
-    );
+    type Flat3 = (u32, f32, i16);
+    type Supported12 = (u8, u8, u8, u8, u8, u8, u8, u8, u8, u8, u8, u8);
 
     #[cubecl::cube]
     #[allow(dead_code)]
-    fn cubecl_accepts_nested_semantic_items(source: (u32, (f32, i16))) -> ((u32, f32), i16) {
-        ((source.0, source.1.0), source.1.1)
+    fn cubecl_accepts_flat_rows(source: Flat3) -> Flat3 {
+        (source.0, source.1, source.2)
     }
 
     #[cubecl::cube]
@@ -1323,24 +1494,7 @@ mod tests {
     }
 
     #[test]
-    fn write_from_reassociates_without_changing_semantic_leaf_values() {
-        let source: RightAssociated3 = (7, (2.5, -3));
-        let output = LeftAssociated3::write_from(source);
-        assert_eq!(output, ((7, 2.5), -3));
-    }
-
-    #[test]
-    fn deeply_nested_layout_supports_seven_leaves() {
-        type Source = (u8, (u16, (u32, (u64, (i8, (i16, i32))))));
-        type Output = ((((((u8, u16), u32), u64), i8), i16), i32);
-
-        let source: Source = (1, (2, (3, (4, (5, (6, 7))))));
-        let output = Output::write_from(source);
-        assert_eq!(output, ((((((1, 2), 3), 4), 5), 6), 7));
-    }
-
-    #[test]
-    fn layout_arity_is_derived_from_the_binary_tree() {
+    fn layout_arity_is_derived_from_the_flat_row() {
         fn assert_arity<T, A>()
         where
             T: StorageLayout<StorageArity = A>,
@@ -1349,12 +1503,10 @@ mod tests {
         }
 
         assert_arity::<u32, S1>();
-        assert_arity::<RightAssociated3, S3>();
-        assert_arity::<((u8, u16), (u32, f32)), S4>();
+        assert_arity::<Flat3, S3>();
+        assert_arity::<(u8, u16, u32, f32), S4>();
     }
 
-    assert_impl_all!(LeftAssociated3: WritableFrom<RightAssociated3>);
-    assert_impl_all!(Supported12: StorageLayout);
-    assert_not_impl_any!(WrongOrder3: WritableFrom<RightAssociated3>);
-    assert_not_impl_any!(WrongArity2: WritableFrom<RightAssociated3>);
+    assert_impl_all!(Flat3: FlatRow);
+    assert_impl_all!(Supported12: FlatRow);
 }

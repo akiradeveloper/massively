@@ -5,7 +5,7 @@ use proptest::prelude::*;
 
 use super::common::*;
 
-type Twelve = Tuple12<u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32>;
+type Twelve = (u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32);
 
 struct ExpandTwelve;
 struct MaxTwelve;
@@ -15,7 +15,7 @@ impl UnaryOp<u32> for ExpandTwelve {
     type Output = Twelve;
 
     fn apply(value: u32) -> Twelve {
-        tuple12(
+        (
             value,
             value + 1u32,
             value + 2u32,
@@ -35,9 +35,9 @@ impl UnaryOp<u32> for ExpandTwelve {
 #[cubecl::cube]
 impl ReductionOp<Twelve> for MaxTwelve {
     fn apply(lhs: Twelve, rhs: Twelve) -> Twelve {
-        let (l0, l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11) = flatten12(lhs);
-        let (r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11) = flatten12(rhs);
-        tuple12(
+        let (l0, l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11) = lhs;
+        let (r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11) = rhs;
+        (
             l0.max(r0),
             l1.max(r1),
             l2.max(r2),
@@ -56,9 +56,9 @@ impl ReductionOp<Twelve> for MaxTwelve {
 
 impl op::ReductionOp<Twelve> for MaxTwelve {
     fn apply(lhs: Twelve, rhs: Twelve) -> Twelve {
-        let (l0, l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11) = flatten12(lhs);
-        let (r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11) = flatten12(rhs);
-        tuple12(
+        let (l0, l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11) = lhs;
+        let (r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11) = rhs;
+        (
             l0.max(r0),
             l1.max(r1),
             l2.max(r2),
@@ -105,7 +105,7 @@ fn columns(seed: &[u32]) -> [Vec<u32>; 12] {
 fn rows(columns: &[Vec<u32>; 12]) -> Vec<Twelve> {
     (0..columns[0].len())
         .map(|index| {
-            tuple12(
+            (
                 columns[0][index],
                 columns[1][index],
                 columns[2][index],
@@ -127,7 +127,6 @@ fn row_columns(rows: &[Twelve]) -> [Vec<u32>; 12] {
     core::array::from_fn(|column| {
         rows.iter()
             .copied()
-            .map(flatten12)
             .map(|row| match column {
                 0 => row.0,
                 1 => row.1,
@@ -212,32 +211,26 @@ macro_rules! assert_prefix {
         }
     }};
     (8, $exec:expr, $output:expr, $expected:expr) => {{
-        let Zip(Zip(Zip(Zip(Zip(Zip(Zip(o0, o1), o2), o3), o4), o5), o6), o7) = $output;
+        let (o0, o1, o2, o3, o4, o5, o6, o7) = MStorage::into_columns($output);
         assert_prefix!(@check $exec, $expected, [o0, o1, o2, o3, o4, o5, o6, o7]);
     }};
     (9, $exec:expr, $output:expr, $expected:expr) => {{
-        let Zip(Zip(Zip(Zip(Zip(Zip(Zip(Zip(o0, o1), o2), o3), o4), o5), o6), o7), o8) = $output;
+        let (o0, o1, o2, o3, o4, o5, o6, o7, o8) = MStorage::into_columns($output);
         assert_prefix!(@check $exec, $expected, [o0, o1, o2, o3, o4, o5, o6, o7, o8]);
     }};
     (10, $exec:expr, $output:expr, $expected:expr) => {{
-        let Zip(Zip(Zip(Zip(Zip(Zip(Zip(Zip(Zip(o0, o1), o2), o3), o4), o5), o6), o7), o8), o9) = $output;
+        let (o0, o1, o2, o3, o4, o5, o6, o7, o8, o9) = MStorage::into_columns($output);
         assert_prefix!(@check $exec, $expected, [o0, o1, o2, o3, o4, o5, o6, o7, o8, o9]);
     }};
     (11, $exec:expr, $output:expr, $expected:expr) => {{
-        let Zip(Zip(Zip(Zip(Zip(Zip(Zip(Zip(Zip(Zip(o0, o1), o2), o3), o4), o5), o6), o7), o8), o9), o10) = $output;
+        let (o0, o1, o2, o3, o4, o5, o6, o7, o8, o9, o10) = MStorage::into_columns($output);
         assert_prefix!(@check $exec, $expected, [o0, o1, o2, o3, o4, o5, o6, o7, o8, o9, o10]);
     }};
 }
 
 macro_rules! assert_twelve {
     ($exec:expr, $output:expr, $expected:expr) => {{
-        let Zip(
-            Zip(
-                Zip(Zip(Zip(Zip(Zip(Zip(Zip(Zip(Zip(o0, o1), o2), o3), o4), o5), o6), o7), o8), o9),
-                o10,
-            ),
-            o11,
-        ) = $output;
+        let (o0, o1, o2, o3, o4, o5, o6, o7, o8, o9, o10, o11) = MStorage::into_columns($output);
         let outputs = [o0, o1, o2, o3, o4, o5, o6, o7, o8, o9, o10, o11];
         for (actual, expected) in outputs.iter().zip($expected.iter()) {
             assert_eq!($exec.to_host(actual).unwrap(), expected.clone());
@@ -287,7 +280,7 @@ fn zip12_segmented_scans_cross_block_boundaries() {
         .collect();
     let keys: Vec<u32> = (0..seed.len()).map(|index| (index / 300) as u32).collect();
     let device_keys = exec.to_device(&keys);
-    let zero = tuple12(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    let zero = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
     let inclusive = massively::vector::inclusive_scan_by_key(
         &exec,
@@ -351,7 +344,7 @@ proptest! {
         let copied = massively::vector::transform(&exec, permuted, Identity).unwrap();
         assert_twelve!(exec, copied, expected_columns);
 
-        let zero = tuple12(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        let zero = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
         prop_assert_eq!(
             massively::vector::reduce(
                 &exec,

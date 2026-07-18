@@ -9,8 +9,8 @@ image:
 
 # Compile the paper in Docker and publish the latest readable PDF.
 paper: image
-    docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e TZ=UTC -v "$PWD:/workspace" -w /workspace {{ image_name }} bash -c 'mkdir -p paper/build && revision="$(date -u "+%Y-%m-%d %H:%M:%S UTC")" && printf "%s\n" "\\renewcommand{\\PaperRevision}{$revision}" > paper/build/revision.tex && latexmk -cd -pdf -interaction=nonstopmode -halt-on-error -outdir=build paper/main.tex'
-    cp paper/build/main.pdf paper.pdf
+    docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e TZ=UTC -v "$PWD:/workspace" -w /workspace {{ image_name }} bash -c 'mkdir -p paper/build && latexmk -g -cd -pdf -interaction=nonstopmode -halt-on-error -outdir=build paper/main.tex'
+    cp paper/build/main.pdf paper/paper.pdf
 
 # Check all Lean definitions and proofs in Docker.
 proof: image

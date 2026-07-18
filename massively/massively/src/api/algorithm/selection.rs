@@ -1,8 +1,7 @@
 use cubecl::prelude::Runtime;
 
 use crate::{
-    Error, Executor, MIter, MIterMut, MStorage, MVec, ToCanonical, WritableFrom, op::PredicateOp,
-    op::UnaryOp,
+    Error, Executor, MItem, MIter, MIterMut, MStorage, MVec, op::PredicateOp, op::UnaryOp,
 };
 
 /// Copies rows whose stencil is true.
@@ -30,7 +29,7 @@ pub fn copy_where<R, Input, Item, Stencil>(
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
-    Item: ToCanonical<R>,
+    Item: MItem<R>,
     Stencil: MIter<R, Item = bool>,
 {
     let capacity = input.len()? as usize;
@@ -51,9 +50,9 @@ pub(crate) fn copy_where_into<R, Input, Stencil, Output>(
 where
     R: Runtime,
     Input: MIter<R>,
+    Input::Item: MItem<R>,
     Stencil: MIter<R, Item = bool>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Input::Item>,
+    Output: MIterMut<R, Item = Input::Item>,
 {
     crate::selection::copy_where(
         exec,
@@ -73,9 +72,9 @@ pub(crate) fn copy_where_raw_into<R, Input, Stencil, Output>(
 where
     R: Runtime,
     Input: MIter<R>,
+    Input::Item: MItem<R>,
     Stencil: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Input::Item>,
+    Output: MIterMut<R, Item = Input::Item>,
 {
     crate::selection::copy_where(
         exec,
@@ -113,7 +112,7 @@ pub fn remove_where<R, Input, Item, Stencil>(
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
-    Item: ToCanonical<R>,
+    Item: MItem<R>,
     Stencil: MIter<R, Item = bool>,
 {
     let capacity = input.len()? as usize;
@@ -134,9 +133,9 @@ pub(crate) fn remove_where_into<R, Input, Stencil, Output>(
 where
     R: Runtime,
     Input: MIter<R>,
+    Input::Item: MItem<R>,
     Stencil: MIter<R, Item = bool>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Input::Item>,
+    Output: MIterMut<R, Item = Input::Item>,
 {
     crate::selection::remove_where(
         exec,
@@ -156,9 +155,9 @@ pub(crate) fn remove_where_raw_into<R, Input, Stencil, Output>(
 where
     R: Runtime,
     Input: MIter<R>,
+    Input::Item: MItem<R>,
     Stencil: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Input::Item>,
+    Output: MIterMut<R, Item = Input::Item>,
 {
     crate::selection::remove_where(
         exec,
@@ -206,7 +205,7 @@ pub fn partition<R, Input, Item, Pred>(
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
-    Item: ToCanonical<R>,
+    Item: MItem<R>,
     Pred: PredicateOp<Item>,
 {
     let len = input.len()? as usize;
@@ -226,8 +225,8 @@ pub(crate) fn partition_into<R, Input, Output, Pred>(
 where
     R: Runtime,
     Input: MIter<R>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Input::Item>,
+    Input::Item: MItem<R>,
+    Output: MIterMut<R, Item = Input::Item>,
     Pred: PredicateOp<Input::Item>,
 {
     crate::selection::partition(
@@ -370,9 +369,9 @@ where
     R: Runtime,
     Input: MIter<R>,
     Stencil: MIter<R, Item = bool>,
-    Output: MIterMut<R>,
+    Output: MIterMut<R, Item = <Op as UnaryOp<Input::Item>>::Output>,
     Op: UnaryOp<Input::Item>,
-    Output::Item: WritableFrom<<Op as UnaryOp<Input::Item>>::Output>,
+    Op::Output: MItem<R>,
 {
     crate::selection::transform_where(
         exec,
@@ -395,9 +394,9 @@ where
     R: Runtime,
     Input: MIter<R>,
     Stencil: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
+    Output: MIterMut<R, Item = <Op as UnaryOp<Input::Item>>::Output>,
     Op: UnaryOp<Input::Item>,
-    Output::Item: WritableFrom<<Op as UnaryOp<Input::Item>>::Output>,
+    Op::Output: MItem<R>,
 {
     crate::selection::transform_where(
         exec,

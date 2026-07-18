@@ -13,6 +13,8 @@ const SIZES: &[usize] = &[1 << 20, 1 << 24];
 struct Even;
 struct FirstLeafEven;
 
+type Seven = (usize, usize, usize, usize, usize, usize, usize);
+
 #[cubecl::cube]
 impl PredicateOp<usize> for Even {
     fn apply(value: usize) -> bool {
@@ -21,9 +23,9 @@ impl PredicateOp<usize> for Even {
 }
 
 #[cubecl::cube]
-impl PredicateOp<((((((usize, usize), usize), usize), usize), usize), usize)> for FirstLeafEven {
-    fn apply(value: ((((((usize, usize), usize), usize), usize), usize), usize)) -> bool {
-        value.0.0.0.0.0.0 % 2usize == 0usize
+impl PredicateOp<Seven> for FirstLeafEven {
+    fn apply(value: Seven) -> bool {
+        value.0 % 2usize == 0usize
     }
 }
 

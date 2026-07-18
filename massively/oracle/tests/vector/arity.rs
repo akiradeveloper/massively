@@ -5,13 +5,12 @@ use proptest::prelude::*;
 
 use super::common::*;
 
-type Seven = ((((((u32, u32), u32), u32), u32), u32), u32);
-
 type Two = (u32, u32);
-type Three = (Two, u32);
-type Four = (Three, u32);
-type Five = (Four, u32);
-type Six = (Five, u32);
+type Three = (u32, u32, u32);
+type Four = (u32, u32, u32, u32);
+type Five = (u32, u32, u32, u32, u32);
+type Six = (u32, u32, u32, u32, u32, u32);
+type Seven = (u32, u32, u32, u32, u32, u32, u32);
 
 struct IdentitySeven;
 struct MaxSeven;
@@ -52,7 +51,8 @@ macro_rules! impl_project_ops {
             fn apply($value: $input) -> Three {
                 let seed = $seed;
                 (
-                    (seed ^ 0x5a5a_5a5a, (seed << 1) ^ 0xa5a5_a5a5),
+                    seed ^ 0x5a5a_5a5a,
+                    (seed << 1) ^ 0xa5a5_a5a5,
                     (seed >> 1) ^ 0x3c3c_3c3c,
                 )
             }
@@ -65,10 +65,9 @@ macro_rules! impl_project_ops {
             fn apply($value: $input) -> Four {
                 let seed = $seed;
                 (
-                    (
-                        (seed ^ 0x5a5a_5a5a, (seed << 1) ^ 0xa5a5_a5a5),
-                        (seed >> 1) ^ 0x3c3c_3c3c,
-                    ),
+                    seed ^ 0x5a5a_5a5a,
+                    (seed << 1) ^ 0xa5a5_a5a5,
+                    (seed >> 1) ^ 0x3c3c_3c3c,
                     (seed << 2) ^ 0xc3c3_c3c3,
                 )
             }
@@ -81,13 +80,10 @@ macro_rules! impl_project_ops {
             fn apply($value: $input) -> Five {
                 let seed = $seed;
                 (
-                    (
-                        (
-                            (seed ^ 0x5a5a_5a5a, (seed << 1) ^ 0xa5a5_a5a5),
-                            (seed >> 1) ^ 0x3c3c_3c3c,
-                        ),
-                        (seed << 2) ^ 0xc3c3_c3c3,
-                    ),
+                    seed ^ 0x5a5a_5a5a,
+                    (seed << 1) ^ 0xa5a5_a5a5,
+                    (seed >> 1) ^ 0x3c3c_3c3c,
+                    (seed << 2) ^ 0xc3c3_c3c3,
                     (seed >> 2) ^ 0x0f0f_0f0f,
                 )
             }
@@ -100,16 +96,11 @@ macro_rules! impl_project_ops {
             fn apply($value: $input) -> Six {
                 let seed = $seed;
                 (
-                    (
-                        (
-                            (
-                                (seed ^ 0x5a5a_5a5a, (seed << 1) ^ 0xa5a5_a5a5),
-                                (seed >> 1) ^ 0x3c3c_3c3c,
-                            ),
-                            (seed << 2) ^ 0xc3c3_c3c3,
-                        ),
-                        (seed >> 2) ^ 0x0f0f_0f0f,
-                    ),
+                    seed ^ 0x5a5a_5a5a,
+                    (seed << 1) ^ 0xa5a5_a5a5,
+                    (seed >> 1) ^ 0x3c3c_3c3c,
+                    (seed << 2) ^ 0xc3c3_c3c3,
+                    (seed >> 2) ^ 0x0f0f_0f0f,
                     (seed << 3) ^ 0xf0f0_f0f0,
                 )
             }
@@ -122,19 +113,12 @@ macro_rules! impl_project_ops {
             fn apply($value: $input) -> Seven {
                 let seed = $seed;
                 (
-                    (
-                        (
-                            (
-                                (
-                                    (seed ^ 0x5a5a_5a5a, (seed << 1) ^ 0xa5a5_a5a5),
-                                    (seed >> 1) ^ 0x3c3c_3c3c,
-                                ),
-                                (seed << 2) ^ 0xc3c3_c3c3,
-                            ),
-                            (seed >> 2) ^ 0x0f0f_0f0f,
-                        ),
-                        (seed << 3) ^ 0xf0f0_f0f0,
-                    ),
+                    seed ^ 0x5a5a_5a5a,
+                    (seed << 1) ^ 0xa5a5_a5a5,
+                    (seed >> 1) ^ 0x3c3c_3c3c,
+                    (seed << 2) ^ 0xc3c3_c3c3,
+                    (seed >> 2) ^ 0x0f0f_0f0f,
+                    (seed << 3) ^ 0xf0f0_f0f0,
                     (seed >> 3) ^ 0x9696_9696,
                 )
             }
@@ -144,11 +128,11 @@ macro_rules! impl_project_ops {
 
 impl_project_ops!(u32, input => input);
 impl_project_ops!(Two, input => input.0 ^ (input.1 << 1));
-impl_project_ops!(Three, input => input.0.0 ^ (input.0.1 << 1) ^ (input.1 << 2));
-impl_project_ops!(Four, input => input.0.0.0 ^ (input.0.0.1 << 1) ^ (input.0.1 << 2) ^ (input.1 << 3));
-impl_project_ops!(Five, input => input.0.0.0.0 ^ (input.0.0.0.1 << 1) ^ (input.0.0.1 << 2) ^ (input.0.1 << 3) ^ (input.1 << 4));
-impl_project_ops!(Six, input => input.0.0.0.0.0 ^ (input.0.0.0.0.1 << 1) ^ (input.0.0.0.1 << 2) ^ (input.0.0.1 << 3) ^ (input.0.1 << 4) ^ (input.1 << 5));
-impl_project_ops!(Seven, input => input.0.0.0.0.0.0 ^ (input.0.0.0.0.0.1 << 1) ^ (input.0.0.0.0.1 << 2) ^ (input.0.0.0.1 << 3) ^ (input.0.0.1 << 4) ^ (input.0.1 << 5) ^ (input.1 << 6));
+impl_project_ops!(Three, input => input.0 ^ (input.1 << 1) ^ (input.2 << 2));
+impl_project_ops!(Four, input => input.0 ^ (input.1 << 1) ^ (input.2 << 2) ^ (input.3 << 3));
+impl_project_ops!(Five, input => input.0 ^ (input.1 << 1) ^ (input.2 << 2) ^ (input.3 << 3) ^ (input.4 << 4));
+impl_project_ops!(Six, input => input.0 ^ (input.1 << 1) ^ (input.2 << 2) ^ (input.3 << 3) ^ (input.4 << 4) ^ (input.5 << 5));
+impl_project_ops!(Seven, input => input.0 ^ (input.1 << 1) ^ (input.2 << 2) ^ (input.3 << 3) ^ (input.4 << 4) ^ (input.5 << 5) ^ (input.6 << 6));
 
 #[cubecl::cube]
 impl UnaryOp<Seven> for IdentitySeven {
@@ -169,23 +153,13 @@ impl op::UnaryOp<Seven> for IdentitySeven {
 
 fn max_seven(lhs: Seven, rhs: Seven) -> Seven {
     (
-        (
-            (
-                (
-                    (
-                        (
-                            lhs.0.0.0.0.0.0.max(rhs.0.0.0.0.0.0),
-                            lhs.0.0.0.0.0.1.max(rhs.0.0.0.0.0.1),
-                        ),
-                        lhs.0.0.0.0.1.max(rhs.0.0.0.0.1),
-                    ),
-                    lhs.0.0.0.1.max(rhs.0.0.0.1),
-                ),
-                lhs.0.0.1.max(rhs.0.0.1),
-            ),
-            lhs.0.1.max(rhs.0.1),
-        ),
+        lhs.0.max(rhs.0),
         lhs.1.max(rhs.1),
+        lhs.2.max(rhs.2),
+        lhs.3.max(rhs.3),
+        lhs.4.max(rhs.4),
+        lhs.5.max(rhs.5),
+        lhs.6.max(rhs.6),
     )
 }
 
@@ -193,23 +167,13 @@ fn max_seven(lhs: Seven, rhs: Seven) -> Seven {
 impl ReductionOp<Seven> for MaxSeven {
     fn apply(lhs: Seven, rhs: Seven) -> Seven {
         (
-            (
-                (
-                    (
-                        (
-                            (
-                                lhs.0.0.0.0.0.0.max(rhs.0.0.0.0.0.0),
-                                lhs.0.0.0.0.0.1.max(rhs.0.0.0.0.0.1),
-                            ),
-                            lhs.0.0.0.0.1.max(rhs.0.0.0.0.1),
-                        ),
-                        lhs.0.0.0.1.max(rhs.0.0.0.1),
-                    ),
-                    lhs.0.0.1.max(rhs.0.0.1),
-                ),
-                lhs.0.1.max(rhs.0.1),
-            ),
+            lhs.0.max(rhs.0),
             lhs.1.max(rhs.1),
+            lhs.2.max(rhs.2),
+            lhs.3.max(rhs.3),
+            lhs.4.max(rhs.4),
+            lhs.5.max(rhs.5),
+            lhs.6.max(rhs.6),
         )
     }
 }
@@ -228,16 +192,12 @@ fn seven_aos(columns: &[Vec<u32>; 7]) -> Vec<Seven> {
     (0..columns[0].len())
         .map(|index| {
             (
-                (
-                    (
-                        (
-                            ((columns[0][index], columns[1][index]), columns[2][index]),
-                            columns[3][index],
-                        ),
-                        columns[4][index],
-                    ),
-                    columns[5][index],
-                ),
+                columns[0][index],
+                columns[1][index],
+                columns[2][index],
+                columns[3][index],
+                columns[4][index],
+                columns[5][index],
                 columns[6][index],
             )
         })
@@ -391,104 +351,46 @@ macro_rules! input_seed {
     };
 }
 
-macro_rules! mvec_column {
-    (1, $output:expr, 0) => {
-        &$output
-    };
-    (2, $output:expr, 0) => {
-        &$output.0
-    };
-    (2, $output:expr, 1) => {
-        &$output.1
-    };
-    (3, $output:expr, 0) => {
-        &$output.0.0
-    };
-    (3, $output:expr, 1) => {
-        &$output.0.1
-    };
-    (3, $output:expr, 2) => {
-        &$output.1
-    };
-    (4, $output:expr, 0) => {
-        &$output.0.0.0
-    };
-    (4, $output:expr, 1) => {
-        &$output.0.0.1
-    };
-    (4, $output:expr, 2) => {
-        &$output.0.1
-    };
-    (4, $output:expr, 3) => {
-        &$output.1
-    };
-    (5, $output:expr, 0) => {
-        &$output.0.0.0.0
-    };
-    (5, $output:expr, 1) => {
-        &$output.0.0.0.1
-    };
-    (5, $output:expr, 2) => {
-        &$output.0.0.1
-    };
-    (5, $output:expr, 3) => {
-        &$output.0.1
-    };
-    (5, $output:expr, 4) => {
-        &$output.1
-    };
-    (6, $output:expr, 0) => {
-        &$output.0.0.0.0.0
-    };
-    (6, $output:expr, 1) => {
-        &$output.0.0.0.0.1
-    };
-    (6, $output:expr, 2) => {
-        &$output.0.0.0.1
-    };
-    (6, $output:expr, 3) => {
-        &$output.0.0.1
-    };
-    (6, $output:expr, 4) => {
-        &$output.0.1
-    };
-    (6, $output:expr, 5) => {
-        &$output.1
-    };
-    (7, $output:expr, 0) => {
-        &$output.0.0.0.0.0.0
-    };
-    (7, $output:expr, 1) => {
-        &$output.0.0.0.0.0.1
-    };
-    (7, $output:expr, 2) => {
-        &$output.0.0.0.0.1
-    };
-    (7, $output:expr, 3) => {
-        &$output.0.0.0.1
-    };
-    (7, $output:expr, 4) => {
-        &$output.0.0.1
-    };
-    (7, $output:expr, 5) => {
-        &$output.0.1
-    };
-    (7, $output:expr, 6) => {
-        &$output.1
-    };
-}
-
 macro_rules! assert_project_columns {
-    (1, $exec:expr, $output:expr, $seeds:expr) => { assert_project_columns!(@one 1, 0, $exec, $output, $seeds) };
-    (2, $exec:expr, $output:expr, $seeds:expr) => {{ assert_project_columns!(@one 2, 0, $exec, $output, $seeds); assert_project_columns!(@one 2, 1, $exec, $output, $seeds); }};
-    (3, $exec:expr, $output:expr, $seeds:expr) => {{ assert_project_columns!(2, $exec, $output.0, $seeds); assert_project_columns!(@one 3, 2, $exec, $output, $seeds); }};
-    (4, $exec:expr, $output:expr, $seeds:expr) => {{ assert_project_columns!(3, $exec, $output.0, $seeds); assert_project_columns!(@one 4, 3, $exec, $output, $seeds); }};
-    (5, $exec:expr, $output:expr, $seeds:expr) => {{ assert_project_columns!(4, $exec, $output.0, $seeds); assert_project_columns!(@one 5, 4, $exec, $output, $seeds); }};
-    (6, $exec:expr, $output:expr, $seeds:expr) => {{ assert_project_columns!(5, $exec, $output.0, $seeds); assert_project_columns!(@one 6, 5, $exec, $output, $seeds); }};
-    (7, $exec:expr, $output:expr, $seeds:expr) => {{ assert_project_columns!(6, $exec, $output.0, $seeds); assert_project_columns!(@one 7, 6, $exec, $output, $seeds); }};
-    (@one $arity:tt, $column:tt, $exec:expr, $output:expr, $seeds:expr) => {{
-        let expected: Vec<_> = $seeds.iter().map(|seed| project(*seed, $column)).collect();
-        prop_assert_eq!($exec.to_host(mvec_column!($arity, $output, $column)).unwrap(), expected);
+    (1, $exec:expr, $output:expr, $seeds:expr) => {{
+        let columns = [&$output];
+        assert_project_columns!(@all $exec, columns, $seeds);
+    }};
+    (2, $exec:expr, $output:expr, $seeds:expr) => {{
+        let columns = MStorage::into_columns($output);
+        let columns = [&columns.0, &columns.1];
+        assert_project_columns!(@all $exec, columns, $seeds);
+    }};
+    (3, $exec:expr, $output:expr, $seeds:expr) => {{
+        let columns = MStorage::into_columns($output);
+        let columns = [&columns.0, &columns.1, &columns.2];
+        assert_project_columns!(@all $exec, columns, $seeds);
+    }};
+    (4, $exec:expr, $output:expr, $seeds:expr) => {{
+        let columns = MStorage::into_columns($output);
+        let columns = [&columns.0, &columns.1, &columns.2, &columns.3];
+        assert_project_columns!(@all $exec, columns, $seeds);
+    }};
+    (5, $exec:expr, $output:expr, $seeds:expr) => {{
+        let columns = MStorage::into_columns($output);
+        let columns = [&columns.0, &columns.1, &columns.2, &columns.3, &columns.4];
+        assert_project_columns!(@all $exec, columns, $seeds);
+    }};
+    (6, $exec:expr, $output:expr, $seeds:expr) => {{
+        let columns = MStorage::into_columns($output);
+        let columns = [&columns.0, &columns.1, &columns.2, &columns.3, &columns.4, &columns.5];
+        assert_project_columns!(@all $exec, columns, $seeds);
+    }};
+    (7, $exec:expr, $output:expr, $seeds:expr) => {{
+        let columns = MStorage::into_columns($output);
+        let columns = [&columns.0, &columns.1, &columns.2, &columns.3, &columns.4, &columns.5, &columns.6];
+        assert_project_columns!(@all $exec, columns, $seeds);
+    }};
+    (@all $exec:expr, $columns:expr, $seeds:expr) => {{
+        for (column, actual) in $columns.into_iter().enumerate() {
+            let expected: Vec<_> = $seeds.iter().map(|seed| project(*seed, column)).collect();
+            prop_assert_eq!($exec.to_host(actual).unwrap(), expected);
+        }
     }};
 }
 
@@ -729,15 +631,13 @@ proptest! {
         };
 
         let output = massively::vector::transform(&exec, input(), IdentitySeven).unwrap();
-        prop_assert_eq!(exec.to_host(&output.0.0.0.0.0.0).unwrap(), columns[0].clone());
-        prop_assert_eq!(exec.to_host(&output.0.0.0.0.0.1).unwrap(), columns[1].clone());
-        prop_assert_eq!(exec.to_host(&output.0.0.0.0.1).unwrap(), columns[2].clone());
-        prop_assert_eq!(exec.to_host(&output.0.0.0.1).unwrap(), columns[3].clone());
-        prop_assert_eq!(exec.to_host(&output.0.0.1).unwrap(), columns[4].clone());
-        prop_assert_eq!(exec.to_host(&output.0.1).unwrap(), columns[5].clone());
-        prop_assert_eq!(exec.to_host(&output.1).unwrap(), columns[6].clone());
+        let output = MStorage::into_columns(output);
+        let output = [&output.0, &output.1, &output.2, &output.3, &output.4, &output.5, &output.6];
+        for (actual, expected) in output.into_iter().zip(&columns) {
+            prop_assert_eq!(exec.to_host(actual).unwrap(), expected.clone());
+        }
 
-        let zero: Seven = ((((((0, 0), 0), 0), 0), 0), 0);
+        let zero: Seven = (0, 0, 0, 0, 0, 0, 0);
         prop_assert_eq!(
             massively::vector::reduce(&exec, input(), zero, MaxSeven).unwrap(),
             reference::reduce(&seven_aos(&columns), zero, MaxSeven),

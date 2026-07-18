@@ -75,7 +75,7 @@ where
             right: other_lower.len().min(other_upper.len()),
         });
     }
-    let flags = exec.alloc_canonical::<u32>(len);
+    let flags = exec.alloc_row::<u32>(len);
     if len == 0 {
         return Ok(flags);
     }
@@ -96,32 +96,29 @@ where
     Ok(flags)
 }
 
-/// Runs an ordered multiset operation on two canonical payloads.
+/// Runs an ordered multiset operation on two flat-row payloads.
 ///
 /// `mode` is 0 for union, 1 for intersection, and 2 for left difference.
-pub(crate) fn set_canonical<R, Item, Less, Output>(
+pub(crate) fn set_storage<R, Item, Less, Output>(
     exec: &Executor<R>,
-    left: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
-    right: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+    left: &<Item as crate::RowAlloc<R>>::RowStorage,
+    right: &<Item as crate::RowAlloc<R>>::RowStorage,
     _less: Less,
     output: Output,
     mode: u8,
 ) -> Result<u32, Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
+    Item: crate::api::iter::MItem<R> + crate::RowAlloc<R>,
     Less: crate::op::BinaryPredicateOp<Item>,
     Item::StorageLeaves: crate::core::facade::KernelValue,
-    <Item as crate::CanonicalAlloc<R>>::CanonicalStorage: crate::CanonicalStorage<R>,
-    <<Item as crate::CanonicalAlloc<R>>::CanonicalStorage as crate::CanonicalStorage<R>>::Item:
-        crate::WritableFrom<Item>,
-    Output: crate::core::facade::KernelOutput<R> + SliceOutput,
-    Output::Item: crate::WritableFrom<Item>,
+    <Item as crate::RowAlloc<R>>::RowStorage: crate::RowStorage<R>,
+    Output: crate::core::facade::KernelOutput<R>
+        + crate::output::OutputExpression<Item = Item>
+        + SliceOutput,
 {
-    let left_read =
-        crate::read::FixedReassociate::<_, Item>::new(crate::CanonicalStorage::read(left));
-    let right_read =
-        crate::read::FixedReassociate::<_, Item>::new(crate::CanonicalStorage::read(right));
+    let left_read = crate::read::FixedRead::new(crate::RowStorage::read(left));
+    let right_read = crate::read::FixedRead::new(crate::RowStorage::read(right));
 
     if mode == 0 {
         let merge =
@@ -145,14 +142,14 @@ where
             occurrence_flags::<R, UnionExtra>(exec, &right_own_lower, &left_lower, &left_upper)?;
 
         let total = merge.left_len + merge.right_len;
-        let conceptual_flags = exec.alloc_canonical::<u32>(total);
+        let conceptual_flags = exec.alloc_row::<u32>(total);
         crate::selection::fill(exec, 1u32, conceptual_flags.slice_mut(..merge.left_len))?;
         crate::materialize(
             exec,
             right_extra.column(),
             conceptual_flags.slice_mut(merge.left_len..),
         )?;
-        let merged_flags = exec.alloc_canonical::<u32>(total);
+        let merged_flags = exec.alloc_row::<u32>(total);
         crate::indexed::gather_u32(
             exec,
             conceptual_flags.column(),
@@ -161,7 +158,7 @@ where
         )?;
         let selection = SelectionControl::from_flags(exec, merged_flags)?;
         let count = selection.count();
-        let selected_permutation = exec.alloc_canonical::<u32>(count as usize);
+        let selected_permutation = exec.alloc_row::<u32>(count as usize);
         crate::indexed::gather_u32(
             exec,
             merge.permutation.column(),
@@ -173,7 +170,7 @@ where
             left_len: merge.left_len,
             right_len: merge.right_len,
         };
-        crate::merge::apply_canonical::<R, Item, _>(
+        crate::merge::apply_storage::<R, Item, _>(
             exec,
             left,
             right,
@@ -229,14 +226,14 @@ where
         occurrence_flags::<R, UnionExtra>(exec, &right_own_lower, &left_lower, &left_upper)?;
 
     let total = merge.left_len + merge.right_len;
-    let conceptual_flags = exec.alloc_canonical::<u32>(total);
+    let conceptual_flags = exec.alloc_row::<u32>(total);
     crate::selection::fill(exec, 1u32, conceptual_flags.slice_mut(..merge.left_len))?;
     crate::materialize(
         exec,
         right_extra.column(),
         conceptual_flags.slice_mut(merge.left_len..),
     )?;
-    let merged_flags = exec.alloc_canonical::<u32>(total);
+    let merged_flags = exec.alloc_row::<u32>(total);
     crate::indexed::gather_u32(
         exec,
         conceptual_flags.column(),
@@ -245,7 +242,7 @@ where
     )?;
     let selection = SelectionControl::from_flags(exec, merged_flags)?;
     let count = selection.count();
-    let selected_permutation = exec.alloc_canonical::<u32>(count as usize);
+    let selected_permutation = exec.alloc_row::<u32>(count as usize);
     crate::indexed::gather_u32(
         exec,
         merge.permutation.column(),

@@ -38,14 +38,14 @@ impl UnaryOp<(f32, f32)> for AddPair {
     }
 }
 
-struct AddNestedTriple;
+struct AddTriple;
 
 #[cubecl::cube]
-impl UnaryOp<((f32, f32), f32)> for AddNestedTriple {
+impl UnaryOp<(f32, f32, f32)> for AddTriple {
     type Output = f32;
 
-    fn apply(input: ((f32, f32), f32)) -> f32 {
-        input.0.0 + input.0.1 + input.1
+    fn apply(input: (f32, f32, f32)) -> f32 {
+        input.0 + input.1 + input.2
     }
 }
 
@@ -100,7 +100,7 @@ fn bench_transform_reduce(c: &mut Criterion) {
                         black_box(second.slice(..)),
                         black_box(third.slice(..)),
                     ),
-                    AddNestedTriple,
+                    AddTriple,
                 );
                 black_box(reduce(&exec, input, 0.0, Sum).unwrap())
             })

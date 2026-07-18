@@ -2,7 +2,10 @@ mod common;
 
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
-use massively::{op::BinaryPredicateOp, vector::sort_by_key};
+use massively::{
+    op::BinaryPredicateOp,
+    vector::{radix_sort_by_key, sort_by_key},
+};
 
 struct Less;
 
@@ -70,9 +73,34 @@ fn bench_sort_by_key(c: &mut Criterion) {
     pattern_group.finish();
 }
 
+fn bench_radix_sort_by_key(c: &mut Criterion) {
+    let exec = common::exec();
+    let mut group = c.benchmark_group("radix_sort_by_key");
+
+    for &len in common::SORT_SIZES {
+        let keys = exec.to_device(&common::shuffled_u32(len));
+        let values = exec.to_device(&common::dense_f32(len));
+        exec.sync().unwrap();
+
+        group.bench_function(BenchmarkId::new("gpu", len), |b| {
+            b.iter(|| {
+                let output = radix_sort_by_key(
+                    &exec,
+                    black_box(keys.slice(..)),
+                    black_box(values.slice(..)),
+                )
+                .unwrap();
+                exec.sync().unwrap();
+                black_box(output);
+            })
+        });
+    }
+    group.finish();
+}
+
 criterion_group! {
     name = benches;
     config = common::criterion();
-    targets = bench_sort_by_key
+    targets = bench_sort_by_key, bench_radix_sort_by_key
 }
 criterion_main!(benches);

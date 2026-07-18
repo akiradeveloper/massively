@@ -3,8 +3,8 @@
 use cubecl::prelude::*;
 
 use crate::{
-    A13, CanonicalAlloc, CanonicalStorage, Counting, DeviceVec, Dispatch, Error, Executor,
-    MStorageElement, ReadExpression, S12, StorageLayout, Transform, WritableFrom,
+    A13, Counting, DeviceVec, Dispatch, Error, Executor, MStorageElement, ReadExpression, RowAlloc,
+    RowStorage, S12, StorageLayout, Transform,
     allocation::PrependInput,
     eval::Eval13,
     indexed::GatherInput,
@@ -23,16 +23,10 @@ use crate::{
 
 const BLOCK_SIZE: u32 = 256;
 
-type FixedScanStorage<R, Item> = <Item as crate::CanonicalAlloc<R>>::CanonicalStorage;
+type FixedScanStorage<R, Item> = <Item as crate::RowAlloc<R>>::RowStorage;
 type FixedScanRead<R, Item> =
-    crate::read::FixedReassociate<<FixedScanStorage<R, Item> as CanonicalStorage<R>>::Read, Item>;
-type FixedScanSlots<Item> =
-    <<Item as StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots;
-type FixedScanOutput<R, Item> = crate::output::ReassociatedOutput<
-    <FixedScanStorage<R, Item> as CanonicalStorage<R>>::Write,
-    Item,
-    FixedScanSlots<Item>,
->;
+    crate::read::FixedRead<<FixedScanStorage<R, Item> as RowStorage<R>>::Read>;
+type FixedScanOutput<R, Item> = <FixedScanStorage<R, Item> as RowStorage<R>>::Write;
 
 #[cubecl::cube(launch_unchecked, explicit_define)]
 fn u32_block_inclusive_scan_kernel(
@@ -1069,11 +1063,13 @@ macro_rules! impl_padded_scan_dispatch {
                 L7 = L7, L8 = L8, L9 = L9, L10 = L10, L11 = L11, L12 = L12,
             >,
             Input::DeviceExpr: $eval<Item, $( $leaf ),+>,
-            Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
-            Output::Item: WritableFrom<Item>,
+            Output: OutputExpression<Item = Item>
+                + LowerOutputExpression
+                + StageOutput<R, Env0>,
             Output::Slots: PaddedOutputSlots<Leaves = Item::StorageLeaves>,
-            Partials: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
-            Partials::Item: WritableFrom<Item>,
+            Partials: OutputExpression<Item = Item>
+                + LowerOutputExpression
+                + StageOutput<R, Env0>,
             Partials::Slots: PaddedOutputSlots<Leaves = Item::StorageLeaves>,
             Item::StorageLeaves: SharedLeaves
                 + MutableLeaves
@@ -1183,12 +1179,12 @@ where
     Input: ReadExpression<Item = Item>
         + LowerReadExpression<Slots: PaddedReadSlots>
         + StageRead<R, Env0>,
-    Output:
-        OutputExpression + LowerOutputExpression<Slots: PaddedOutputSlots> + StageOutput<R, Env0>,
-    Output::Item: WritableFrom<Item>,
-    Partials:
-        OutputExpression + LowerOutputExpression<Slots: PaddedOutputSlots> + StageOutput<R, Env0>,
-    Partials::Item: WritableFrom<Item>,
+    Output: OutputExpression<Item = Item>
+        + LowerOutputExpression<Slots: PaddedOutputSlots>
+        + StageOutput<R, Env0>,
+    Partials: OutputExpression<Item = Item>
+        + LowerOutputExpression<Slots: PaddedOutputSlots>
+        + StageOutput<R, Env0>,
     Item: StorageLayout,
     Op: ReductionOp<Item>,
     Dispatch<A13, S12>: InclusiveScanPassDispatch<
@@ -1222,12 +1218,11 @@ fn add_fixed_prefixes<R, Output, Item, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
+    Item: crate::api::iter::MItem<R> + crate::RowAlloc<R>,
     Op: ReductionOp<Item>,
-    Output: OutputExpression
+    Output: OutputExpression<Item = Item>
         + LowerOutputExpression<Slots: PaddedOutputSlots<Leaves = Item::StorageLeaves>>
         + StageOutput<R, Env0>,
-    Output::Item: WritableFrom<Item>,
 {
     if len == 0 {
         return Ok(());
@@ -1393,7 +1388,7 @@ fn scan_fixed_storage<R, Item, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
+    Item: crate::api::iter::MItem<R> + crate::RowAlloc<R>,
     Op: ReductionOp<Item>,
     Dispatch<A13, S12>: InclusiveScanPassDispatch<
             R,
@@ -1421,14 +1416,14 @@ where
     }
 
     let blocks = len.div_ceil(BLOCK_SIZE as usize);
-    let partials = exec.alloc_canonical::<Item>(blocks);
+    let partials = exec.alloc_row::<Item>(blocks);
     let input_read = FixedScanRead::<R, Item>::new(input.read());
-    let output_write = FixedScanOutput::<R, Item>::new(output.write());
-    let partial_write = FixedScanOutput::<R, Item>::new(partials.write());
+    let output_write = output.write();
+    let partial_write = partials.write();
     scan_pass::<R, _, _, _, Item, Op>(exec, &input_read, &output_write, &partial_write)?;
 
     if blocks > 1 {
-        let prefixes = exec.alloc_canonical::<Item>(blocks);
+        let prefixes = exec.alloc_row::<Item>(blocks);
         scan_fixed_storage::<R, Item, Op>(exec, &partials, &prefixes)?;
         add_fixed_prefixes::<R, _, Item, Op>(exec, &prefixes, &output_write, len)?;
     }
@@ -1440,11 +1435,10 @@ impl<R, Input, Output, Item, Op, ReadSlots, WriteSlots>
 where
     R: Runtime,
     Input: ReadExpression<Item = Item> + LowerReadExpression + StageRead<R, Env0>,
-    Output: OutputExpression
+    Output: OutputExpression<Item = Item>
         + LowerOutputExpression<Slots: PaddedOutputSlots<Leaves = Item::StorageLeaves>>
         + StageOutput<R, Env0>,
-    Output::Item: WritableFrom<Item>,
-    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
+    Item: crate::api::iter::MItem<R> + crate::RowAlloc<R>,
     Op: ReductionOp<Item>,
     Dispatch<A13, S12>: InclusiveScanPassDispatch<
             R,
@@ -1482,8 +1476,8 @@ where
         }
 
         let blocks = len.div_ceil(BLOCK_SIZE as usize);
-        let partials = exec.alloc_canonical::<Item>(blocks);
-        let partial_write = FixedScanOutput::<R, Item>::new(partials.write());
+        let partials = exec.alloc_row::<Item>(blocks);
+        let partial_write = partials.write();
         <Dispatch<A13, S12> as InclusiveScanPassDispatch<
             R,
             Input,
@@ -1496,7 +1490,7 @@ where
         >>::run_pass(exec, input, output, &partial_write)?;
 
         if blocks > 1 {
-            let prefixes = exec.alloc_canonical::<Item>(blocks);
+            let prefixes = exec.alloc_row::<Item>(blocks);
             scan_fixed_storage::<R, Item, Op>(exec, &partials, &prefixes)?;
             add_fixed_prefixes::<R, _, Item, Op>(exec, &prefixes, output, len)?;
         }
@@ -1583,8 +1577,7 @@ where
     Op: ReductionOp<Input::Item>,
     Adjacent<Input, Op>:
         ReadExpression<Item = Input::Item> + LowerReadExpression + StageRead<R, Env0>,
-    Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
-    Output::Item: WritableFrom<Input::Item>,
+    Output: OutputExpression<Item = Input::Item> + LowerOutputExpression + StageOutput<R, Env0>,
     Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
             R,
             Adjacent<Input, Op>,
@@ -1614,22 +1607,16 @@ where
     R: Runtime,
     Input: PrependInput<R>,
     Input::Item: crate::api::iter::MItem<R>
-        + CanonicalAlloc<R, CanonicalStorage = Input::Storage>,
+        + RowAlloc<R, RowStorage = Input::Storage>,
     <Input::Item as StorageLayout>::StorageLeaves:
         StorePadded12 + crate::core::facade::KernelValue,
-    Input::Storage: CanonicalStorage<R, Item = <Input::Item as CanonicalAlloc<R>>::CanonicalItem>,
+    Input::Storage: RowStorage<R, Item = Input::Item>,
     Input::SemanticRead: LowerReadExpression + StageRead<R, Env0>,
-    <Input::Storage as CanonicalStorage<R>>::Write: LowerOutputExpression + StageOutput<R, Env0>,
-    <<Input::Storage as CanonicalStorage<R>>::Write as OutputExpression>::Item:
-        WritableFrom<Input::Item>,
+    <Input::Storage as RowStorage<R>>::Write: LowerOutputExpression + StageOutput<R, Env0>,
     Dispatch<A13, S12>: InclusiveScanDispatch<
             R,
             Input::SemanticRead,
-            crate::output::ReassociatedOutput<
-                <Input::Storage as CanonicalStorage<R>>::Write,
-                Input::Item,
-                <<Input::Item as StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
-            >,
+            <Input::Storage as RowStorage<R>>::Write,
             Input::Item,
             KernelReadSlots<<Input::SemanticRead as LowerReadExpression>::Slots>,
             crate::output::KernelOutputSlots<
@@ -1637,7 +1624,7 @@ where
             >,
             Op,
         >,
-    <Input::Storage as CanonicalStorage<R>>::Read:
+    <Input::Storage as RowStorage<R>>::Read:
         GatherInput<R, Transform<Counting, crate::op::U32ToUsize>, Output>,
     Op: ReductionOp<Input::Item>,
 {
@@ -1650,13 +1637,8 @@ where
     ) -> Result<(), Error> {
         let prefixed = self.prepend(exec, init)?;
         let prefixed_len = prefixed.len()?;
-        let scanned = exec.alloc_canonical::<Input::Item>(prefixed_len);
-        let scanned_output = crate::output::ReassociatedOutput::<
-            _,
-            Input::Item,
-            <<Input::Item as StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
-        >::new(scanned.write());
-        inclusive_scan(exec, Input::semantic_read(&prefixed), op, scanned_output)?;
+        let scanned = exec.alloc_row::<Input::Item>(prefixed_len);
+        inclusive_scan(exec, Input::semantic_read(&prefixed), op, scanned.write())?;
         crate::indexed::gather_u32(
             exec,
             scanned.read(),
@@ -1686,13 +1668,13 @@ pub(crate) fn inclusive_scan_u32<R: Runtime>(
     input: &DeviceVec<R, u32>,
 ) -> Result<DeviceVec<R, u32>, Error> {
     if input.is_empty() {
-        return Ok(exec.alloc_canonical::<u32>(0));
+        return Ok(exec.alloc_row::<u32>(0));
     }
     let len = input.len();
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     let blocks = len.div_ceil(BLOCK_SIZE as usize);
-    let output = exec.alloc_canonical::<u32>(len);
-    let block_sums = exec.alloc_canonical::<u32>(blocks);
+    let output = exec.alloc_row::<u32>(len);
+    let block_sums = exec.alloc_row::<u32>(blocks);
     let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len_u32]));
     let count = cube_count_1d(blocks)?;
     unsafe {
@@ -1729,7 +1711,7 @@ pub(crate) fn last_u32<R: Runtime>(
     if input.is_empty() {
         return Ok(0);
     }
-    let output = exec.alloc_canonical::<u32>(1);
+    let output = exec.alloc_row::<u32>(1);
     unsafe {
         copy_last_kernel::launch_unchecked::<R>(
             exec.client(),
@@ -1745,7 +1727,7 @@ pub(crate) fn last_u32<R: Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CanonicalStorage, Counting, Permute, Transform, Zip, op::UnaryOp};
+    use crate::{Counting, Permute, RowStorage, Transform, Zip, op::UnaryOp};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     #[test]
@@ -1786,7 +1768,7 @@ mod tests {
         let len = 70_001;
         let left = exec.to_device(&vec![1_u32; len]);
         let right = exec.to_device(&vec![2_u32; len]);
-        let output = exec.alloc_canonical::<(u32, u32)>(len);
+        let output = exec.alloc_row::<(u32, u32)>(len);
 
         inclusive_scan(
             &exec,
@@ -1804,20 +1786,14 @@ mod tests {
         }
     }
 
-    type Seven = (u32, (u32, (u32, (u32, (u32, (u32, u32))))));
+    type Seven = (u32, u32, u32, u32, u32, u32, u32);
     struct SumSeven;
 
     #[cubecl::cube]
     impl UnaryOp<Seven> for SumSeven {
         type Output = u32;
         fn apply(input: Seven) -> u32 {
-            input.0
-                + input.1.0
-                + input.1.1.0
-                + input.1.1.1.0
-                + input.1.1.1.1.0
-                + input.1.1.1.1.1.0
-                + input.1.1.1.1.1.1
+            input.0 + input.1 + input.2 + input.3 + input.4 + input.5 + input.6
         }
     }
 
@@ -1828,22 +1804,12 @@ mod tests {
         fn apply(lhs: Seven, rhs: Seven) -> Seven {
             (
                 lhs.0 + rhs.0,
-                (
-                    lhs.1.0 + rhs.1.0,
-                    (
-                        lhs.1.1.0 + rhs.1.1.0,
-                        (
-                            lhs.1.1.1.0 + rhs.1.1.1.0,
-                            (
-                                lhs.1.1.1.1.0 + rhs.1.1.1.1.0,
-                                (
-                                    lhs.1.1.1.1.1.0 + rhs.1.1.1.1.1.0,
-                                    lhs.1.1.1.1.1.1 + rhs.1.1.1.1.1.1,
-                                ),
-                            ),
-                        ),
-                    ),
-                ),
+                lhs.1 + rhs.1,
+                lhs.2 + rhs.2,
+                lhs.3 + rhs.3,
+                lhs.4 + rhs.4,
+                lhs.5 + rhs.5,
+                lhs.6 + rhs.6,
             )
         }
     }
@@ -1874,17 +1840,18 @@ mod tests {
             seven,
             Transform::new(Counting::new(0, 600), crate::op::U32ToUsize),
         );
-        let output = exec.alloc_canonical::<Seven>(600);
+        let output = exec.alloc_row::<Seven>(600);
 
         inclusive_scan(&exec, input, SumSevenItems, output.write()).unwrap();
 
-        assert_eq!(exec.to_host(&output.0.0.0.0.0.0).unwrap()[599], 600);
-        assert_eq!(exec.to_host(&output.0.0.0.0.0.1).unwrap()[599], 1_200);
-        assert_eq!(exec.to_host(&output.0.0.0.0.1).unwrap()[599], 1_800);
-        assert_eq!(exec.to_host(&output.0.0.0.1).unwrap()[599], 2_400);
-        assert_eq!(exec.to_host(&output.0.0.1).unwrap()[599], 3_000);
-        assert_eq!(exec.to_host(&output.0.1).unwrap()[599], 3_600);
-        assert_eq!(exec.to_host(&output.1).unwrap()[599], 4_200);
+        let (a, b, c, d, e, f, g) = crate::MStorage::into_columns(output);
+        assert_eq!(exec.to_host(&a).unwrap()[599], 600);
+        assert_eq!(exec.to_host(&b).unwrap()[599], 1_200);
+        assert_eq!(exec.to_host(&c).unwrap()[599], 1_800);
+        assert_eq!(exec.to_host(&d).unwrap()[599], 2_400);
+        assert_eq!(exec.to_host(&e).unwrap()[599], 3_000);
+        assert_eq!(exec.to_host(&f).unwrap()[599], 3_600);
+        assert_eq!(exec.to_host(&g).unwrap()[599], 4_200);
     }
 
     #[test]
@@ -1967,15 +1934,13 @@ mod tests {
             seven,
             Transform::new(Counting::new(0, 4), crate::op::U32ToUsize),
         );
-        let output = exec.alloc_canonical::<Seven>(4);
-        let init: Seven = (10, (20, (30, (40, (50, (60, 70))))));
+        let output = exec.alloc_row::<Seven>(4);
+        let init: Seven = (10, 20, 30, 40, 50, 60, 70);
         exclusive_scan(&exec, input, init, SumSevenItems, output.write()).unwrap();
 
-        assert_eq!(
-            exec.to_host(&output.0.0.0.0.0.0).unwrap(),
-            vec![10, 11, 12, 13]
-        );
-        assert_eq!(exec.to_host(&output.1).unwrap(), vec![70, 77, 84, 91]);
+        let (first, _, _, _, _, _, last) = crate::MStorage::into_columns(output);
+        assert_eq!(exec.to_host(&first).unwrap(), vec![10, 11, 12, 13]);
+        assert_eq!(exec.to_host(&last).unwrap(), vec![70, 77, 84, 91]);
     }
 
     #[test]

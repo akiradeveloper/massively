@@ -3,7 +3,7 @@
 use cubecl::prelude::*;
 
 use crate::{
-    Error, Executor, ReadExpression, StorageLayout, WritableFrom,
+    Error, Executor, ReadExpression, StorageLayout,
     eval::Eval13,
     output::OutputBindings,
     read::{Env0, LowerReadExpression, PaddedReadSlots},
@@ -15,8 +15,7 @@ const BLOCK_SIZE: u32 = 256;
 
 #[cubecl::cube(launch_unchecked, explicit_define)]
 fn indexed_copy_a13<
-    Source: CubeType + Send + Sync + 'static,
-    Target: WritableFrom<Source> + Send + Sync + 'static,
+    Item: CubeType + Send + Sync + 'static,
     L0: CubePrimitive,
     L1: CubePrimitive,
     L2: CubePrimitive,
@@ -73,9 +72,9 @@ fn indexed_copy_a13<
             O10 = O10,
             O11 = O11,
         >,
-    SourceExpr: Eval13<Source, L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12>,
+    SourceExpr: Eval13<Item, L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12>,
     IndexExpr: Eval13<usize, I0, I1, I2, I3, I4, I5, I6, I7, I8, I9, I10, I11, I12>,
-    Layout: Decompose<Target, Leaves = Leaves>,
+    Layout: Decompose<Item, Leaves = Leaves>,
 >(
     slot0: &[L0],
     slot1: &[L1],
@@ -176,7 +175,7 @@ fn indexed_copy_a13<
             read_offsets,
             source_position,
         );
-        Layout::decompose(Target::write_from(source)).store_padded(
+        Layout::decompose(source).store_padded(
             out0,
             out1,
             out2,
@@ -222,9 +221,15 @@ impl<R, Values, Indices, Output> IndexedCopyInput<R, Indices, Output> for Values
 where
     R: Runtime,
     Values: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
+    Values::Item: StorageLayout,
     Indices: ReadExpression<Item = usize> + LowerReadExpression + StageRead<R, Env0>,
-    Output: crate::core::facade::KernelOutput<R>,
-    Output::Item: WritableFrom<Values::Item>,
+    <Values::Item as StorageLayout>::StorageLeaves: StorePadded12,
+    <<Values::Item as StorageLayout>::StorageLeaves as CubeType>::ExpandType: StorePadded12Expand,
+    Output: crate::output::OutputExpression<Item = Values::Item>
+        + crate::output::LowerOutputExpression
+        + crate::output::StageOutput<R, Env0>,
+    Output::Slots:
+        crate::output::PaddedOutputSlots<Leaves = <Values::Item as StorageLayout>::StorageLeaves>,
 {
     fn indexed_copy_selected(
         self,
@@ -290,7 +295,6 @@ where
         unsafe {
             indexed_copy_a13::launch_unchecked::<
                 Values::Item,
-                Output::Item,
                 <Values::Slots as PaddedReadSlots>::L0,
                 <Values::Slots as PaddedReadSlots>::L1,
                 <Values::Slots as PaddedReadSlots>::L2,
@@ -456,9 +460,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        CanonicalStorage, Counting, Permute, ReverseCounting, Transform, Zip, read::FixedRead,
-    };
+    use crate::{Counting, Permute, ReverseCounting, RowStorage, Transform, Zip, read::FixedRead};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     #[test]
@@ -526,7 +528,7 @@ mod tests {
 
     #[test]
     fn gather_accepts_lazy_indices_independently() {
-        type Seven = (u32, (u32, (u32, (u32, (u32, (u32, u32))))));
+        type Seven = (u32, u32, u32, u32, u32, u32, u32);
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let inputs: Vec<_> = (0_u32..7)
             .map(|base| exec.to_device(&[base * 10 + 1, base * 10 + 2, base * 10 + 3]))
@@ -559,11 +561,12 @@ mod tests {
             ),
             crate::op::U32ToUsize,
         );
-        let output = exec.alloc_canonical::<Seven>(2);
+        let output = exec.alloc_row::<Seven>(2);
 
         gather_direct(&exec, FixedRead::new(values), indices, output.write()).unwrap();
-        assert_eq!(exec.to_host(&output.0.0.0.0.0.0).unwrap(), vec![3, 1]);
-        assert_eq!(exec.to_host(&output.1).unwrap(), vec![63, 61]);
+        let (first, _, _, _, _, _, last) = crate::MStorage::into_columns(output);
+        assert_eq!(exec.to_host(&first).unwrap(), vec![3, 1]);
+        assert_eq!(exec.to_host(&last).unwrap(), vec![63, 61]);
     }
 
     #[test]

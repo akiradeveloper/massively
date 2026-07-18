@@ -1,5 +1,7 @@
 //! Host-owned semantic twin of `massively::graph`.
 
+#![allow(private_interfaces)]
+
 use std::{fmt::Debug, marker::PhantomData, sync::Arc};
 
 use crate::{Error, Result, protocol::EncodedExpr};
@@ -115,8 +117,7 @@ enum ScalarNode {
 #[derive(Clone, Debug)]
 pub struct ScalarExpr(ScalarNode);
 
-/// A recursively nested product expression.  This is the sole structural
-/// representation used for every arity.
+/// A private binary product expression whose public item schema is flat.
 #[derive(Clone, Debug)]
 pub struct Zip<Left, Right> {
     left: Left,
@@ -155,13 +156,118 @@ mod private {
     pub trait Sealed {}
 }
 
+#[derive(Clone, Copy, Debug)]
+#[doc(hidden)]
+pub struct Last<T>(PhantomData<fn() -> T>);
+
+#[derive(Clone, Copy, Debug)]
+#[doc(hidden)]
+pub struct More<Head, Tail>(PhantomData<fn() -> (Head, Tail)>);
+
+#[doc(hidden)]
+pub trait Concat<Rhs> {
+    type Output;
+}
+
+impl<Head, Rhs> Concat<Rhs> for Last<Head> {
+    type Output = More<Head, Rhs>;
+}
+
+impl<Head, Tail, Rhs> Concat<Rhs> for More<Head, Tail>
+where
+    Tail: Concat<Rhs>,
+{
+    type Output = More<Head, Tail::Output>;
+}
+
+#[doc(hidden)]
+pub trait FlatLeaves {
+    type Item: Clone + Debug + PartialEq + Eq;
+
+    fn assemble(columns: &[Vec<u32>]) -> Result<Vec<Self::Item>>;
+}
+
+impl FlatLeaves for Last<u32> {
+    type Item = u32;
+
+    fn assemble(columns: &[Vec<u32>]) -> Result<Vec<Self::Item>> {
+        let [column] = columns else {
+            return Err(Error::Protocol(format!(
+                "scalar result expected one column, received {}",
+                columns.len()
+            )));
+        };
+        Ok(column.clone())
+    }
+}
+
+macro_rules! u32_for {
+    ($column:ident) => {
+        u32
+    };
+}
+
+macro_rules! impl_flat_leaves {
+    ($leaves:ty => ($first:ident, $( $column:ident ),+ $(,)?)) => {
+        impl FlatLeaves for $leaves {
+            type Item = (u32, $(u32_for!($column),)+);
+
+            fn assemble(columns: &[Vec<u32>]) -> Result<Vec<Self::Item>> {
+                let [$first, $( $column, )+] = columns else {
+                    return Err(Error::Protocol(format!(
+                        "product result expected {} columns, received {}",
+                        1usize $(+ { let _ = stringify!($column); 1usize })+,
+                        columns.len()
+                    )));
+                };
+                let len = $first.len();
+                if $( $column.len() != len )||+ {
+                    return Err(Error::Protocol(
+                        "product result columns have different lengths".into(),
+                    ));
+                }
+                Ok((0..len)
+                    .map(|index| ($first[index], $( $column[index], )+))
+                    .collect())
+            }
+        }
+    };
+}
+
+type Leaves2 = More<u32, Last<u32>>;
+type Leaves3 = More<u32, Leaves2>;
+type Leaves4 = More<u32, Leaves3>;
+type Leaves5 = More<u32, Leaves4>;
+type Leaves6 = More<u32, Leaves5>;
+type Leaves7 = More<u32, Leaves6>;
+type Leaves8 = More<u32, Leaves7>;
+type Leaves9 = More<u32, Leaves8>;
+type Leaves10 = More<u32, Leaves9>;
+type Leaves11 = More<u32, Leaves10>;
+type Leaves12 = More<u32, Leaves11>;
+
+impl_flat_leaves!(Leaves2 => (c0, c1));
+impl_flat_leaves!(Leaves3 => (c0, c1, c2));
+impl_flat_leaves!(Leaves4 => (c0, c1, c2, c3));
+impl_flat_leaves!(Leaves5 => (c0, c1, c2, c3, c4));
+impl_flat_leaves!(Leaves6 => (c0, c1, c2, c3, c4, c5));
+impl_flat_leaves!(Leaves7 => (c0, c1, c2, c3, c4, c5, c6));
+impl_flat_leaves!(Leaves8 => (c0, c1, c2, c3, c4, c5, c6, c7));
+impl_flat_leaves!(Leaves9 => (c0, c1, c2, c3, c4, c5, c6, c7, c8));
+impl_flat_leaves!(Leaves10 => (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9));
+impl_flat_leaves!(Leaves11 => (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10));
+impl_flat_leaves!(Leaves12 => (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11));
+
 /// A typed oracle expression whose scalar leaves can be evaluated by Lean and
 /// reassembled without an arity-specific implementation.
 pub trait Expression: private::Sealed + Clone + Debug {
     type Item: Clone + Debug + PartialEq + Eq;
 }
 
-pub(crate) trait ExpressionImpl: Expression {
+#[doc(hidden)]
+pub trait ExpressionImpl: Expression {
+    type Leaves: FlatLeaves<Item = Self::Item>;
+
     fn encode_leaves(&self, output: &mut Vec<EncodedExpr>);
     fn leaf_count(&self) -> usize;
     fn assemble(&self, columns: &[Vec<u32>]) -> Result<Vec<Self::Item>>;
@@ -174,6 +280,8 @@ impl Expression for ScalarExpr {
 }
 
 impl ExpressionImpl for ScalarExpr {
+    type Leaves = Last<u32>;
+
     fn encode_leaves(&self, output: &mut Vec<EncodedExpr>) {
         output.push(EncodedExpr::from_node(&self.0));
     }
@@ -183,13 +291,7 @@ impl ExpressionImpl for ScalarExpr {
     }
 
     fn assemble(&self, columns: &[Vec<u32>]) -> Result<Vec<Self::Item>> {
-        let [column] = columns else {
-            return Err(Error::Protocol(format!(
-                "scalar result expected one column, received {}",
-                columns.len()
-            )));
-        };
-        Ok(column.clone())
+        <Self::Leaves as FlatLeaves>::assemble(columns)
     }
 }
 
@@ -200,19 +302,26 @@ where
 {
 }
 
+#[allow(private_bounds)]
 impl<Left, Right> Expression for Zip<Left, Right>
 where
-    Left: Expression,
-    Right: Expression,
+    Left: ExpressionImpl,
+    Right: ExpressionImpl,
+    Left::Leaves: Concat<Right::Leaves>,
+    <Left::Leaves as Concat<Right::Leaves>>::Output: FlatLeaves,
 {
-    type Item = (Left::Item, Right::Item);
+    type Item = <<Left::Leaves as Concat<Right::Leaves>>::Output as FlatLeaves>::Item;
 }
 
 impl<Left, Right> ExpressionImpl for Zip<Left, Right>
 where
     Left: ExpressionImpl,
     Right: ExpressionImpl,
+    Left::Leaves: Concat<Right::Leaves>,
+    <Left::Leaves as Concat<Right::Leaves>>::Output: FlatLeaves,
 {
+    type Leaves = <Left::Leaves as Concat<Right::Leaves>>::Output;
+
     fn encode_leaves(&self, output: &mut Vec<EncodedExpr>) {
         self.left.encode_leaves(output);
         self.right.encode_leaves(output);
@@ -223,7 +332,6 @@ where
     }
 
     fn assemble(&self, columns: &[Vec<u32>]) -> Result<Vec<Self::Item>> {
-        let left_count = self.left.leaf_count();
         if columns.len() != self.leaf_count() {
             return Err(Error::Protocol(format!(
                 "product result expected {} columns, received {}",
@@ -231,16 +339,7 @@ where
                 columns.len()
             )));
         }
-        let left = self.left.assemble(&columns[..left_count])?;
-        let right = self.right.assemble(&columns[left_count..])?;
-        if left.len() != right.len() {
-            return Err(Error::Protocol(format!(
-                "product result length mismatch: {} and {}",
-                left.len(),
-                right.len()
-            )));
-        }
-        Ok(left.into_iter().zip(right).collect())
+        <Self::Leaves as FlatLeaves>::assemble(columns)
     }
 }
 
@@ -490,11 +589,11 @@ mod tests {
     }
 
     #[test]
-    fn nested_products_reassemble_without_arity_cases() {
+    fn nested_products_reassemble_as_flat_rows() {
         let expression = zip2(zip2(source_id(), destination_id()), edge_id());
         let rows = expression
             .assemble(&[vec![0, 1], vec![1, 0], vec![4, 7]])
             .unwrap();
-        assert_eq!(rows, vec![((0, 1), 4), ((1, 0), 7)]);
+        assert_eq!(rows, vec![(0, 1, 4), (1, 0, 7)]);
     }
 }

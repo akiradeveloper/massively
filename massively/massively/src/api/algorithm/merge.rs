@@ -2,10 +2,7 @@
 
 use cubecl::prelude::Runtime;
 
-use crate::{
-    Error, Executor, MIter, MIterMut, MStorage, MVec, ToCanonical, WritableFrom,
-    op::BinaryPredicateOp,
-};
+use crate::{Error, Executor, MItem, MIter, MIterMut, MStorage, MVec, op::BinaryPredicateOp};
 
 /// Stably merges two sorted ranges.
 ///
@@ -42,7 +39,7 @@ where
     R: Runtime,
     Left: MIter<R, Item = Item>,
     Right: MIter<R, Item = Item>,
-    Item: ToCanonical<R>,
+    Item: MItem<R>,
     Less: BinaryPredicateOp<Item>,
 {
     let left_len = left.len()? as usize;
@@ -68,10 +65,9 @@ where
     R: Runtime,
     Left: MIter<R>,
     Right: MIter<R, Item = Left::Item>,
-    Left::Item: crate::api::iter::CanonicalAbi<R>,
+    Left::Item: crate::api::iter::MItem<R>,
     Less: BinaryPredicateOp<Left::Item>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Left::Item>,
+    Output: MIterMut<R, Item = Left::Item>,
 {
     let left =
         crate::allocation::normalize_lowered(exec, crate::api::iter::lower_fixed::<R, _>(left))?;
@@ -79,11 +75,11 @@ where
         crate::allocation::normalize_lowered(exec, crate::api::iter::lower_fixed::<R, _>(right))?;
     let control = crate::merge::merge_control_fixed(
         exec,
-        crate::read::FixedReassociate::<_, Left::Item>::new(crate::CanonicalStorage::read(&left)),
-        crate::read::FixedReassociate::<_, Left::Item>::new(crate::CanonicalStorage::read(&right)),
+        crate::read::FixedRead::new(crate::RowStorage::read(&left)),
+        crate::read::FixedRead::new(crate::RowStorage::read(&right)),
         less,
     )?;
-    crate::merge::apply_canonical(exec, &left, &right, &control, output.lower_output())
+    crate::merge::apply_storage(exec, &left, &right, &control, output.lower_output())
 }
 
 /// Stably merges key/value ranges using the ordering of the keys.
@@ -137,7 +133,7 @@ where
     LeftValues: MIter<R>,
     RightKeys: MIter<R, Item = LeftKeys::Item>,
     RightValues: MIter<R, Item = LeftValues::Item>,
-    LeftValues::Item: ToCanonical<R>,
+    LeftValues::Item: MItem<R>,
     Less: BinaryPredicateOp<LeftKeys::Item>,
 {
     let left_len = left_keys.len()? as usize;
@@ -183,10 +179,9 @@ where
     LeftValues: MIter<R>,
     RightKeys: MIter<R, Item = LeftKeys::Item>,
     RightValues: MIter<R, Item = LeftValues::Item>,
-    LeftValues::Item: crate::api::iter::CanonicalAbi<R>,
+    LeftValues::Item: crate::api::iter::MItem<R>,
     Less: BinaryPredicateOp<LeftKeys::Item>,
-    ValueOutput: MIterMut<R>,
-    ValueOutput::Item: WritableFrom<LeftValues::Item>,
+    ValueOutput: MIterMut<R, Item = LeftValues::Item>,
 {
     let control = crate::merge::merge_control_fixed(
         exec,
@@ -203,7 +198,7 @@ where
         exec,
         crate::api::iter::lower_fixed::<R, _>(right_values),
     )?;
-    crate::merge::apply_canonical(
+    crate::merge::apply_storage(
         exec,
         &left_values,
         &right_values,

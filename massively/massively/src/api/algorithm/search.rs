@@ -1,6 +1,6 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MIter, MIterMut, MVec, WritableFrom, op::BinaryPredicateOp};
+use crate::{Error, Executor, MIter, MIterMut, MVec, op::BinaryPredicateOp};
 
 /// Finds the first source item equal to any needle.
 ///
@@ -107,8 +107,7 @@ where
     R: Runtime,
     Source: MIter<R>,
     Values: MIter<R, Item = Source::Item>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<u32>,
+    Output: MIterMut<R, Item = u32>,
     Less: BinaryPredicateOp<Source::Item>,
 {
     let bounds = crate::search::lower_bounds_storage(
@@ -178,8 +177,7 @@ where
     R: Runtime,
     Source: MIter<R>,
     Values: MIter<R, Item = Source::Item>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<u32>,
+    Output: MIterMut<R, Item = u32>,
     Less: BinaryPredicateOp<Source::Item>,
 {
     let bounds = crate::search::upper_bounds_storage(

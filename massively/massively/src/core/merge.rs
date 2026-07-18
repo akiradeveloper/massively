@@ -5,13 +5,13 @@ use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 use crate::{
-    A13, CanonicalAlloc, CanonicalStorage, Column, DeviceVec, Error, Executor, MStorageElement,
-    ReadExpression, StorageLayout, Transform,
+    A13, Column, DeviceVec, Error, Executor, MStorageElement, ReadExpression, RowAlloc, RowStorage,
+    StorageLayout, Transform,
     allocation::{CopyStorage, NormalizeInput},
     eval::Eval13,
     indexed::GatherInput,
     ordering::BinaryPredicateOp,
-    read::{Env0, Env13, LowerReadExpression},
+    read::{Env0, Env13, FixedRead, LowerReadExpression},
     reduce::{StageRead, StagedBindings},
 };
 
@@ -126,7 +126,7 @@ macro_rules! impl_merge_control_dispatch {
                 let left_len = left.logical_len()?;
                 let right_len = right.logical_len()?;
                 let total = left_len.checked_add(right_len).ok_or(Error::LengthTooLarge { len: usize::MAX })?;
-                let permutation = exec.alloc_canonical::<u32>(total);
+                let permutation = exec.alloc_row::<u32>(total);
                 if total == 0 {
                     return Ok(MergeControl { permutation, left_len, right_len });
                 }
@@ -178,32 +178,32 @@ impl<R, Left, Right, Less> MergeControlInput<R, Right, Less> for Left
 where
     R: Runtime,
     Left: NormalizeInput<R>,
-    Left::Item: StorageLayout + CanonicalAlloc<R>,
+    Left::Item: StorageLayout + RowAlloc<R>,
     Right: NormalizeInput<R> + ReadExpression<Item = Left::Item>,
     Left::SemanticRead: LowerReadExpression,
     Right::SemanticRead: LowerReadExpression,
     MergeDispatch<crate::S12>: MergeControlDispatch<
             R,
-            Left::SemanticRead,
-            Right::SemanticRead,
+            FixedRead<Left::SemanticRead>,
+            FixedRead<Right::SemanticRead>,
             Left::Item,
-            <Left::SemanticRead as LowerReadExpression>::Slots,
-            <Right::SemanticRead as LowerReadExpression>::Slots,
+            <FixedRead<Left::SemanticRead> as LowerReadExpression>::Slots,
+            <FixedRead<Right::SemanticRead> as LowerReadExpression>::Slots,
             Less,
         >,
 {
     fn merge_control(self, exec: &Executor<R>, right: Right) -> Result<MergeControl<R>, Error> {
         let left = self.normalize(exec)?;
         let right = right.normalize(exec)?;
-        let left_read = Left::semantic_read(&left);
-        let right_read = Right::semantic_read(&right);
+        let left_read = FixedRead::new(Left::semantic_read(&left));
+        let right_read = FixedRead::new(Right::semantic_read(&right));
         <MergeDispatch<crate::S12> as MergeControlDispatch<
             R,
-            Left::SemanticRead,
-            Right::SemanticRead,
+            FixedRead<Left::SemanticRead>,
+            FixedRead<Right::SemanticRead>,
             Left::Item,
-            <Left::SemanticRead as LowerReadExpression>::Slots,
-            <Right::SemanticRead as LowerReadExpression>::Slots,
+            <FixedRead<Left::SemanticRead> as LowerReadExpression>::Slots,
+            <FixedRead<Right::SemanticRead> as LowerReadExpression>::Slots,
             Less,
         >>::run(exec, &left_read, &right_read)
     }
@@ -252,22 +252,19 @@ where
 ///
 /// The payload layout is handled once through its semantic leaf list.  Key
 /// and value arities therefore never occur in the same dispatch obligation.
-pub(crate) fn apply_canonical<R, Item, Output>(
+pub(crate) fn apply_storage<R, Item, Output>(
     exec: &Executor<R>,
-    left: &<Item as CanonicalAlloc<R>>::CanonicalStorage,
-    right: &<Item as CanonicalAlloc<R>>::CanonicalStorage,
+    left: &<Item as RowAlloc<R>>::RowStorage,
+    right: &<Item as RowAlloc<R>>::RowStorage,
     control: &MergeControl<R>,
     output: Output,
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R> + CanonicalAlloc<R>,
+    Item: crate::api::iter::MItem<R> + RowAlloc<R>,
     Item::StorageLeaves: crate::core::facade::KernelValue,
-    <Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
-    <<Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item:
-        crate::WritableFrom<Item>,
-    Output: crate::core::facade::KernelOutput<R>,
-    Output::Item: crate::WritableFrom<Item>,
+    <Item as RowAlloc<R>>::RowStorage: RowStorage<R>,
+    Output: crate::core::facade::KernelOutput<R> + crate::output::OutputExpression<Item = Item>,
 {
     let left_len = left.len()?;
     let right_len = right.len()?;
@@ -281,27 +278,17 @@ where
     let total = left_len
         .checked_add(right_len)
         .ok_or(Error::LengthTooLarge { len: usize::MAX })?;
-    let combined = exec.alloc_canonical::<Item>(total);
+    let combined = exec.alloc_row::<Item>(total);
 
-    let left_read = crate::read::FixedReassociate::<_, Item>::new(left.read());
-    let left_write = crate::output::ReassociatedOutput::<
-        _,
-        Item,
-        <Item::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
-    >::new(combined.slice_mut(..left_len));
-    crate::transform::materialize_fixed(exec, &left_read, &left_write)?;
+    let left_read = crate::read::FixedRead::new(left.read());
+    crate::transform::materialize_fixed(exec, &left_read, &combined.slice_mut(..left_len))?;
 
-    let right_read = crate::read::FixedReassociate::<_, Item>::new(right.read());
-    let right_write = crate::output::ReassociatedOutput::<
-        _,
-        Item,
-        <Item::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
-    >::new(combined.slice_mut(left_len..));
-    crate::transform::materialize_fixed(exec, &right_read, &right_write)?;
+    let right_read = crate::read::FixedRead::new(right.read());
+    crate::transform::materialize_fixed(exec, &right_read, &combined.slice_mut(left_len..))?;
 
     crate::indexed::gather_u32(
         exec,
-        crate::read::FixedReassociate::<_, Item>::new(combined.read()),
+        crate::read::FixedRead::new(combined.read()),
         control.permutation.column(),
         output,
     )
@@ -323,10 +310,10 @@ impl<R, Left, Right, Output> ConcatApply<R, Right, Output> for Left
 where
     R: Runtime,
     Left: NormalizeInput<R>,
-    Left::Item: CanonicalAlloc<R, CanonicalStorage = Left::Storage>,
+    Left::Item: RowAlloc<R, RowStorage = Left::Storage>,
     Left::Storage: CopyStorage<R>,
     Right: NormalizeInput<R, Storage = Left::Storage> + ReadExpression<Item = Left::Item>,
-    <Left::Storage as CanonicalStorage<R>>::Read:
+    <Left::Storage as RowStorage<R>>::Read:
         GatherInput<R, Transform<Column<u32>, crate::op::U32ToUsize>, Output>,
 {
     fn concat_apply(
@@ -346,7 +333,7 @@ where
                 right: control.left_len + control.right_len,
             });
         }
-        let combined = exec.alloc_canonical::<Left::Item>(left_len + right_len);
+        let combined = exec.alloc_row::<Left::Item>(left_len + right_len);
         left.copy_storage(exec, combined.slice_mut(..left_len))?;
         right.copy_storage(exec, combined.slice_mut(left_len..))?;
         crate::indexed::gather_u32(exec, combined.read(), control.permutation.column(), output)

@@ -3,8 +3,8 @@
 use cubecl::prelude::Runtime;
 
 use crate::{
-    Error, Executor, MIter, MIterMut, MStorage, MVec, ToCanonical, WritableFrom,
-    op::BinaryPredicateOp, op::ReductionOp,
+    Error, Executor, MItem, MIter, MIterMut, MStorage, MVec, RadixKey, op::BinaryPredicateOp,
+    op::ReductionOp,
 };
 
 /// Stably sorts keys and applies the same ordering to values.
@@ -50,13 +50,84 @@ where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
-    Values::Item: ToCanonical<R>,
+    Values::Item: MItem<R>,
     Less: BinaryPredicateOp<Keys::Item>,
 {
     let len = keys.len()? as usize;
     let value_output = exec.alloc::<Values::Item>(len);
     sort_values_by_key_into(exec, keys, values, less, value_output.slice_mut(..))?;
     Ok(value_output)
+}
+
+/// Stably radix-sorts keys in ascending order and applies the same ordering to values.
+///
+/// Integer keys use their numeric order. Floating-point keys use the same total
+/// ordering as `f32::total_cmp` and `f64::total_cmp`. Compound keys produced by
+/// `zip2` through `zip12` are ordered lexicographically from left to right.
+///
+/// # Examples
+///
+/// ```
+/// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+/// use massively::{Executor, vector::radix_sort_by_key};
+///
+/// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+/// let keys = exec.to_device(&[3_i32, -1, 2, -1]);
+/// let values = exec.to_device(&[30_u32, 10, 20, 11]);
+/// let output = radix_sort_by_key(&exec, keys.slice(..), values.slice(..)).unwrap();
+///
+/// assert_eq!(exec.to_host(&output).unwrap(), vec![10, 11, 20, 30]);
+/// ```
+pub fn radix_sort_by_key<R, Keys, Values>(
+    exec: &Executor<R>,
+    keys: Keys,
+    values: Values,
+) -> Result<MVec<R, Values::Item>, Error>
+where
+    R: Runtime,
+    Keys: MIter<R>,
+    Keys::Item: RadixKey<R>,
+    Values: MIter<R>,
+    Values::Item: MItem<R>,
+{
+    let len = keys.len()?;
+    let value_output = exec.alloc::<Values::Item>(len);
+    radix_sort_values_by_key_into(exec, keys, values, value_output.slice_mut(..))?;
+    Ok(value_output)
+}
+
+/// Stably radix-sorts values into caller-provided storage.
+#[doc(hidden)]
+pub(crate) fn radix_sort_values_by_key_into<R, Keys, Values, ValueOutput>(
+    exec: &Executor<R>,
+    keys: Keys,
+    values: Values,
+    value_output: ValueOutput,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Keys: MIter<R>,
+    Keys::Item: RadixKey<R>,
+    Values: MIter<R>,
+    Values::Item: MItem<R>,
+    ValueOutput: MIterMut<R, Item = Values::Item>,
+{
+    let key_len = keys.len()?;
+    let value_len = values.len()?;
+    if key_len != value_len {
+        return Err(Error::LengthMismatch {
+            left: key_len,
+            right: value_len,
+        });
+    }
+    let key_storage = crate::api::algorithm::transform(exec, keys, crate::op::Identity)?;
+    let permutation = <Keys::Item as RadixKey<R>>::radix_permutation(exec, &key_storage, key_len)?;
+    crate::indexed::apply_permutation(
+        exec,
+        crate::api::iter::lower_fixed::<R, _>(values),
+        permutation.column(),
+        value_output.lower_output(),
+    )
 }
 
 /// Stably sorts values using a key-derived permutation without materializing keys.
@@ -72,9 +143,9 @@ where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
+    Values::Item: MItem<R>,
     Less: BinaryPredicateOp<Keys::Item>,
-    ValueOutput: MIterMut<R>,
-    ValueOutput::Item: WritableFrom<Values::Item>,
+    ValueOutput: MIterMut<R, Item = Values::Item>,
 {
     let key_len = keys.len()?;
     let value_len = values.len()?;
@@ -112,11 +183,10 @@ where
     Keys: MIter<R>,
     Keys::Item: crate::api::iter::SortAbi<R>,
     Values: MIter<R>,
+    Values::Item: MItem<R>,
     Less: BinaryPredicateOp<Keys::Item>,
-    KeyOutput: MIterMut<R>,
-    KeyOutput::Item: WritableFrom<Keys::Item>,
-    ValueOutput: MIterMut<R>,
-    ValueOutput::Item: WritableFrom<Values::Item>,
+    KeyOutput: MIterMut<R, Item = Keys::Item>,
+    ValueOutput: MIterMut<R, Item = Values::Item>,
 {
     let key_len = keys.len()?;
     let value_len = values.len()?;
@@ -189,7 +259,7 @@ where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
-    Values::Item: ToCanonical<R>,
+    Values::Item: MItem<R>,
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
 {
@@ -213,11 +283,11 @@ where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
+    Values::Item: MItem<R>,
     Values::Item: crate::api::iter::ScratchAbi<R>,
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Values::Item>,
+    Output: MIterMut<R, Item = Values::Item>,
 {
     crate::core::by_key::inclusive_scan_by_key_lowered(
         exec,
@@ -282,7 +352,7 @@ where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
-    Values::Item: ToCanonical<R>,
+    Values::Item: MItem<R>,
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
 {
@@ -307,11 +377,10 @@ where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
-    Values::Item: crate::api::iter::ScratchAbi<R>,
+    Values::Item: MItem<R> + crate::api::iter::ScratchAbi<R>,
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Values::Item>,
+    Output: MIterMut<R, Item = Values::Item>,
 {
     crate::core::by_key::exclusive_scan_by_key_lowered(
         exec,
@@ -377,9 +446,9 @@ pub fn reduce_by_key<R, Keys, Values, KeyItem, ValueItem, Equal, Op>(
 where
     R: Runtime,
     Keys: MIter<R, Item = KeyItem>,
-    KeyItem: ToCanonical<R>,
+    KeyItem: MItem<R>,
     Values: MIter<R, Item = ValueItem>,
-    ValueItem: ToCanonical<R>,
+    ValueItem: MItem<R>,
     Equal: BinaryPredicateOp<KeyItem>,
     Op: ReductionOp<ValueItem>,
 {
@@ -416,14 +485,13 @@ pub(crate) fn reduce_by_key_into<R, Keys, Values, Equal, Op, KeyOutput, ValueOut
 where
     R: Runtime,
     Keys: MIter<R>,
+    Keys::Item: MItem<R>,
     Values: MIter<R>,
-    Values::Item: crate::api::iter::ScratchAbi<R>,
+    Values::Item: MItem<R> + crate::api::iter::ScratchAbi<R>,
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
-    KeyOutput: MIterMut<R>,
-    KeyOutput::Item: WritableFrom<Keys::Item>,
-    ValueOutput: MIterMut<R>,
-    ValueOutput::Item: WritableFrom<Values::Item>,
+    KeyOutput: MIterMut<R, Item = Keys::Item>,
+    ValueOutput: MIterMut<R, Item = Values::Item>,
 {
     crate::core::by_key::reduce_by_key_lowered(
         exec,
@@ -483,7 +551,7 @@ where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
-    Values::Item: ToCanonical<R>,
+    Values::Item: MItem<R>,
     Equal: BinaryPredicateOp<Keys::Item>,
 {
     let capacity = keys.len()? as usize;
@@ -506,9 +574,9 @@ where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
+    Values::Item: MItem<R>,
     Equal: BinaryPredicateOp<Keys::Item>,
-    ValueOutput: MIterMut<R>,
-    ValueOutput::Item: WritableFrom<Values::Item>,
+    ValueOutput: MIterMut<R, Item = Values::Item>,
 {
     crate::core::by_key::unique_by_key(
         exec,

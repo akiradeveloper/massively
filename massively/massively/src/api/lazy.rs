@@ -3,9 +3,165 @@
 //! Lazy expressions allocate no result buffer by themselves. They are evaluated by the algorithm
 //! that consumes them.
 
-use crate::MStorageElement;
+use core::marker::PhantomData;
+use std::ops::RangeBounds;
 
-pub use crate::core::read::{Permute, Reverse, Taken, Transform};
+use cubecl::prelude::Runtime;
+
+use crate::{Error, MIter, MStorageElement, op::UnaryOp};
+use crate::{core::facade as private, read::SliceExpression};
+
+pub use crate::core::read::Taken;
+
+/// Logical lazy permutation lowered only when an algorithm consumes it.
+#[derive(Clone, Copy, Debug)]
+pub struct Permute<Values, Indices> {
+    values: Values,
+    indices: Indices,
+}
+
+impl<Values, Indices> Permute<Values, Indices> {
+    pub const fn new(values: Values, indices: Indices) -> Self {
+        Self { values, indices }
+    }
+}
+
+#[doc(hidden)]
+impl<R, Values, Indices> MIter<R> for Permute<Values, Indices>
+where
+    R: Runtime,
+    Values: MIter<R>,
+    Indices: MIter<R, Item = usize>,
+    crate::read::Permute<Values::Read, Indices::Read>:
+        private::KernelInput<R, Item = Values::Item> + private::IterLength + SliceExpression,
+{
+    type Item = Values::Item;
+    type Read = crate::read::Permute<Values::Read, Indices::Read>;
+    type Slice = crate::read::Slice<R, Self::Read>;
+
+    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice
+    where
+        Bounds: RangeBounds<usize>,
+    {
+        let input = self.clone().lower_read();
+        let len = private::IterLength::logical_len(&input)
+            .expect("cannot slice a lazy permutation with an invalid length");
+        let (start, count) = crate::api::iter::resolve_iter_range(len, range);
+        crate::read::Slice::new(input.slice_expression(start, count))
+    }
+
+    fn len(&self) -> Result<usize, Error> {
+        self.indices.len()
+    }
+
+    fn lower_read(self) -> Self::Read {
+        crate::read::Permute::new(self.values.lower_read(), self.indices.lower_read())
+    }
+}
+
+/// Logical lazy reverse view lowered only when an algorithm consumes it.
+#[derive(Clone, Copy, Debug)]
+pub struct Reverse<Values> {
+    values: Values,
+}
+
+impl<Values> Reverse<Values> {
+    pub const fn new(values: Values) -> Self {
+        Self { values }
+    }
+}
+
+#[doc(hidden)]
+impl<R, Values> MIter<R> for Reverse<Values>
+where
+    R: Runtime,
+    Values: MIter<R>,
+    crate::read::Reverse<Values::Read>:
+        private::KernelInput<R, Item = Values::Item> + private::IterLength + SliceExpression,
+{
+    type Item = Values::Item;
+    type Read = crate::read::Reverse<Values::Read>;
+    type Slice = crate::read::Slice<R, Self::Read>;
+
+    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice
+    where
+        Bounds: RangeBounds<usize>,
+    {
+        let input = self.clone().lower_read();
+        let len = private::IterLength::logical_len(&input)
+            .expect("cannot slice a lazy reverse view with an invalid length");
+        let (start, count) = crate::api::iter::resolve_iter_range(len, range);
+        crate::read::Slice::new(input.slice_expression(start, count))
+    }
+
+    fn len(&self) -> Result<usize, Error> {
+        self.values.len()
+    }
+
+    fn lower_read(self) -> Self::Read {
+        crate::read::Reverse::new(self.values.lower_read())
+    }
+}
+
+/// Logical lazy transform lowered only when an algorithm consumes it.
+#[derive(Debug)]
+pub struct Transform<Input, Op> {
+    input: Input,
+    _op: PhantomData<fn() -> Op>,
+}
+
+impl<Input: Clone, Op> Clone for Transform<Input, Op> {
+    fn clone(&self) -> Self {
+        Self {
+            input: self.input.clone(),
+            _op: PhantomData,
+        }
+    }
+}
+
+impl<Input: Copy, Op> Copy for Transform<Input, Op> {}
+
+impl<Input, Op> Transform<Input, Op> {
+    pub fn new(input: Input, _op: Op) -> Self {
+        Self {
+            input,
+            _op: PhantomData,
+        }
+    }
+}
+
+#[doc(hidden)]
+impl<R, Input, Op> MIter<R> for Transform<Input, Op>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    Op: UnaryOp<Input::Item>,
+    crate::read::Transform<Input::Read, Op>:
+        private::KernelInput<R, Item = Op::Output> + private::IterLength + SliceExpression,
+{
+    type Item = Op::Output;
+    type Read = crate::read::Transform<Input::Read, Op>;
+    type Slice = crate::read::Slice<R, Self::Read>;
+
+    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice
+    where
+        Bounds: RangeBounds<usize>,
+    {
+        let input = self.clone().lower_read();
+        let len = private::IterLength::logical_len(&input)
+            .expect("cannot slice a lazy transform with an invalid length");
+        let (start, count) = crate::api::iter::resolve_iter_range(len, range);
+        crate::read::Slice::new(input.slice_expression(start, count))
+    }
+
+    fn len(&self) -> Result<usize, Error> {
+        self.input.len()
+    }
+
+    fn lower_read(self) -> Self::Read {
+        crate::read::Transform::from_input(self.input.lower_read())
+    }
+}
 
 /// An unbounded stream that repeats one value.
 #[derive(Clone, Copy, Debug)]

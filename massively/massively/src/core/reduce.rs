@@ -5,8 +5,8 @@ use cubecl::prelude::*;
 
 use crate::allocation::CopyStorage;
 use crate::{
-    A13, CanonicalStorage, Column, Constant, Counting, Error, Executor, MStorageElement, Permute,
-    ReadExpression, ReverseCounting, S12, StorageLayout, Taken, Transform, Zip,
+    A13, Column, Constant, Counting, Error, Executor, MStorageElement, Permute, ReadExpression,
+    ReverseCounting, RowStorage, S12, StorageLayout, Taken, Transform, Zip,
     eval::Eval13,
     launch::cube_count_1d,
     op::UnaryOp,
@@ -21,18 +21,10 @@ use crate::{
     },
 };
 
-type FixedReduceStorage<R, Item> = <Item as crate::CanonicalAlloc<R>>::CanonicalStorage;
-type FixedReduceRead<R, Item> = crate::read::FixedReassociate<
-    <FixedReduceStorage<R, Item> as crate::CanonicalStorage<R>>::Read,
-    Item,
->;
-type FixedReduceSlots<Item> =
-    <<Item as StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots;
-type FixedReduceOutput<R, Item> = crate::output::ReassociatedOutput<
-    <FixedReduceStorage<R, Item> as crate::CanonicalStorage<R>>::Write,
-    Item,
-    FixedReduceSlots<Item>,
->;
+type FixedReduceStorage<R, Item> = <Item as crate::RowAlloc<R>>::RowStorage;
+type FixedReduceRead<R, Item> =
+    crate::read::FixedRead<<FixedReduceStorage<R, Item> as crate::RowStorage<R>>::Read>;
+type FixedReduceOutput<R, Item> = <FixedReduceStorage<R, Item> as crate::RowStorage<R>>::Write;
 
 const BLOCK_SIZE: u32 = 256;
 const ITEMS_PER_UNIT: usize = 256;
@@ -414,12 +406,12 @@ where
     }
 }
 
-impl<R, Values, Offsets, Env> StageRead<R, Env> for crate::seg::SegmentIterator<Values, Offsets>
+impl<R, Values, Offsets, Env> StageRead<R, Env> for crate::seg::SegmentRead<Values, Offsets>
 where
     R: Runtime,
     Values: StageRead<R, Env>,
     Offsets: StageRead<R, Values::NextEnv>,
-    crate::seg::SegmentIterator<Values, Offsets>: BindSlots<Env>,
+    crate::seg::SegmentRead<Values, Offsets>: BindSlots<Env>,
 {
     fn logical_len(&self) -> Result<usize, Error> {
         Ok(self.offsets().logical_len()?.saturating_sub(1))
@@ -505,28 +497,6 @@ where
     Input: ReadExpression + StageRead<R, Env>,
     Op: ReductionOp<Input::Item>,
     crate::read::Adjacent<Input, Op>: BindSlots<Env>,
-{
-    fn logical_len(&self) -> Result<usize, Error> {
-        self.input.logical_len()
-    }
-
-    fn stage_at(
-        &self,
-        client: &ComputeClient<R>,
-        owner: u64,
-        bindings: &mut StagedBindings,
-    ) -> Result<(), Error> {
-        self.input.stage_at(client, owner, bindings)
-    }
-}
-
-impl<R, Input, Output, Env> StageRead<R, Env> for crate::read::Reassociate<Input, Output>
-where
-    R: Runtime,
-    Input: ReadExpression + StageRead<R, Env>,
-    Input::Item: StorageLayout,
-    Output: StorageLayout + crate::WritableFrom<Input::Item> + 'static,
-    crate::read::Reassociate<Input, Output>: BindSlots<Env>,
 {
     fn logical_len(&self) -> Result<usize, Error> {
         self.input.logical_len()
@@ -1557,7 +1527,7 @@ fn finish_fixed_reduce<R, Item, Op>(
 ) -> Result<Item, Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
+    Item: crate::api::iter::MItem<R> + crate::RowAlloc<R>,
     Op: ReductionOp<Item>,
     Dispatch<A13, S12>: ReducePassDispatch<
             R,
@@ -1573,33 +1543,32 @@ where
 {
     while current_len > 1 {
         let next_len = pass_block_count(current_len);
-        let next = exec.alloc_canonical::<Item>(next_len);
+        let next = exec.alloc_row::<Item>(next_len);
         let input = FixedReduceRead::<R, Item>::new(current.read());
-        let output = FixedReduceOutput::<R, Item>::new(next.write());
+        let output = next.write();
         reduce_pass::<R, _, _, Item, Op>(exec, &input, &output)?;
         current = next;
         current_len = next_len;
     }
 
     let initial = crate::allocation::singleton(exec, init)?;
-    let combined = exec.alloc_canonical::<Item>(2);
+    let combined = exec.alloc_row::<Item>(2);
     initial.copy_storage(exec, combined.slice_mut(..1))?;
     current.copy_storage(exec, combined.slice_mut(1..))?;
 
-    let result = exec.alloc_canonical::<Item>(1);
+    let result = exec.alloc_row::<Item>(1);
     let input = FixedReduceRead::<R, Item>::new(combined.read());
-    let output = FixedReduceOutput::<R, Item>::new(result.write());
+    let output = result.write();
     reduce_pass::<R, _, _, Item, Op>(exec, &input, &output)?;
 
-    let canonical = result.read_first(exec)?;
-    Ok(Item::from_storage_leaves(canonical.into_storage_leaves()))
+    result.read_first(exec)
 }
 
 impl<R, Input, Item, Op, Slots> ReduceDispatch<R, Input, Item, Op, Slots> for Dispatch<A13, S12>
 where
     R: Runtime,
     Input: ReadExpression<Item = Item> + LowerReadExpression + StageRead<R, Env0>,
-    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
+    Item: crate::api::iter::MItem<R> + crate::RowAlloc<R>,
     Op: ReductionOp<Item>,
     Dispatch<A13, S12>: ReducePassDispatch<
             R,
@@ -1629,8 +1598,8 @@ where
             return Ok(init);
         }
         let blocks = pass_block_count(len);
-        let partials = exec.alloc_canonical::<Item>(blocks);
-        let output = FixedReduceOutput::<R, Item>::new(partials.write());
+        let partials = exec.alloc_row::<Item>(blocks);
+        let output = partials.write();
         <Dispatch<A13, S12> as ReducePassDispatch<
             R,
             Input,
@@ -1707,29 +1676,29 @@ mod tests {
         }
     }
 
-    struct AddNestedTriple;
+    struct AddTriple;
 
     #[cubecl::cube]
-    impl UnaryOp<((u32, u32), u32)> for AddNestedTriple {
+    impl UnaryOp<(u32, u32, u32)> for AddTriple {
         type Output = u32;
 
-        fn apply(input: ((u32, u32), u32)) -> u32 {
-            input.0.0 + input.0.1 + input.1
+        fn apply(input: (u32, u32, u32)) -> u32 {
+            input.0 + input.1 + input.2
         }
     }
 
-    struct AddNestedFour;
+    struct AddFour;
 
     #[cubecl::cube]
-    impl UnaryOp<(((u32, u32), u32), u32)> for AddNestedFour {
+    impl UnaryOp<(u32, u32, u32, u32)> for AddFour {
         type Output = u32;
 
-        fn apply(input: (((u32, u32), u32), u32)) -> u32 {
-            input.0.0.0 + input.0.0.1 + input.0.1 + input.1
+        fn apply(input: (u32, u32, u32, u32)) -> u32 {
+            input.0 + input.1 + input.2 + input.3
         }
     }
 
-    type Seven = (u32, (u32, (u32, (u32, (u32, (u32, u32))))));
+    type Seven = (u32, u32, u32, u32, u32, u32, u32);
     struct AddSeven;
 
     #[cubecl::cube]
@@ -1737,22 +1706,12 @@ mod tests {
         fn apply(lhs: Seven, rhs: Seven) -> Seven {
             (
                 lhs.0 + rhs.0,
-                (
-                    lhs.1.0 + rhs.1.0,
-                    (
-                        lhs.1.1.0 + rhs.1.1.0,
-                        (
-                            lhs.1.1.1.0 + rhs.1.1.1.0,
-                            (
-                                lhs.1.1.1.1.0 + rhs.1.1.1.1.0,
-                                (
-                                    lhs.1.1.1.1.1.0 + rhs.1.1.1.1.1.0,
-                                    lhs.1.1.1.1.1.1 + rhs.1.1.1.1.1.1,
-                                ),
-                            ),
-                        ),
-                    ),
-                ),
+                lhs.1 + rhs.1,
+                lhs.2 + rhs.2,
+                lhs.3 + rhs.3,
+                lhs.4 + rhs.4,
+                lhs.5 + rhs.5,
+                lhs.6 + rhs.6,
             )
         }
     }
@@ -1785,7 +1744,7 @@ mod tests {
     }
 
     #[test]
-    fn dispatch_a3_storage1_preserves_nested_zip_semantics() {
+    fn dispatch_a3_storage1_uses_flat_zip_semantics() {
         let exec = executor();
         let len = 4097;
         let first = exec.to_device(&vec![1_u32; len]);
@@ -1793,7 +1752,7 @@ mod tests {
         let third = exec.to_device(&vec![3_u32; len]);
         let input = Transform::new(
             Zip::new(Zip::new(first.column(), second.column()), third.column()),
-            AddNestedTriple,
+            AddTriple,
         );
 
         let output = reduce(&exec, input, 0, Sum).unwrap();
@@ -1820,7 +1779,7 @@ mod tests {
     }
 
     type FourColumns = Zip<Zip<Zip<Column<u32>, Column<u32>>, Column<u32>>, Column<u32>>;
-    type FourInput = Transform<FourColumns, AddNestedFour>;
+    type FourInput = Transform<FourColumns, AddFour>;
     type FourExpr = <FourInput as LowerReadExpression>::DeviceExpr;
 
     #[test]
@@ -1837,7 +1796,7 @@ mod tests {
                 ),
                 columns[3].column(),
             ),
-            AddNestedFour,
+            AddFour,
         );
         assert_eq!(reduce(&exec, input, 5, Sum).unwrap(), 5 + 10 * 513);
     }
@@ -1869,26 +1828,19 @@ mod tests {
             seven,
             crate::Transform::new(Counting::new(0, len), crate::op::U32ToUsize),
         );
-        let init: Seven = (10, (20, (30, (40, (50, (60, 70))))));
+        let init: Seven = (10, 20, 30, 40, 50, 60, 70);
 
         let output = reduce(&exec, input, init, AddSeven).unwrap();
         assert_eq!(
             output,
             (
                 10 + len as u32,
-                (
-                    20 + 2 * len as u32,
-                    (
-                        30 + 3 * len as u32,
-                        (
-                            40 + 4 * len as u32,
-                            (
-                                50 + 5 * len as u32,
-                                (60 + 6 * len as u32, 70 + 7 * len as u32),
-                            ),
-                        ),
-                    ),
-                ),
+                20 + 2 * len as u32,
+                30 + 3 * len as u32,
+                40 + 4 * len as u32,
+                50 + 5 * len as u32,
+                60 + 6 * len as u32,
+                70 + 7 * len as u32,
             )
         );
     }

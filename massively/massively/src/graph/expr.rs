@@ -1,17 +1,21 @@
 //! Edge-context expressions consumed by a traversal terminal.
 
+#![allow(private_interfaces)]
+
 use cubecl::prelude::Runtime;
 
-use crate::{CanonicalForm, DeviceVec, Error, Executor, MIter, MStorage, Zip};
+use crate::api::iter::Zipped;
+use crate::{DeviceVec, Error, Executor, MItem, MIter, MStorage, Zip};
 
 use super::control::TraversalControl;
 
-pub(crate) mod private {
+#[doc(hidden)]
+pub mod private {
     use super::*;
 
     pub trait Sealed {}
 
-    pub(crate) trait EdgeExprImpl<R: Runtime>: EdgeExpr<R> + Sized {
+    pub trait EdgeExprImpl<R: Runtime>: EdgeExpr<R> + Sized {
         type Storage: MStorage<R, Item = <Self as EdgeExpr<R>>::Item>;
 
         fn materialize(
@@ -29,7 +33,7 @@ pub(crate) mod private {
 /// that the backend can change its fused representation without exposing traversal control.
 #[allow(private_bounds)]
 pub trait EdgeExpr<R: Runtime>: private::Sealed {
-    type Item: CanonicalForm<R>;
+    type Item: MItem<R>;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -91,8 +95,8 @@ impl<R, Values> EdgeExpr<R> for Source<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: CanonicalForm<R>,
-    <Values::Item as CanonicalForm<R>>::Storage: MStorage<R, Item = Values::Item>,
+    Values::Item: MItem<R>,
+    <Values::Item as MItem<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
     type Item = Values::Item;
 }
@@ -101,8 +105,8 @@ impl<R, Values> EdgeExpr<R> for Destination<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: CanonicalForm<R>,
-    <Values::Item as CanonicalForm<R>>::Storage: MStorage<R, Item = Values::Item>,
+    Values::Item: MItem<R>,
+    <Values::Item as MItem<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
     type Item = Values::Item;
 }
@@ -111,8 +115,8 @@ impl<R, Values> EdgeExpr<R> for Edge<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: CanonicalForm<R>,
-    <Values::Item as CanonicalForm<R>>::Storage: MStorage<R, Item = Values::Item>,
+    Values::Item: MItem<R>,
+    <Values::Item as MItem<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
     type Item = Values::Item;
 }
@@ -133,10 +137,10 @@ impl<R, Values> private::EdgeExprImpl<R> for Source<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: CanonicalForm<R>,
-    <Values::Item as CanonicalForm<R>>::Storage: MStorage<R, Item = Values::Item>,
+    Values::Item: MItem<R>,
+    <Values::Item as MItem<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
-    type Storage = <Values::Item as CanonicalForm<R>>::Storage;
+    type Storage = <Values::Item as MItem<R>>::Storage;
 
     fn materialize(
         self,
@@ -158,10 +162,10 @@ impl<R, Values> private::EdgeExprImpl<R> for Destination<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: CanonicalForm<R>,
-    <Values::Item as CanonicalForm<R>>::Storage: MStorage<R, Item = Values::Item>,
+    Values::Item: MItem<R>,
+    <Values::Item as MItem<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
-    type Storage = <Values::Item as CanonicalForm<R>>::Storage;
+    type Storage = <Values::Item as MItem<R>>::Storage;
 
     fn materialize(
         self,
@@ -183,10 +187,10 @@ impl<R, Values> private::EdgeExprImpl<R> for Edge<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: CanonicalForm<R>,
-    <Values::Item as CanonicalForm<R>>::Storage: MStorage<R, Item = Values::Item>,
+    Values::Item: MItem<R>,
+    <Values::Item as MItem<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
-    type Storage = <Values::Item as CanonicalForm<R>>::Storage;
+    type Storage = <Values::Item as MItem<R>>::Storage;
 
     fn materialize(
         self,
@@ -240,30 +244,31 @@ impl<R: Runtime> private::EdgeExprImpl<R> for EdgeId {
     }
 }
 
-impl<Left, Right> private::Sealed for Zip<Left, Right>
+impl<Left, Right> private::Sealed for Zipped<Left, Right>
 where
     Left: private::Sealed,
     Right: private::Sealed,
 {
 }
 
-impl<R, Left, Right> EdgeExpr<R> for Zip<Left, Right>
-where
-    R: Runtime,
-    Left: EdgeExpr<R>,
-    Right: EdgeExpr<R>,
-    (Left::Item, Right::Item): CanonicalForm<R>,
-{
-    type Item = (Left::Item, Right::Item);
-}
-
-impl<R, Left, Right> private::EdgeExprImpl<R> for Zip<Left, Right>
+impl<R, Left, Right> EdgeExpr<R> for Zipped<Left, Right>
 where
     R: Runtime,
     Left: EdgeExpr<R> + private::EdgeExprImpl<R>,
     Right: EdgeExpr<R> + private::EdgeExprImpl<R>,
-    (Left::Item, Right::Item): CanonicalForm<R>,
-    Zip<Left::Storage, Right::Storage>: MStorage<R, Item = (Left::Item, Right::Item)>,
+    Zip<Left::Storage, Right::Storage>: MStorage<R>,
+    <Zip<Left::Storage, Right::Storage> as MStorage<R>>::Item: MItem<R>,
+{
+    type Item = <Zip<Left::Storage, Right::Storage> as MStorage<R>>::Item;
+}
+
+impl<R, Left, Right> private::EdgeExprImpl<R> for Zipped<Left, Right>
+where
+    R: Runtime,
+    Left: EdgeExpr<R> + private::EdgeExprImpl<R>,
+    Right: EdgeExpr<R> + private::EdgeExprImpl<R>,
+    Zip<Left::Storage, Right::Storage>: MStorage<R>,
+    <Zip<Left::Storage, Right::Storage> as MStorage<R>>::Item: MItem<R>,
 {
     type Storage = Zip<Left::Storage, Right::Storage>;
 

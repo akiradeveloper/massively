@@ -40,7 +40,7 @@ fn read_u32<R: Runtime>(
 pub fn solve<R: Runtime>(
     exec: &Executor<R>,
     graph: &DeviceWeightedCsr<R, f32>,
-) -> common::Result<MVec<R, ((u32, u32), f32)>> {
+) -> common::Result<MVec<R, (u32, u32, f32)>> {
     let topology = graph.graph();
     let edge_count = topology.edge_count();
     let sources = graph::traverse(
@@ -111,6 +111,7 @@ mod tests {
     use super::*;
     use crate::WeightedCsr;
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+    use massively::MStorage;
 
     #[test]
     fn weighted_path_is_its_own_tree() {
@@ -118,7 +119,8 @@ mod tests {
         let graph = WeightedCsr::new(common::path_graph(), vec![1.0, 1.0, 2.0, 2.0, 3.0, 3.0]);
         let graph = DeviceWeightedCsr::from_host(&exec, &graph).unwrap();
         let tree = solve(&exec, &graph).unwrap();
-        assert_eq!(tree.0.0.len(), 3);
-        assert_eq!(exec.to_host(&tree.1).unwrap().iter().sum::<f32>(), 6.0);
+        let (sources, _, weights) = MStorage::into_columns(tree);
+        assert_eq!(sources.len(), 3);
+        assert_eq!(exec.to_host(&weights).unwrap().iter().sum::<f32>(), 6.0);
     }
 }

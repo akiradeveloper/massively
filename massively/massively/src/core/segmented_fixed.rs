@@ -9,7 +9,7 @@ use crate::storage::{
     Decompose, LoadMutPadded12, LoadPadded12, MutableLeaves, PlaneShuffleLeaves, Recompose,
     SharedLeaves, SharedLeavesExpand, StorePadded12, StorePadded12Expand,
 };
-use crate::{CanonicalStorage, DeviceVec, Error, Executor};
+use crate::{DeviceVec, Error, Executor, RowStorage};
 
 const BLOCK_SIZE: u32 = 256;
 

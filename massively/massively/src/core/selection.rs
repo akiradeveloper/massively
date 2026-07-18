@@ -3,14 +3,15 @@
 use cubecl::prelude::*;
 
 use crate::{
-    A1, CanonicalStorage, Column, Constant, DeviceSliceMut, DeviceVec, Dispatch, Error, Executor,
-    ReadExpression, S1, StorageLayout, Transform, Zip,
+    A1, Column, Constant, DeviceSliceMut, DeviceVec, Dispatch, Error, Executor, ReadExpression,
+    RowStorage, S1, StorageLayout, Transform, Zip,
     indexed::GatherInput,
     op::UnaryOp,
     output::{LowerOutputExpression, OutputExpression, SliceOutput, StageOutput},
     read::{Env0, Env1, LowerReadExpression},
     reduce::{ReductionOp, StageRead},
     scan::{InclusiveScanDispatch, inclusive_scan, inclusive_scan_u32, last_u32},
+    storage::Concat,
     transform::{MaterializeDispatch, materialize},
 };
 
@@ -90,7 +91,6 @@ where
     DeviceSliceMut<T>: OutputExpression<Item = T, StorageArity = S1>
         + LowerOutputExpression<Slots = Env1<T>>
         + StageOutput<R, Env0>,
-    T: crate::WritableFrom<T>,
 {
     fn fill_output(self, exec: &Executor<R>, value: T) -> Result<(), Error> {
         let len = self.len();
@@ -103,7 +103,11 @@ where
     R: Runtime,
     Left: FillOutput<R>,
     Right: FillOutput<R>,
-    Zip<Left, Right>: OutputExpression<Item = (Left::Item, Right::Item)>,
+    Zip<Left, Right>: OutputExpression,
+    <Left::Item as StorageLayout>::StorageLeaves: Concat<
+            <Right::Item as StorageLayout>::StorageLeaves,
+            Output = <<Zip<Left, Right> as OutputExpression>::Item as StorageLayout>::StorageLeaves,
+        >,
 {
     fn fill_output(self, exec: &Executor<R>, value: Self::Item) -> Result<(), Error> {
         let left_len = self.0.logical_len()?;
@@ -114,23 +118,12 @@ where
                 right: right_len,
             });
         }
-        self.0.fill_output(exec, value.0)?;
-        self.1.fill_output(exec, value.1)
-    }
-}
-
-impl<R, Output, Source, Slots> FillOutput<R>
-    for crate::output::ReassociatedOutput<Output, Source, Slots>
-where
-    R: Runtime,
-    Output: FillOutput<R>,
-    Source: StorageLayout,
-    Output::Item: crate::WritableFrom<Source>,
-    Slots: crate::output::OutputSlotEnvironment<StorageArity = Source::StorageArity>,
-{
-    fn fill_output(self, exec: &Executor<R>, value: Source) -> Result<(), Error> {
-        let value = <Output::Item as crate::WritableFrom<Source>>::write_from(value);
-        self.into_inner().fill_output(exec, value)
+        let (left, right) =
+            <Left::Item as StorageLayout>::StorageLeaves::split(value.into_storage_leaves());
+        self.0
+            .fill_output(exec, Left::Item::from_storage_leaves(left))?;
+        self.1
+            .fill_output(exec, Right::Item::from_storage_leaves(right))
     }
 }
 
@@ -190,7 +183,7 @@ where
 
     fn selected_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error> {
         let len = self.logical_len()?;
-        let positions = exec.alloc_canonical::<u32>(len);
+        let positions = exec.alloc_row::<u32>(len);
         inclusive_scan(
             exec,
             Transform::new(self, IsTrue),
@@ -202,7 +195,7 @@ where
 
     fn rejected_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error> {
         let len = self.logical_len()?;
-        let positions = exec.alloc_canonical::<u32>(len);
+        let positions = exec.alloc_row::<u32>(len);
         inclusive_scan(
             exec,
             Transform::new(self, IsFalse),
@@ -272,7 +265,7 @@ impl<R: Runtime> SelectionControl<R> {
         count: u32,
         invert: bool,
     ) -> Result<Self, Error> {
-        let indices = exec.alloc_canonical::<u32>(count as usize);
+        let indices = exec.alloc_row::<u32>(count as usize);
         if count != 0 {
             let len = u32::try_from(positions.len()).map_err(|_| Error::LengthTooLarge {
                 len: positions.len(),
@@ -479,10 +472,10 @@ where
     Stencil: FlagInput<R>,
     Output: OutputExpression,
     Output::Item: crate::allocation::ScratchStorage<R>,
-    <Output::Item as crate::allocation::ScratchStorage<R>>::Storage: CanonicalStorage<R>,
-    <<Output::Item as crate::allocation::ScratchStorage<R>>::Storage as CanonicalStorage<R>>::Write:
+    <Output::Item as crate::allocation::ScratchStorage<R>>::Storage: RowStorage<R>,
+    <<Output::Item as crate::allocation::ScratchStorage<R>>::Storage as RowStorage<R>>::Write:
         FillOutput<R>,
-    <<Output::Item as crate::allocation::ScratchStorage<R>>::Storage as CanonicalStorage<R>>::Read:
+    <<Output::Item as crate::allocation::ScratchStorage<R>>::Storage as RowStorage<R>>::Read:
         crate::indexed::IndexedCopyInput<R, Transform<Column<u32>, crate::op::U32ToUsize>, Output>,
 {
     let stencil_len = stencil.flag_len()?;
@@ -501,10 +494,7 @@ where
         exec,
         control.count() as usize,
     );
-    let replacement = <<Output::Item as crate::allocation::ScratchStorage<R>>::ScratchItem as crate::WritableFrom<
-        Output::Item,
-    >>::write_from(value);
-    replacements.write().fill_output(exec, replacement)?;
+    replacements.write().fill_output(exec, value)?;
     crate::core::scatter::scatter(
         exec,
         replacements.read(),
@@ -598,7 +588,7 @@ mod tests {
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     #[test]
-    fn copy_where_preserves_nested_shape_and_reassociates_output() {
+    fn copy_where_preserves_flat_three_column_rows() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let a = exec.to_device(&[1_u32, 2, 3, 4]);
         let b = exec.to_device(&[10_f32, 20.0, 30.0, 40.0]);
@@ -639,7 +629,7 @@ mod tests {
     fn fused_stencil_scan_produces_binary_positions() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let flags = exec.to_device(&[0_u32, 7, 3, 0]);
-        let positions = exec.alloc_canonical::<u32>(4);
+        let positions = exec.alloc_row::<u32>(4);
         inclusive_scan(
             &exec,
             Transform::new(Transform::new(flags.column(), crate::op::U32ToBool), IsTrue),
@@ -752,11 +742,11 @@ mod tests {
         let b = exec.to_device(&[0_f32; 4]);
         let c = exec.to_device(&[0_i32; 4]);
         let output = || Zip::new(Zip::new(a.slice_mut(..), b.slice_mut(..)), c.slice_mut(..));
-        fill(&exec, ((7_u32, 2.5_f32), -3_i32), output()).unwrap();
+        fill(&exec, (7_u32, 2.5_f32, -3_i32), output()).unwrap();
         let flags = exec.to_device(&[0_u32, 1, 0, 1]);
         replace_where(
             &exec,
-            ((9_u32, 4.5_f32), -8_i32),
+            (9_u32, 4.5_f32, -8_i32),
             Transform::new(flags.column(), crate::op::U32ToBool),
             output(),
         )
@@ -766,7 +756,7 @@ mod tests {
         assert_eq!(exec.to_host(&c).unwrap(), vec![-3, -8, -3, -8]);
     }
 
-    type Seven = (u32, (u32, (u32, (u32, (u32, (u32, u32))))));
+    type Seven = (u32, u32, u32, u32, u32, u32, u32);
 
     struct IncrementSeven;
 
@@ -776,19 +766,12 @@ mod tests {
         fn apply(input: Seven) -> Seven {
             (
                 input.0 + 1u32,
-                (
-                    input.1.0 + 1u32,
-                    (
-                        input.1.1.0 + 1u32,
-                        (
-                            input.1.1.1.0 + 1u32,
-                            (
-                                input.1.1.1.1.0 + 1u32,
-                                (input.1.1.1.1.1.0 + 1u32, input.1.1.1.1.1.1 + 1u32),
-                            ),
-                        ),
-                    ),
-                ),
+                input.1 + 1u32,
+                input.2 + 1u32,
+                input.3 + 1u32,
+                input.4 + 1u32,
+                input.5 + 1u32,
+                input.6 + 1u32,
             )
         }
     }

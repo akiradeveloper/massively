@@ -5,7 +5,7 @@ use std::{
 
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use graph_algorithms::{self as graph, CsrGraph, DeviceCsr, DeviceWeightedCsr, WeightedCsr};
-use massively::{Executor, zip2};
+use massively::{Executor, MStorage, op::Identity, vector, zip2};
 use proptest::{
     prelude::*,
     test_runner::{Config, TestCaseResult, TestRunner},
@@ -262,22 +262,22 @@ fn geolocation_matches_cpu_reference() {
     run_graph_cases(|exec, case| {
         let expected = reference::geo(&case.graph, &case.coordinates, &case.known, ITERATIONS);
         let device_graph = DeviceCsr::from_host(exec, &case.graph).unwrap();
-        let coordinates = zip2(
-            exec.to_device(
-                &case
-                    .coordinates
-                    .iter()
-                    .map(|coordinate| coordinate.0)
-                    .collect::<Vec<_>>(),
-            ),
-            exec.to_device(
-                &case
-                    .coordinates
-                    .iter()
-                    .map(|coordinate| coordinate.1)
-                    .collect::<Vec<_>>(),
-            ),
+        let xs = exec.to_device(
+            &case
+                .coordinates
+                .iter()
+                .map(|coordinate| coordinate.0)
+                .collect::<Vec<_>>(),
         );
+        let ys = exec.to_device(
+            &case
+                .coordinates
+                .iter()
+                .map(|coordinate| coordinate.1)
+                .collect::<Vec<_>>(),
+        );
+        let coordinates =
+            vector::transform(exec, zip2(xs.slice(..), ys.slice(..)), Identity).unwrap();
         let known = exec.to_device(
             &case
                 .known
@@ -287,8 +287,9 @@ fn geolocation_matches_cpu_reference() {
         );
         let output =
             graph::geo::solve(exec, &device_graph, &coordinates, &known, ITERATIONS).unwrap();
-        let xs = exec.to_host(&output.0).unwrap();
-        let ys = exec.to_host(&output.1).unwrap();
+        let (xs, ys) = MStorage::into_columns(output);
+        let xs = exec.to_host(&xs).unwrap();
+        let ys = exec.to_host(&ys).unwrap();
         let actual = xs.into_iter().zip(ys).collect::<Vec<_>>();
         assert_coordinates_near(&actual, &expected, 2e-4)
     });
@@ -393,8 +394,9 @@ fn minimum_spanning_forest_matches_cpu_reference() {
         let matrix = WeightedCsr::new(case.graph, case.weights_f32);
         let matrix = DeviceWeightedCsr::from_host(exec, &matrix).unwrap();
         let actual = graph::mst::solve(exec, &matrix).unwrap();
-        prop_assert_eq!(actual.0.0.len(), expected.0);
-        let actual_weight = exec.to_host(&actual.1).unwrap().iter().sum::<f32>();
+        let (sources, _, weights) = MStorage::into_columns(actual);
+        prop_assert_eq!(sources.len(), expected.0);
+        let actual_weight = exec.to_host(&weights).unwrap().iter().sum::<f32>();
         prop_assert!((actual_weight - expected.1).abs() <= 1e-5);
         Ok(())
     });

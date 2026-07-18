@@ -1,70 +1,40 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
-    Executor, MIter, MIterMut, lazy, op::Identity, op::UnaryOp, unzip2, unzip3, unzip4, unzip5,
-    unzip6, unzip7, unzip8, unzip9, unzip10, unzip11, unzip12, vector::gather, vector::transform,
-    zip2, zip3, zip4, zip5, zip6, zip7, zip8, zip9, zip10, zip11, zip12,
+    Executor, MIter, MIterMut, MStorage, lazy, op::Identity, op::UnaryOp, vector::gather,
+    vector::transform, zip2, zip3, zip4, zip5, zip6, zip7, zip8, zip9, zip10, zip11, zip12,
 };
 
 struct AddThree;
-struct IdentityRightAssociated;
+struct IdentityTriple;
 struct SumFour;
 struct AddPair;
-
-#[test]
-fn unzip_helpers_are_the_inverse_of_zip_helpers() {
-    assert_eq!(unzip2(zip2(1, 2)), (1, 2));
-    assert_eq!(unzip3(zip3(1, 2, 3)), (1, 2, 3));
-    assert_eq!(unzip4(zip4(1, 2, 3, 4)), (1, 2, 3, 4));
-    assert_eq!(unzip5(zip5(1, 2, 3, 4, 5)), (1, 2, 3, 4, 5));
-    assert_eq!(unzip6(zip6(1, 2, 3, 4, 5, 6)), (1, 2, 3, 4, 5, 6));
-    assert_eq!(unzip7(zip7(1, 2, 3, 4, 5, 6, 7)), (1, 2, 3, 4, 5, 6, 7));
-    assert_eq!(
-        unzip8(zip8(1, 2, 3, 4, 5, 6, 7, 8)),
-        (1, 2, 3, 4, 5, 6, 7, 8)
-    );
-    assert_eq!(
-        unzip9(zip9(1, 2, 3, 4, 5, 6, 7, 8, 9)),
-        (1, 2, 3, 4, 5, 6, 7, 8, 9)
-    );
-    assert_eq!(
-        unzip10(zip10(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)),
-        (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-    );
-    assert_eq!(
-        unzip11(zip11(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)),
-        (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
-    );
-    assert_eq!(
-        unzip12(zip12(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)),
-        (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
-    );
-}
+struct EncodeBoolIndex;
 
 #[cubecl::cube]
-impl UnaryOp<((u32, u32), u32)> for AddThree {
+impl UnaryOp<(u32, u32, u32)> for AddThree {
     type Output = u32;
 
-    fn apply(input: ((u32, u32), u32)) -> u32 {
-        input.0.0 + input.0.1 + input.1
+    fn apply(input: (u32, u32, u32)) -> u32 {
+        input.0 + input.1 + input.2
     }
 }
 
 #[cubecl::cube]
-impl UnaryOp<(u32, (u32, u32))> for IdentityRightAssociated {
-    type Output = (u32, (u32, u32));
+impl UnaryOp<(u32, u32, u32)> for IdentityTriple {
+    type Output = (u32, u32, u32);
 
-    fn apply(input: (u32, (u32, u32))) -> (u32, (u32, u32)) {
+    fn apply(input: (u32, u32, u32)) -> (u32, u32, u32) {
         input
     }
 }
 
 #[cubecl::cube]
-impl UnaryOp<(((u32, u32), u32), u32)> for SumFour {
+impl UnaryOp<(u32, u32, u32, u32)> for SumFour {
     type Output = u32;
 
-    fn apply(input: (((u32, u32), u32), u32)) -> u32 {
-        input.0.0.0 + input.0.0.1 + input.0.1 + input.1
+    fn apply(input: (u32, u32, u32, u32)) -> u32 {
+        input.0 + input.1 + input.2 + input.3
     }
 }
 
@@ -77,8 +47,26 @@ impl UnaryOp<(u32, u32)> for AddPair {
     }
 }
 
+#[cubecl::cube]
+impl UnaryOp<(bool, usize)> for EncodeBoolIndex {
+    type Output = u32;
+
+    fn apply(input: (bool, usize)) -> u32 {
+        if input.0 { input.1 as u32 } else { 0u32 }
+    }
+}
+
 #[test]
-fn zip_helpers_are_left_associated_public_iterators() {
+fn zip_flattens_read_only_semantic_scalars() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let input = zip2(lazy::constant(true).take(3), lazy::counting(4).take(3));
+    let output = transform(&exec, input, EncodeBoolIndex).unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![4, 5, 6]);
+}
+
+#[test]
+fn zip_helpers_expose_flat_public_iterators() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let columns: Vec<_> = (0_u32..12)
         .map(|base| exec.to_device(&[base + 1, base + 2]))
@@ -238,21 +226,33 @@ fn zip_helpers_are_left_associated_public_iterators() {
 }
 
 #[test]
-fn write_reassociates_equal_ordered_leaves_at_the_output_boundary() {
+fn zip_grouping_does_not_change_the_logical_row() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let a = exec.to_device(&[1_u32, 2]);
     let b = exec.to_device(&[3_u32, 4]);
     let c = exec.to_device(&[5_u32, 6]);
-    let output = transform(
+
+    let left_grouped = transform(
+        &exec,
+        zip2(zip2(a.slice(..), b.slice(..)), c.slice(..)),
+        IdentityTriple,
+    )
+    .unwrap();
+    let right_grouped = transform(
         &exec,
         zip2(a.slice(..), zip2(b.slice(..), c.slice(..))),
-        IdentityRightAssociated,
+        IdentityTriple,
     )
     .unwrap();
 
-    assert_eq!(exec.to_host(&output.0.0).unwrap(), vec![1, 2]);
-    assert_eq!(exec.to_host(&output.0.1).unwrap(), vec![3, 4]);
-    assert_eq!(exec.to_host(&output.1).unwrap(), vec![5, 6]);
+    let (left_a, left_b, left_c) = MStorage::into_columns(left_grouped);
+    let (right_a, right_b, right_c) = MStorage::into_columns(right_grouped);
+    assert_eq!(exec.to_host(&left_a).unwrap(), vec![1, 2]);
+    assert_eq!(exec.to_host(&left_b).unwrap(), vec![3, 4]);
+    assert_eq!(exec.to_host(&left_c).unwrap(), vec![5, 6]);
+    assert_eq!(exec.to_host(&right_a).unwrap(), vec![1, 2]);
+    assert_eq!(exec.to_host(&right_b).unwrap(), vec![3, 4]);
+    assert_eq!(exec.to_host(&right_c).unwrap(), vec![5, 6]);
 }
 
 #[test]
@@ -290,8 +290,9 @@ fn mutable_slice_adapters_compose_and_can_be_read_back() {
 
     let read = output.slice(1..4).slice(1..2);
     let copy = transform(&exec, read, Identity).unwrap();
-    assert_eq!(exec.to_host(&copy.0).unwrap(), vec![7]);
-    assert_eq!(exec.to_host(&copy.1).unwrap(), vec![9]);
+    let (first, second) = MStorage::into_columns(copy);
+    assert_eq!(exec.to_host(&first).unwrap(), vec![7]);
+    assert_eq!(exec.to_host(&second).unwrap(), vec![9]);
 }
 
 #[test]

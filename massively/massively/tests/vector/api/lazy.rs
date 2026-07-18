@@ -1,7 +1,7 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
-    Executor, MIter, lazy, op::ReductionOp, op::UnaryOp, vector::gather, vector::reduce,
+    Executor, MIter, MStorage, lazy, op::ReductionOp, op::UnaryOp, vector::gather, vector::reduce,
     vector::transform, zip2, zip7,
 };
 
@@ -102,15 +102,8 @@ fn slicing_does_not_increase_read_arity_eight() {
 
     let outputs = transform(&exec, sliced, massively::op::Identity).unwrap();
 
-    let outputs = [
-        &outputs.0.0.0.0.0.0,
-        &outputs.0.0.0.0.0.1,
-        &outputs.0.0.0.0.1,
-        &outputs.0.0.0.1,
-        &outputs.0.0.1,
-        &outputs.0.1,
-        &outputs.1,
-    ];
+    let (a, b, c, d, e, f, g) = MStorage::into_columns(outputs);
+    let outputs = [&a, &b, &c, &d, &e, &f, &g];
     for (column, output) in outputs.into_iter().enumerate() {
         let base = column as u32 * 10;
         assert_eq!(exec.to_host(output).unwrap(), vec![base + 1, base + 2]);
@@ -138,8 +131,7 @@ fn reverse_composes_with_slicing_and_multi_column_inputs() {
 
     assert_eq!(MIter::<WgpuRuntime>::len(&reversed).unwrap(), 3);
     let output = transform(&exec, reversed, massively::op::Identity).unwrap();
-    let output_first = output.0;
-    let output_second = output.1;
+    let (output_first, output_second) = MStorage::into_columns(output);
     assert_eq!(exec.to_host(&output_first).unwrap(), vec![3, 2, 1]);
     assert_eq!(exec.to_host(&output_second).unwrap(), vec![30, 20, 10]);
 }

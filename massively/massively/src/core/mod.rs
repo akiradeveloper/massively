@@ -13,6 +13,7 @@ pub(crate) mod op;
 pub(crate) mod ordering;
 pub(crate) mod output;
 pub(crate) mod predicate;
+pub(crate) mod radix;
 pub(crate) mod read;
 pub(crate) mod reduce;
 pub(crate) mod runtime;

@@ -36,8 +36,7 @@
 //! - [`DeviceVec`], [`DeviceSlice`], and [`DeviceSliceMut`] are the owning and borrowed device
 //!   containers used at API boundaries.
 //! - [`MIter`] and [`MIterMut`] are the public iterator capabilities accepted by algorithms.
-//! - [`zip2`] through [`zip12`] combine columns, while [`unzip2`] through [`unzip12`] recover the
-//!   individual columns; [`tuple2`] through [`tuple12`] construct their corresponding item values.
+//! - [`zip2`] through [`zip12`] combine columns into native flat row tuples.
 //! - [`lazy`] provides allocation-free sources and adapters.
 //! - [`op`] contains reusable GPU operations such as [`op::Identity`].
 
@@ -49,10 +48,9 @@ pub mod vector;
 
 // Crate-private compatibility aliases keep the kernel core independent from
 // the public module layout. They are not part of the external API.
-pub(crate) use core::allocation::{CanonicalAlloc, CanonicalStorage};
-#[doc(hidden)]
-pub use core::allocation::{CanonicalLeaves, FoldCanonical};
+pub(crate) use core::allocation::{RowAlloc, RowStorage};
 pub(crate) use core::arity::{A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13};
+pub(crate) use core::iter::Zip;
 pub(crate) use core::read::{
     Column, Constant, Counting, Permute, ReadExpression, ReverseCounting, Taken, Transform,
 };
@@ -61,33 +59,23 @@ pub(crate) use core::storage::{S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, S12
 pub(crate) use core::transform::materialize;
 pub(crate) use core::value::MStorageElement;
 pub(crate) use core::{
-    allocation, arg_reduce, arity, eval, indexed, launch, merge, ordering, output, predicate, read,
-    reduce, scan, search, segmented, selection, storage, transform, value,
+    allocation, arg_reduce, arity, eval, indexed, launch, merge, ordering, output, predicate,
+    radix, read, reduce, scan, search, segmented, selection, storage, transform, value,
 };
 
+#[doc(hidden)]
+pub use api::iter::Zipped;
 pub use api::iter::{
-    CanonicalForm, MItem, MIter, MIterMut, MStorage, MVec, ToCanonical, WritableFrom, Zip, unzip2,
-    unzip3, unzip4, unzip5, unzip6, unzip7, unzip8, unzip9, unzip10, unzip11, unzip12, zip2, zip3,
-    zip4, zip5, zip6, zip7, zip8, zip9, zip10, zip11, zip12,
+    MItem, MIter, MIterMut, MStorage, MVec, RadixKey, zip2, zip3, zip4, zip5, zip6, zip7, zip8,
+    zip9, zip10, zip11, zip12,
 };
 #[doc(hidden)]
 pub use api::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor};
-pub use api::tuple::{
-    Tuple2, Tuple3, Tuple4, Tuple5, Tuple6, Tuple7, Tuple8, Tuple9, Tuple10, Tuple11, Tuple12,
-    flatten3, flatten4, flatten5, flatten6, flatten7, flatten8, flatten9, flatten10, flatten11,
-    flatten12, tuple2, tuple3, tuple4, tuple5, tuple6, tuple7, tuple8, tuple9, tuple10, tuple11,
-    tuple12,
-};
 pub use api::{Error, lazy, op, util};
 /// Common public data and operation types.
 pub mod prelude {
     pub use crate::{
-        CanonicalForm, DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MItem, MIter, MIterMut,
-        MStorage, MVec, ToCanonical, Tuple2, Tuple3, Tuple4, Tuple5, Tuple6, Tuple7, Tuple8,
-        Tuple9, Tuple10, Tuple11, Tuple12, Zip, flatten3, flatten4, flatten5, flatten6, flatten7,
-        flatten8, flatten9, flatten10, flatten11, flatten12, tuple2, tuple3, tuple4, tuple5,
-        tuple6, tuple7, tuple8, tuple9, tuple10, tuple11, tuple12, unzip2, unzip3, unzip4, unzip5,
-        unzip6, unzip7, unzip8, unzip9, unzip10, unzip11, unzip12, zip2, zip3, zip4, zip5, zip6,
-        zip7, zip8, zip9, zip10, zip11, zip12,
+        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MItem, MIter, MIterMut, MStorage, MVec,
+        RadixKey, zip2, zip3, zip4, zip5, zip6, zip7, zip8, zip9, zip10, zip11, zip12,
     };
 }

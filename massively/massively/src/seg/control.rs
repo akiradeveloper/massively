@@ -1,8 +1,7 @@
 use cubecl::prelude::*;
 
 use crate::{
-    DeviceVec, Error, Executor, MIter, MIterMut, WritableFrom, op::BinaryPredicateOp,
-    op::ReductionOp,
+    DeviceVec, Error, Executor, MItem, MIter, MIterMut, op::BinaryPredicateOp, op::ReductionOp,
 };
 
 const BLOCK_SIZE: u32 = 256;
@@ -374,8 +373,8 @@ impl<R: Runtime> SegmentControl<R> {
     ) -> Result<u32, Error>
     where
         Input: crate::core::facade::KernelInput<R>,
-        Output: MIterMut<R>,
-        Output::Item: WritableFrom<Input::Item>,
+        Input::Item: MItem<R>,
+        Output: MIterMut<R, Item = Input::Item>,
         OutputOffsets: MIterMut<R, Item = u32>,
     {
         let positions = crate::core::scan::inclusive_scan_u32(exec, &flags)?;

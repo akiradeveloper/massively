@@ -11,10 +11,10 @@ const LEN: usize = 4_000_000_000;
 const X_KEY: u32 = seed_key(0);
 const Y_KEY: u32 = seed_key(1);
 
-type FourArgs = (((usize, u32), u32), u32);
-type RandomArgs = (((usize, f32), f32), u32);
-type RuntimeKeyArgs = ((usize, u32), u32);
-type RuntimeRangeArgs = ((((usize, u32), u32), f32), f32);
+type FourArgs = (usize, u32, u32, u32);
+type RandomArgs = (usize, f32, f32, u32);
+type RuntimeKeyArgs = (usize, u32, u32);
+type RuntimeRangeArgs = (usize, u32, u32, f32, f32);
 
 struct Sum;
 struct DetectHit;
@@ -89,7 +89,7 @@ impl UnaryOp<FourArgs> for FourMix {
     type Output = u32;
 
     fn apply(input: FourArgs) -> u32 {
-        input.0.0.0 as u32 ^ input.0.0.1 ^ input.0.1 ^ input.1
+        input.0 as u32 ^ input.1 ^ input.2 ^ input.3
     }
 }
 
@@ -139,8 +139,8 @@ impl UnaryOp<RuntimeKeyArgs> for PcgPairCircleRuntime {
     type Output = u32;
 
     fn apply(input: RuntimeKeyArgs) -> u32 {
-        let index = input.0.0 as u32;
-        circle_hit(unit_f32(input.0.1, index), unit_f32(input.1, index))
+        let index = input.0 as u32;
+        circle_hit(unit_f32(input.1, index), unit_f32(input.2, index))
     }
 }
 
@@ -149,11 +149,11 @@ impl UnaryOp<RuntimeRangeArgs> for PcgPairCircleRuntimeRange {
     type Output = u32;
 
     fn apply(input: RuntimeRangeArgs) -> u32 {
-        let index = input.0.0.0.0 as u32;
-        let x_key = input.0.0.0.1;
-        let y_key = input.0.0.1;
-        let min = input.0.1;
-        let max = input.1;
+        let index = input.0 as u32;
+        let x_key = input.1;
+        let y_key = input.2;
+        let min = input.3;
+        let max = input.4;
         circle_hit(
             uniform_f32(min, max, x_key, index),
             uniform_f32(min, max, y_key, index),
@@ -166,7 +166,7 @@ impl UnaryOp<RandomArgs> for UniformFromArgs {
     type Output = f32;
 
     fn apply(input: RandomArgs) -> f32 {
-        uniform_f32(input.0.0.1, input.0.1, input.1, input.0.0.0 as u32)
+        uniform_f32(input.1, input.2, input.3, input.0 as u32)
     }
 }
 

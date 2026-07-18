@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-forbidden='SegmentKeyInput|SegmentedValues|CanonicalAlloc|CanonicalStorage|CanonicalAbi|ScratchAbi|SortAbi|LayoutCompatible|AllocColumns|GatherInput|ReadExpression|OutputExpression|StorageLayout|MaterializeDispatch|ReduceDispatch|ReadArity|StorageArity|Eval[1-8]|Column'
+forbidden='SegmentKeyInput|SegmentedValues|SegmentRead|CanonicalAlloc|CanonicalStorage|CanonicalAbi|ScratchAbi|SortAbi|RadixKeyAbi|RadixStorage|LayoutCompatible|AllocColumns|GatherInput|KernelInput|IterLength|SliceExpression|ReadExpression|OutputExpression|StorageLayout|MaterializeDispatch|ReduceDispatch|ReadArity|StorageArity|Eval[1-8]|\bColumn\b'
 
 mapfile -d '' pages < <(
     find target/doc/massively -type f \
-        \( -name 'fn.*.html' -o -name 'trait.ToCanonical.html' \
-        -o -name 'trait.CanonicalForm.html' \
+        \( -name 'fn.*.html' -o -name 'trait.RadixKey.html' \
         -o -name 'trait.MIter.html' -o -name 'trait.MIterMut.html' \
         -o -name 'trait.MStorage.html' \) \
         -print0
@@ -17,6 +16,25 @@ if rg -n "$forbidden" "${pages[@]}"; then
     exit 1
 fi
 
+legacy_pages=(
+    trait.CanonicalForm.html trait.WritableFrom.html trait.ToCanonical.html
+    struct.Zip.html struct.SegmentRead.html
+)
+
+for page in "${legacy_pages[@]}"; do
+    test -z "$(find target/doc/massively -type f -name "$page" -print -quit)"
+done
+
+for arity in {2..12}; do
+    test -z "$(find target/doc/massively -type f -name "fn.unzip${arity}.html" -print -quit)"
+    test -z "$(find target/doc/massively -type f -name "fn.tuple${arity}.html" -print -quit)"
+    test -z "$(find target/doc/massively -type f -name "type.Tuple${arity}.html" -print -quit)"
+done
+
+for arity in {3..12}; do
+    test -z "$(find target/doc/massively -type f -name "fn.flatten${arity}.html" -print -quit)"
+done
+
 algorithms=(
     adjacent_difference adjacent_find all_of any_of copy copy_where count_if equal
     exclusive_scan exclusive_scan_by_key fill find_first_of find_if gather gather_where
@@ -24,7 +42,7 @@ algorithms=(
     lexicographical_compare lower_bound max_element merge merge_by_key min_element
     minmax_element mismatch none_of partition reduce reduce_by_key remove_where
     replace_where reverse scatter scatter_reduce scatter_where set_difference
-    set_intersection set_union sort sort_by_key transform transform_where unique
+    set_intersection set_union sort sort_by_key radix_sort_by_key transform transform_where unique
     unique_by_key upper_bound
 )
 

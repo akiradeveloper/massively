@@ -168,7 +168,7 @@ where
     }
 }
 
-impl<Values, Offsets> IterLength for crate::seg::SegmentIterator<Values, Offsets>
+impl<Values, Offsets> IterLength for crate::seg::SegmentRead<Values, Offsets>
 where
     Offsets: IterLength,
 {
@@ -213,15 +213,6 @@ where
             Some(len) => Ok(len),
             None => self.values.logical_len(),
         }
-    }
-}
-
-impl<Input, Output> IterLength for crate::read::Reassociate<Input, Output>
-where
-    Input: IterLength,
-{
-    fn logical_len(&self) -> Result<usize, Error> {
-        self.input.logical_len()
     }
 }
 

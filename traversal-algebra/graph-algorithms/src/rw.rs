@@ -92,33 +92,33 @@ impl ReductionOp<u32> for SumU32 {
 struct PathIndex;
 
 #[cubecl::cube]
-impl UnaryOp<((u32, u32), u32)> for PathIndex {
+impl UnaryOp<(u32, u32, u32)> for PathIndex {
     type Output = u32;
 
-    fn apply(input: ((u32, u32), u32)) -> u32 {
-        input.0.0 * input.0.1 + input.1
+    fn apply(input: (u32, u32, u32)) -> u32 {
+        input.0 * input.1 + input.2
     }
 }
 
 struct ChoiceIndex;
 
 #[cubecl::cube]
-impl UnaryOp<((u32, u32), u32)> for ChoiceIndex {
+impl UnaryOp<(u32, u32, u32)> for ChoiceIndex {
     type Output = u32;
 
-    fn apply(input: ((u32, u32), u32)) -> u32 {
-        input.0.0 * input.0.1 + input.1
+    fn apply(input: (u32, u32, u32)) -> u32 {
+        input.0 * input.1 + input.2
     }
 }
 
 struct SelectEdge;
 
 #[cubecl::cube]
-impl UnaryOp<((u32, u32), u32)> for SelectEdge {
+impl UnaryOp<(u32, u32, u32)> for SelectEdge {
     type Output = u32;
 
-    fn apply(input: ((u32, u32), u32)) -> u32 {
-        input.0.0 + input.1 % input.0.1
+    fn apply(input: (u32, u32, u32)) -> u32 {
+        input.0 + input.2 % input.1
     }
 }
 

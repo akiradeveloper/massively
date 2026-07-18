@@ -50,17 +50,17 @@ fn assignment_digit(code: u32, base: u32, position: u32) -> u32 {
 struct Injective;
 
 #[cubecl::cube]
-impl UnaryOp<((u32, u32), u32)> for Injective {
+impl UnaryOp<(u32, u32, u32)> for Injective {
     type Output = u32;
 
-    fn apply(input: ((u32, u32), u32)) -> u32 {
+    fn apply(input: (u32, u32, u32)) -> u32 {
         let left = RuntimeCell::<u32>::new(0u32);
         let valid = RuntimeCell::<u32>::new(1u32);
-        while left.read() < input.1 {
+        while left.read() < input.2 {
             let right = RuntimeCell::<u32>::new(left.read() + 1u32);
-            while right.read() < input.1 {
-                if assignment_digit(input.0.0, input.0.1, left.read())
-                    == assignment_digit(input.0.0, input.0.1, right.read())
+            while right.read() < input.2 {
+                if assignment_digit(input.0, input.1, left.read())
+                    == assignment_digit(input.0, input.1, right.read())
                 {
                     valid.store(0u32);
                 }
@@ -75,13 +75,13 @@ impl UnaryOp<((u32, u32), u32)> for Injective {
 struct DecodePair;
 
 #[cubecl::cube]
-impl UnaryOp<(((u32, u32), u32), u32)> for DecodePair {
+impl UnaryOp<(u32, u32, u32, u32)> for DecodePair {
     type Output = (u32, u32);
 
-    fn apply(input: (((u32, u32), u32), u32)) -> (u32, u32) {
+    fn apply(input: (u32, u32, u32, u32)) -> (u32, u32) {
         (
-            assignment_digit(input.0.0.0, input.0.0.1, input.0.1),
-            assignment_digit(input.0.0.0, input.0.0.1, input.1),
+            assignment_digit(input.0, input.1, input.2),
+            assignment_digit(input.0, input.1, input.3),
         )
     }
 }
@@ -102,11 +102,11 @@ impl BinaryPredicateOp<(u32, u32)> for PairLess {
 struct PairEqual;
 
 #[cubecl::cube]
-impl UnaryOp<((u32, u32), (u32, u32))> for PairEqual {
+impl UnaryOp<(u32, u32, u32, u32)> for PairEqual {
     type Output = u32;
 
-    fn apply(input: ((u32, u32), (u32, u32))) -> u32 {
-        if input.0.0 == input.1.0 && input.0.1 == input.1.1 {
+    fn apply(input: (u32, u32, u32, u32)) -> u32 {
+        if input.0 == input.2 && input.1 == input.3 {
             1u32
         } else {
             0u32
@@ -154,11 +154,11 @@ impl UnaryOp<(u32, u32)> for Modulo {
 struct Decode;
 
 #[cubecl::cube]
-impl UnaryOp<((u32, u32), u32)> for Decode {
+impl UnaryOp<(u32, u32, u32)> for Decode {
     type Output = u32;
 
-    fn apply(input: ((u32, u32), u32)) -> u32 {
-        assignment_digit(input.0.0, input.0.1, input.1)
+    fn apply(input: (u32, u32, u32)) -> u32 {
+        assignment_digit(input.0, input.1, input.2)
     }
 }
 
@@ -241,14 +241,8 @@ pub fn solve<R: Runtime>(
                 searchable.slice(..),
                 common::indices(locations.slice(..)),
             )?;
-            let present = vector::transform(
-                exec,
-                zip2(
-                    zip2(candidates.0.slice(..), candidates.1.slice(..)),
-                    zip2(found.0.slice(..), found.1.slice(..)),
-                ),
-                PairEqual,
-            )?;
+            let present =
+                vector::transform(exec, zip2(candidates.slice(..), found.slice(..)), PairEqual)?;
             stencil = vector::transform(exec, zip2(stencil.slice(..), present.slice(..)), Both)?;
         }
     }

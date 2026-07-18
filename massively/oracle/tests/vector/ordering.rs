@@ -1,5 +1,7 @@
 use cubecl::prelude::*;
-use massively::{Executor, op::BinaryPredicateOp, vector::sort, vector::sort_by_key, zip2, zip7};
+use massively::{
+    Executor, MStorage, op::BinaryPredicateOp, vector::sort, vector::sort_by_key, zip2, zip7,
+};
 
 use super::common::exec;
 
@@ -21,14 +23,14 @@ impl BinaryPredicateOp<(u32, u32)> for LessFirst {
     }
 }
 
-type Seven = ((((((u32, u32), u32), u32), u32), u32), u32);
+type Seven = (u32, u32, u32, u32, u32, u32, u32);
 
 struct LessSevenFirst;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<Seven> for LessSevenFirst {
     fn apply(lhs: Seven, rhs: Seven) -> bool {
-        lhs.0.0.0.0.0.0 < rhs.0.0.0.0.0.0
+        lhs.0 < rhs.0
     }
 }
 
@@ -73,8 +75,9 @@ fn sort_is_naturally_stable_across_merge_tiles() {
 
     let mut expected: Vec<_> = first.into_iter().zip(ordinal).collect();
     expected.sort_by_key(|item| item.0);
-    let actual_first = exec.to_host(&output.0).unwrap();
-    let actual_ordinal = exec.to_host(&output.1).unwrap();
+    let (first, ordinal) = MStorage::into_columns(output);
+    let actual_first = exec.to_host(&first).unwrap();
+    let actual_ordinal = exec.to_host(&ordinal).unwrap();
     assert_eq!(
         actual_first
             .into_iter()
@@ -144,8 +147,9 @@ fn seven_column_sort_runs_the_global_merge_resource_plan() {
 
     let mut expected: Vec<_> = first.into_iter().zip(0_u32..len as u32).collect();
     expected.sort_by_key(|item| item.0);
-    let actual_first = exec.to_host(&outputs.0.0.0.0.0.0).unwrap();
-    let actual_ordinal = exec.to_host(&outputs.0.0.0.0.0.1).unwrap();
+    let (first, ordinal, _, _, _, _, _) = MStorage::into_columns(outputs);
+    let actual_first = exec.to_host(&first).unwrap();
+    let actual_ordinal = exec.to_host(&ordinal).unwrap();
     assert_eq!(
         actual_first
             .into_iter()

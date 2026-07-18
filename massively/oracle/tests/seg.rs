@@ -8,7 +8,9 @@ use massively::seg::{
     InclusiveScan, IsSorted, IsSortedUntil, NoneOf, Reduce, Reverse, SegmentIterator, Sort,
     Transform, Unique,
 };
-use massively::{op::BinaryPredicateOp, op::PredicateOp, op::ReductionOp, op::UnaryOp, zip2};
+use massively::{
+    MStorage, op::BinaryPredicateOp, op::PredicateOp, op::ReductionOp, op::UnaryOp, zip2,
+};
 use oracle::{op, seg as reference};
 use proptest::prelude::*;
 
@@ -291,10 +293,12 @@ macro_rules! pair_length_preserving_case {
                 ).unwrap();
 
                 let (expected, expected_offsets) = flatten(&$oracle(&segments));
+                let (output_first, output_second) =
+                    MStorage::into_columns(output.values().clone());
                 prop_assert_eq!(
                     pair_rows(
-                        exec.to_host(&output.values().0).unwrap(),
-                        exec.to_host(&output.values().1).unwrap(),
+                        exec.to_host(&output_first).unwrap(),
+                        exec.to_host(&output_second).unwrap(),
                     ),
                     expected,
                 );
@@ -330,10 +334,12 @@ macro_rules! pair_compacting_case {
                 ).unwrap();
 
                 let (expected, expected_offsets) = flatten(&$oracle(&segments));
+                let (output_first, output_second) =
+                    MStorage::into_columns(output.values().clone());
                 prop_assert_eq!(
                     pair_rows(
-                        exec.to_host(&output.values().0).unwrap(),
-                        exec.to_host(&output.values().1).unwrap(),
+                        exec.to_host(&output_first).unwrap(),
+                        exec.to_host(&output_second).unwrap(),
                     ),
                     expected,
                 );
@@ -363,10 +369,11 @@ macro_rules! pair_item_reduce_case {
                     ),
                 ).unwrap();
 
+                let (output_first, output_second) = MStorage::into_columns(output);
                 prop_assert_eq!(
                     pair_rows(
-                        exec.to_host(&output.0).unwrap(),
-                        exec.to_host(&output.1).unwrap(),
+                        exec.to_host(&output_first).unwrap(),
+                        exec.to_host(&output_second).unwrap(),
                     ),
                     $oracle(&segments),
                 );

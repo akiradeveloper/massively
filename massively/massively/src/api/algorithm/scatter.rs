@@ -1,10 +1,8 @@
-use core::marker::PhantomData;
-
 use cubecl::prelude::*;
 
 use crate::{
-    CanonicalStorage, Error, Executor, MIter, MIterMut, StorageLayout, WritableFrom,
-    op::{BinaryPredicateOp, ReductionOp, UnaryOp},
+    Error, Executor, MIter, MIterMut, RowStorage,
+    op::{BinaryPredicateOp, ReductionOp},
 };
 
 struct IndexLess;
@@ -22,38 +20,6 @@ struct IndexEqual;
 impl BinaryPredicateOp<usize> for IndexEqual {
     fn apply(lhs: usize, rhs: usize) -> bool {
         lhs == rhs
-    }
-}
-
-struct WriteValue<Target>(PhantomData<fn() -> Target>);
-
-#[cubecl::cube]
-impl<Source, Target> UnaryOp<Source> for WriteValue<Target>
-where
-    Source: CubeType + Send + Sync + 'static,
-    Target: StorageLayout + WritableFrom<Source> + Send + Sync + 'static,
-{
-    type Output = Target;
-
-    fn apply(value: Source) -> Target {
-        Target::write_from(value)
-    }
-}
-
-struct WriteReduction<Source, Op>(PhantomData<fn() -> (Source, Op)>);
-
-#[cubecl::cube]
-impl<Source, Target, Op> ReductionOp<Target> for WriteReduction<Source, Op>
-where
-    Source: CubeType + Send + Sync + 'static,
-    Target: StorageLayout + WritableFrom<Source> + Send + Sync + 'static,
-    Op: ReductionOp<Source>,
-{
-    fn apply(lhs: Target, rhs: Target) -> Target {
-        Target::write_from(Op::apply(
-            Target::read_source(lhs),
-            Target::read_source(rhs),
-        ))
     }
 }
 
@@ -90,9 +56,9 @@ pub fn scatter<R, Values, Indices, Output>(
 where
     R: Runtime,
     Values: MIter<R>,
+    Values::Item: crate::MItem<R>,
     Indices: MIter<R, Item = usize>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Values::Item>,
+    Output: MIterMut<R, Item = Values::Item>,
 {
     crate::core::scatter::scatter(
         exec,
@@ -112,9 +78,9 @@ pub(crate) fn scatter_raw<R, Values, Indices, Output>(
 where
     R: Runtime,
     Values: MIter<R>,
+    Values::Item: crate::MItem<R>,
     Indices: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Values::Item>,
+    Output: MIterMut<R, Item = Values::Item>,
 {
     crate::core::scatter::scatter(
         exec,
@@ -170,10 +136,10 @@ pub fn scatter_where<R, Values, Indices, Stencil, Output>(
 where
     R: Runtime,
     Values: MIter<R>,
+    Values::Item: crate::MItem<R>,
     Indices: MIter<R, Item = usize>,
     Stencil: MIter<R, Item = bool>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Values::Item>,
+    Output: MIterMut<R, Item = Values::Item>,
 {
     crate::core::scatter::scatter_where(
         exec,
@@ -241,9 +207,9 @@ pub fn scatter_reduce<R, Values, Indices, Output, Op>(
 where
     R: Runtime,
     Values: MIter<R>,
+    Values::Item: crate::MItem<R>,
     Indices: MIter<R, Item = usize>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Values::Item>,
+    Output: MIterMut<R, Item = Values::Item>,
     Op: ReductionOp<Values::Item>,
 {
     let indices_len = indices.len()?;
@@ -270,9 +236,9 @@ pub(crate) fn scatter_reduce_raw<R, Values, Indices, Output, Op>(
 where
     R: Runtime,
     Values: MIter<R>,
+    Values::Item: crate::MItem<R>,
     Indices: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Values::Item>,
+    Output: MIterMut<R, Item = Values::Item>,
     Op: ReductionOp<Values::Item>,
 {
     let indices_len = indices.len()?;
@@ -295,9 +261,9 @@ fn scatter_reduce_lowered<R, Values, Indices, Output, Op>(
 where
     R: Runtime,
     Values: MIter<R>,
+    Values::Item: crate::MItem<R>,
     Indices: crate::core::facade::KernelInput<R, Item = usize>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Values::Item>,
+    Output: MIterMut<R, Item = Values::Item>,
     Op: ReductionOp<Values::Item>,
 {
     let len = values.len()?;
@@ -314,17 +280,9 @@ where
     let len_usize = len;
     let sorted_values =
         <Output::Item as crate::allocation::ScratchStorage<R>>::alloc_scratch(exec, len_usize);
-    let values = crate::read::Transform::new(
-        crate::api::iter::lower_fixed::<R, _>(values),
-        WriteValue::<Output::Item>(PhantomData),
-    );
+    let values = crate::api::iter::lower_fixed::<R, _>(values);
     let permutation = crate::ordering::sort_control_with(exec, indices.clone(), IndexLess)?;
-    let sorted_output = crate::output::ReassociatedOutput::<
-        _,
-        Output::Item,
-        <<Output::Item as crate::StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
-    >::new(sorted_values.write());
-    crate::indexed::gather_u32(exec, values, permutation.column(), sorted_output)?;
+    crate::indexed::gather_u32(exec, values, permutation.column(), sorted_values.write())?;
 
     let heads = crate::ordering::unique_head_flags_ordered::<R, _, IndexEqual>(
         exec,
@@ -340,31 +298,23 @@ where
         unique_positions.slice_mut(..),
     )?;
 
-    let sorted_values = crate::read::FixedReassociate::<_, Output::Item>::new(sorted_values.read());
+    let sorted_values = crate::read::FixedRead::new(sorted_values.read());
     let reduced_values = <Output::Item as crate::allocation::ScratchStorage<R>>::alloc_scratch(
         exec,
         head_control.count() as usize,
     );
-    let reduced_output = crate::output::ReassociatedOutput::<
-        _,
-        Output::Item,
-        <<Output::Item as crate::StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
-    >::new(reduced_values.write());
     crate::core::by_key::reduce_values_by_heads_lowered(
         exec,
         sorted_values,
         &heads,
         &head_control,
-        Output::Item::write_from(init),
-        WriteReduction::<Values::Item, Op>(PhantomData),
-        reduced_output,
+        init,
+        op,
+        reduced_values.write(),
     )?;
 
-    let _ = op;
-    let reduced_values = crate::read::FixedReassociate::<_, Output::Item>::new(
-        CanonicalStorage::read(&reduced_values),
-    );
-    crate::core::scatter_reduce::apply::<R, _, _, _, WriteReduction<Values::Item, Op>>(
+    let reduced_values = crate::read::FixedRead::new(RowStorage::read(&reduced_values));
+    crate::core::scatter_reduce::apply::<R, _, _, _, Op>(
         exec,
         reduced_values,
         indices,
@@ -376,52 +326,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::zip2;
+    use crate::{zip2, zip3};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-    use static_assertions::assert_not_impl_any;
-
-    #[derive(CubeType, Clone, Copy)]
-    struct StoredOnlyValue {
-        value: u32,
-    }
-
-    struct StoredOnlyLayout;
-
-    #[cubecl::cube]
-    impl crate::storage::Decompose<StoredOnlyValue> for StoredOnlyLayout {
-        type Leaves = crate::storage::Last<u32>;
-
-        fn decompose(item: StoredOnlyValue) -> Self::Leaves {
-            crate::storage::Last::new(item.value)
-        }
-    }
-
-    #[cubecl::cube]
-    impl crate::storage::Recompose<StoredOnlyValue> for StoredOnlyLayout {
-        type Leaves = crate::storage::Last<u32>;
-
-        fn recompose(leaves: Self::Leaves) -> StoredOnlyValue {
-            StoredOnlyValue {
-                value: leaves.value,
-            }
-        }
-    }
-
-    impl StorageLayout for StoredOnlyValue {
-        type StorageArity = crate::S1;
-        type StorageLeaves = crate::storage::Last<u32>;
-        type DeviceLayout = StoredOnlyLayout;
-
-        fn into_storage_leaves(self) -> Self::StorageLeaves {
-            crate::storage::Last { value: self.value }
-        }
-
-        fn from_storage_leaves(leaves: Self::StorageLeaves) -> Self {
-            Self {
-                value: leaves.value,
-            }
-        }
-    }
 
     struct Add;
 
@@ -441,12 +347,12 @@ mod tests {
         }
     }
 
-    struct RightAssociatedAdd;
+    struct TripleAdd;
 
     #[cubecl::cube]
-    impl ReductionOp<(u32, (u32, u32))> for RightAssociatedAdd {
-        fn apply(lhs: (u32, (u32, u32)), rhs: (u32, (u32, u32))) -> (u32, (u32, u32)) {
-            (lhs.0 + rhs.0, (lhs.1.0 + rhs.1.0, lhs.1.1 + rhs.1.1))
+    impl ReductionOp<(u32, u32, u32)> for TripleAdd {
+        fn apply(lhs: (u32, u32, u32), rhs: (u32, u32, u32)) -> (u32, u32, u32) {
+            (lhs.0 + rhs.0, lhs.1 + rhs.1, lhs.2 + rhs.2)
         }
     }
 
@@ -475,7 +381,7 @@ mod tests {
     }
 
     #[test]
-    fn scatter_reduce_writes_to_differently_associated_output() {
+    fn scatter_reduce_preserves_three_flat_columns() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let first = exec.to_device(&[1_u32, 2, 3]);
         let second = exec.to_device(&[10_u32, 20, 30]);
@@ -488,12 +394,13 @@ mod tests {
 
         scatter_reduce(
             &exec,
-            zip2(first.slice(..), zip2(second.slice(..), third.slice(..))),
+            zip3(first.slice(..), second.slice(..), third.slice(..)),
             indices,
-            (0, (0, 0)),
-            RightAssociatedAdd,
-            zip2(
-                zip2(output_first.slice_mut(..), output_second.slice_mut(..)),
+            (0, 0, 0),
+            TripleAdd,
+            zip3(
+                output_first.slice_mut(..),
+                output_second.slice_mut(..),
                 output_third.slice_mut(..),
             ),
         )
@@ -502,24 +409,5 @@ mod tests {
         assert_eq!(exec.to_host(&output_first).unwrap(), vec![102, 204]);
         assert_eq!(exec.to_host(&output_second).unwrap(), vec![1020, 2040]);
         assert_eq!(exec.to_host(&output_third).unwrap(), vec![10200, 20400]);
-    }
-
-    #[test]
-    fn scatter_reduce_accepts_preallocated_only_output() {
-        assert_not_impl_any!(StoredOnlyValue: crate::ToCanonical<WgpuRuntime>);
-
-        let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-        let values = exec.to_device(&[2_u32, 3, 5, 7]);
-        let indices = exec.to_device(&[1_u32, 0, 1, 1]);
-        let backing = exec.to_device(&[10_u32, 20, 30]);
-        let output =
-            crate::output::ReassociatedOutput::<_, StoredOnlyValue, crate::read::Env1<u32>>::new(
-                backing.slice_mut(..),
-            );
-        let indices = crate::lazy::transform(indices.slice(..), crate::op::U32ToUsize);
-
-        scatter_reduce(&exec, values.slice(..), indices, 0, Add, output).unwrap();
-
-        assert_eq!(exec.to_host(&backing).unwrap(), vec![13, 34, 30]);
     }
 }

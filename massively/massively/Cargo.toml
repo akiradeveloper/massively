@@ -7,7 +7,7 @@ license.workspace = true
 name = "massively"
 readme = "../../README.md"
 repository.workspace = true
-version = "0.80.0"
+version = "0.81.0"
 
 [dependencies]
 cubecl.workspace = true
@@ -42,6 +42,10 @@ name = "vector_api_reduce"
 path = "tests/vector/api/reduce.rs"
 
 [[test]]
+name = "vector_api_radix"
+path = "tests/vector/api/radix.rs"
+
+[[test]]
 name = "vector_api_runtime"
 path = "tests/vector/api/runtime.rs"
 
@@ -50,8 +54,8 @@ name = "vector_api_tuple"
 path = "tests/vector/api/tuple.rs"
 
 [[test]]
-name = "vector_api_write_from"
-path = "tests/vector/api/write_from.rs"
+name = "vector_api_flat_rows"
+path = "tests/vector/api/flat_rows.rs"
 
 [[test]]
 name = "seg_api"

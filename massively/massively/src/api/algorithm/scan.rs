@@ -2,9 +2,7 @@
 
 use cubecl::prelude::Runtime;
 
-use crate::{
-    Error, Executor, MIter, MIterMut, MStorage, MVec, ToCanonical, WritableFrom, op::ReductionOp,
-};
+use crate::{Error, Executor, MItem, MIter, MIterMut, MStorage, MVec, op::ReductionOp};
 
 /// Computes an inclusive scan and returns owned device storage.
 ///
@@ -38,21 +36,16 @@ pub fn inclusive_scan<R, Input, Item, Op>(
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
-    Item: ToCanonical<R>,
+    Item: MItem<R>,
     Op: ReductionOp<Item>,
 {
     let len = input.len()? as usize;
     let output = exec.alloc::<Item>(len);
-    let output_view = crate::output::ReassociatedOutput::<
-        _,
-        Item,
-        <<Item as crate::StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
-    >::new(output.slice_mut(..).lower_output());
     crate::scan::inclusive_scan(
         exec,
         crate::api::iter::lower_fixed::<R, _>(input),
         op,
-        output_view,
+        output.slice_mut(..).lower_output(),
     )?;
     Ok(output)
 }
@@ -68,13 +61,8 @@ pub(crate) fn inclusive_scan_into<R, Input, Output, Op>(
 where
     R: Runtime,
     Input: MIter<R>,
-    Input::Item: crate::api::iter::CanonicalAbi<R>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Input::Item>
-        + crate::StorageLayout<
-            StorageArity = <Input::Item as crate::StorageLayout>::StorageArity,
-            StorageLeaves = <Input::Item as crate::StorageLayout>::StorageLeaves,
-        >,
+    Input::Item: crate::api::iter::MItem<R>,
+    Output: MIterMut<R, Item = Input::Item>,
     Op: ReductionOp<Input::Item>,
 {
     crate::scan::inclusive_scan(
@@ -117,7 +105,7 @@ pub fn adjacent_difference<R, Input, Item, Op>(
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
-    Item: ToCanonical<R>,
+    Item: MItem<R>,
     Op: ReductionOp<Item>,
 {
     let len = input.len()? as usize;
@@ -137,9 +125,8 @@ pub(crate) fn adjacent_difference_into<R, Input, Output, Op>(
 where
     R: Runtime,
     Input: MIter<R>,
-    Input::Item: crate::StorageLayout,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Input::Item>,
+    Input::Item: MItem<R>,
+    Output: MIterMut<R, Item = Input::Item>,
     Op: ReductionOp<Input::Item>,
 {
     crate::scan::adjacent_difference(
@@ -183,22 +170,17 @@ pub fn exclusive_scan<R, Input, Item, Op>(
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
-    Item: ToCanonical<R>,
+    Item: MItem<R>,
     Op: ReductionOp<Item>,
 {
     let len = input.len()? as usize;
     let output = exec.alloc::<Item>(len);
-    let output_view = crate::output::ReassociatedOutput::<
-        _,
-        Item,
-        <<Item as crate::StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
-    >::new(output.slice_mut(..).lower_output());
     crate::scan::exclusive_scan(
         exec,
         crate::api::iter::lower_fixed::<R, _>(input),
         init,
         op,
-        output_view,
+        output.slice_mut(..).lower_output(),
     )?;
     Ok(output)
 }
