@@ -36,9 +36,8 @@ This document has three deliberately separated levels of assurance:
   \item mathematical definitions and proofs presented here;
   \item kernel-checked counterparts of the language results and a typed
         abstract CubeCL resource semantics in Lean~4;
-  \item differential value tests against the public
-        \texttt{massively::graph} implementation, plus generated checks of the
-        serialized abstract resource certificates.
+  \item differential value tests between an independent sequential Rust
+        reference and the public \texttt{massively::graph} implementation.
 \end{enumerate}
 
 The third level is empirical and does not turn the Rust or CubeCL compiler into

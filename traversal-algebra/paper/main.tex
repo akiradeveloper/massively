@@ -35,10 +35,10 @@ pulls vertex and edge data to an ordered stream of edge contexts, a pure map
 constructs messages, and monoidal terminals either emit the stream or push
 messages back to source or destination vertices.  We fix the finite
 ordered multigraph semantics and prove the foundational sequence and fusion
-laws.  The definitions and theorems in this slice are checked in Lean~4, and
-the executable Lean semantics generates conformance cases for the Massively
-GPU implementation.  We additionally define Monoidal Frontier BSP as an
-independent source machine and machine-check a forward simulation into the
+laws.  The definitions and theorems in this slice are checked in Lean~4, while
+an independent sequential Rust reference supplies conformance results for the
+Massively GPU implementation.  We additionally define Monoidal Frontier BSP
+as an independent source machine and machine-check a forward simulation into the
 pull--map--push semantic core for one superstep and every finite execution.
 We then give a signature-relative, callback-free typed syntax and prove that
 syntax-directed compilation commutes with denotation and preserves every

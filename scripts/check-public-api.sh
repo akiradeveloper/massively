@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-forbidden='SegmentKeyInput|SegmentedValues|SegmentRead|CanonicalAlloc|CanonicalStorage|CanonicalAbi|ScratchAbi|SortAbi|RadixKeyAbi|RadixStorage|LayoutCompatible|AllocColumns|GatherInput|KernelInput|IterLength|SliceExpression|ReadExpression|OutputExpression|StorageLayout|MaterializeDispatch|ReduceDispatch|ReadArity|StorageArity|Eval[1-8]|\bColumn\b'
+forbidden='SegmentKeyInput|SegmentedValues|SegmentRead|CanonicalAlloc|CanonicalStorage|CanonicalAbi|ScratchAbi|SortAbi|ItemDispatch|MutableItem|MutableDispatch|ConcreteOutput|OutputOperation|RadixKeyAbi|RadixStorage|LayoutCompatible|AllocColumns|RowAlloc|ScratchStorage|KernelRow|GatherInput|KernelInput|IterLength|SliceExpression|ReadExpression|OutputExpression|StorageLayout|MaterializeDispatch|ReduceDispatch|ReadArity|StorageArity|Eval[1-8]|\bColumn\b'
 
 mapfile -d '' pages < <(
     find target/doc/massively -type f \
         \( -name 'fn.*.html' -o -name 'trait.RadixKey.html' \
+        -o -name 'trait.MAllocItem.html' \
         -o -name 'trait.MIter.html' -o -name 'trait.MIterMut.html' \
         -o -name 'trait.MStorage.html' \) \
         -print0
@@ -18,6 +19,7 @@ fi
 
 legacy_pages=(
     trait.CanonicalForm.html trait.WritableFrom.html trait.ToCanonical.html
+    trait.MItem.html trait.MScratchItem.html trait.MSortItem.html trait.MutableItem.html
     struct.Zip.html struct.SegmentRead.html
 )
 

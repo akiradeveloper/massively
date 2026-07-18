@@ -10,15 +10,14 @@ use proptest::{
     prelude::*,
     test_runner::{Config, TestCaseError, TestCaseResult, TestRunner},
 };
-use std::cell::RefCell;
 use traversal_algebra_oracle::{
-    CASES, CubeClCost, CubeClMachine, DestinationStrategy, LeanOracle, OracleCase,
+    CpuOracle,
     graph::{self as oracle_graph, Csr as OracleCsr, EdgeContext, Observation, op as oracle_op},
 };
 
 const DEFAULT_PROPERTY_CASES: u32 = 256;
 const DEFAULT_SEMANTIC_CASES: u32 = 32;
-const DEFAULT_SCALE_VERTICES: usize = 1_025;
+const DEFAULT_SCALE_VERTICES: usize = 65_537;
 
 #[derive(Clone, Debug)]
 struct GraphCase {
@@ -78,95 +77,6 @@ fn environment_u32(name: &str, default: u32) -> u32 {
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(default)
-}
-
-fn active_edge_count(case: &GraphCase) -> u64 {
-    case.frontier
-        .iter()
-        .map(|&source| {
-            let source = source as usize;
-            u64::from(case.offsets[source + 1] - case.offsets[source])
-        })
-        .sum()
-}
-
-fn reduction_depth(items: u64) -> u64 {
-    if items == 0 {
-        0
-    } else {
-        u64::from(u64::BITS - items.leading_zeros())
-    }
-}
-
-fn certificate_machine(case: &GraphCase) -> CubeClMachine {
-    let selector = case.offsets.len() + case.destinations.len() + case.frontier.len();
-    let workgroup_size = [32, 64, 96, 128, 256][selector % 5];
-    let subgroup_size = [8, 16, 32][selector % 3];
-    CubeClMachine {
-        workgroup_size,
-        subgroup_size,
-    }
-}
-
-fn assert_machine_geometry(cost: CubeClCost, machine: CubeClMachine) -> TestCaseResult {
-    let workgroup_size = u64::from(machine.workgroup_size);
-    let subgroup_size = u64::from(machine.subgroup_size);
-    let subgroups_per_workgroup = workgroup_size.div_ceil(subgroup_size);
-    prop_assert!(cost.scheduled_threads >= cost.logical_threads);
-    prop_assert_eq!(cost.scheduled_threads % workgroup_size, 0);
-    prop_assert_eq!(
-        cost.scheduled_subgroups,
-        (cost.scheduled_threads / workgroup_size) * subgroups_per_workgroup
-    );
-    Ok(())
-}
-
-fn assert_sequential_cost(
-    total: CubeClCost,
-    prefix: CubeClCost,
-    suffix: CubeClCost,
-) -> TestCaseResult {
-    prop_assert_eq!(
-        total.logical_threads,
-        prefix.logical_threads + suffix.logical_threads
-    );
-    prop_assert_eq!(
-        total.scheduled_threads,
-        prefix.scheduled_threads + suffix.scheduled_threads
-    );
-    prop_assert_eq!(
-        total.scheduled_subgroups,
-        prefix.scheduled_subgroups + suffix.scheduled_subgroups
-    );
-    prop_assert_eq!(total.scalar_work, prefix.scalar_work + suffix.scalar_work);
-    prop_assert_eq!(total.span, prefix.span + suffix.span);
-    prop_assert_eq!(
-        total.global_loads,
-        prefix.global_loads + suffix.global_loads
-    );
-    prop_assert_eq!(
-        total.global_stores,
-        prefix.global_stores + suffix.global_stores
-    );
-    prop_assert_eq!(
-        total.host_read_words,
-        prefix.host_read_words + suffix.host_read_words
-    );
-    prop_assert_eq!(
-        total.atomic_operations,
-        prefix.atomic_operations + suffix.atomic_operations
-    );
-    prop_assert_eq!(total.barriers, prefix.barriers + suffix.barriers);
-    prop_assert_eq!(total.launches, prefix.launches + suffix.launches);
-    prop_assert_eq!(
-        total.allocated_words,
-        prefix.allocated_words + suffix.allocated_words
-    );
-    prop_assert_eq!(
-        total.materializations,
-        prefix.materializations + suffix.materializations
-    );
-    Ok(())
 }
 
 fn small_graph_case() -> impl Strategy<Value = GraphCase> {
@@ -341,19 +251,8 @@ impl SplitMix64 {
     }
 }
 
-fn generated_case(case: &OracleCase) -> GraphCase {
-    let rows = case
-        .offsets
-        .windows(2)
-        .map(|range| case.destinations[range[0] as usize..range[1] as usize].to_vec())
-        .collect();
-    let mut generated = case_from_rows(rows, case.frontier.to_vec(), 0xC0DE_CAFE);
-    generated.generation = format!("fixture({})", case.name);
-    generated
-}
-
 fn oracle_failure(error: impl std::fmt::Display) -> TestCaseError {
-    TestCaseError::fail(format!("Lean oracle failed: {error}"))
+    TestCaseError::fail(format!("CPU oracle failed: {error}"))
 }
 
 fn gpu_failure(context: &str, error: impl std::fmt::Debug) -> TestCaseError {
@@ -361,7 +260,7 @@ fn gpu_failure(context: &str, error: impl std::fmt::Debug) -> TestCaseError {
 }
 
 fn expected_contexts(
-    oracle: &mut LeanOracle,
+    oracle: &CpuOracle,
     case: &GraphCase,
 ) -> Result<Vec<EdgeContext>, TestCaseError> {
     let query = oracle_graph::traverse(oracle_csr(case), case.frontier.clone())
@@ -393,7 +292,7 @@ fn expected_contexts(
 }
 
 fn compare_core(
-    oracle: &mut LeanOracle,
+    oracle: &CpuOracle,
     exec: &Executor<WgpuRuntime>,
     case: &GraphCase,
 ) -> TestCaseResult {
@@ -482,7 +381,7 @@ fn compare_core(
 }
 
 fn compare_fine_semantics(
-    oracle: &mut LeanOracle,
+    oracle: &CpuOracle,
     exec: &Executor<WgpuRuntime>,
     case: &GraphCase,
 ) -> TestCaseResult {
@@ -670,203 +569,35 @@ fn compare_fine_semantics(
 }
 
 #[test]
-fn generated_regressions_equal_the_typed_lean_oracle() {
-    let mut oracle = LeanOracle::start().unwrap();
-    for fixture in CASES {
-        let case = generated_case(fixture);
-        let actual_edges = expected_contexts(&mut oracle, &case).unwrap();
-        assert_eq!(
-            actual_edges, fixture.expected_edges,
-            "fixture {}",
-            fixture.name
-        );
-
-        let actual_source = match oracle
-            .observe(
-                oracle_graph::traverse(oracle_csr(&case), case.frontier.clone())
-                    .unwrap()
-                    .map(oracle_graph::edge_id(), oracle_op::One)
-                    .reduce_by_source(0, oracle_op::Add)
-                    .unwrap(),
-            )
-            .unwrap()
-        {
-            Observation::SourceReduced(values) => values,
-            observation => panic!("wrong source observation shape: {observation:?}"),
-        };
-        assert_eq!(
-            actual_source, fixture.expected_source_counts,
-            "fixture {}",
-            fixture.name
-        );
-
-        let actual_destination = match oracle
-            .observe(
-                oracle_graph::traverse(oracle_csr(&case), case.frontier.clone())
-                    .unwrap()
-                    .map(oracle_graph::edge_id(), oracle_op::One)
-                    .reduce_by_destination(0, oracle_op::Add)
-                    .unwrap(),
-            )
-            .unwrap()
-        {
-            Observation::DestinationReduced(values) => values,
-            observation => panic!("wrong destination observation shape: {observation:?}"),
-        };
-        assert_eq!(
-            actual_destination, fixture.expected_destination_counts,
-            "fixture {}",
-            fixture.name
-        );
-    }
-}
-
-#[test]
-fn proptest_massively_against_typed_lean_oracle() {
+fn proptest_massively_against_independent_cpu_oracle() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-    let oracle = RefCell::new(LeanOracle::start().unwrap());
+    let oracle = CpuOracle::new();
     let mut runner = TestRunner::new(Config {
         cases: property_cases(),
         ..Config::default()
     });
     runner
-        .run(&graph_case(), |case| {
-            compare_core(&mut oracle.borrow_mut(), &exec, &case)
-        })
+        .run(&graph_case(), |case| compare_core(&oracle, &exec, &case))
         .unwrap();
 }
 
 #[test]
 fn proptest_edge_expression_and_terminal_semantics() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-    let oracle = RefCell::new(LeanOracle::start().unwrap());
+    let oracle = CpuOracle::new();
     let mut runner = TestRunner::new(Config {
         cases: semantic_cases(),
         ..Config::default()
     });
     runner
         .run(&graph_case(), |case| {
-            compare_fine_semantics(&mut oracle.borrow_mut(), &exec, &case)
-        })
-        .unwrap();
-}
-
-fn compare_cubecl_certificate(oracle: &mut LeanOracle, case: &GraphCase) -> TestCaseResult {
-    let graph = oracle_csr(case);
-    let machine = certificate_machine(case);
-    let emit = oracle_graph::traverse(graph.clone(), case.frontier.clone())
-        .unwrap()
-        .map(oracle_graph::source_id(), oracle_op::Identity)
-        .emit();
-    let emit_cost = oracle
-        .cubecl_certificate(&emit, machine, DestinationStrategy::SortReduce)
-        .unwrap();
-    let active_edges = active_edge_count(case);
-    prop_assert_eq!(emit_cost.vertices, (case.offsets.len() - 1) as u64);
-    prop_assert_eq!(emit_cost.topology_edges, case.destinations.len() as u64);
-    prop_assert_eq!(emit_cost.frontier_occurrences, case.frontier.len() as u64);
-    prop_assert_eq!(emit_cost.active_edges, active_edges);
-    prop_assert_eq!(emit_cost.output_words, 1);
-    prop_assert_eq!(
-        emit_cost.fused.scalar_work,
-        active_edges * (emit_cost.expression_work + emit_cost.output_words)
-    );
-    prop_assert_eq!(
-        emit_cost.fused.global_loads,
-        active_edges * emit_cost.global_load_words_per_edge
-    );
-    prop_assert_eq!(emit_cost.fused.global_stores, active_edges);
-    prop_assert_eq!(emit_cost.fused.materializations, 0);
-    let expected_control_work = emit_cost.topology_edges
-        + emit_cost.vertices
-        + 6 * emit_cost.frontier_occurrences
-        + 11 * active_edges
-        + 2
-        + u64::from(!case.frontier.is_empty());
-    prop_assert_eq!(
-        emit_cost.materialized_csr_control.scalar_work,
-        expected_control_work
-    );
-    prop_assert_eq!(
-        emit_cost.materialized_csr_control.host_read_words,
-        u64::from(!case.frontier.is_empty())
-    );
-    assert_sequential_cost(
-        emit_cost.with_materialized_csr_control,
-        emit_cost.materialized_csr_control,
-        emit_cost.fused,
-    )?;
-    assert_machine_geometry(emit_cost.fused, machine)?;
-    assert_machine_geometry(emit_cost.materialized_csr_control, machine)?;
-    assert_machine_geometry(emit_cost.with_materialized_csr_control, machine)?;
-
-    let source = oracle_graph::traverse(graph.clone(), case.frontier.clone())
-        .unwrap()
-        .map(oracle_graph::source_id(), oracle_op::Identity)
-        .reduce_by_source(0, oracle_op::Add)
-        .unwrap();
-    let source_cost = oracle
-        .cubecl_certificate(&source, machine, DestinationStrategy::SortReduce)
-        .unwrap();
-    prop_assert_eq!(
-        source_cost.fused.scalar_work,
-        source_cost.frontier_occurrences + active_edges * (source_cost.expression_work + 1)
-    );
-    assert_sequential_cost(
-        source_cost.with_materialized_csr_control,
-        source_cost.materialized_csr_control,
-        source_cost.fused,
-    )?;
-
-    let destination = oracle_graph::traverse(graph, case.frontier.clone())
-        .unwrap()
-        .map(oracle_graph::source_id(), oracle_op::Identity)
-        .reduce_by_destination(0, oracle_op::Add)
-        .unwrap();
-    let atomic = oracle
-        .cubecl_certificate(&destination, machine, DestinationStrategy::Atomic)
-        .unwrap();
-    prop_assert_eq!(
-        atomic.fused.scalar_work,
-        atomic.vertices + active_edges * (atomic.expression_work + 1)
-    );
-    prop_assert_eq!(atomic.fused.atomic_operations, active_edges);
-    prop_assert_eq!(atomic.fused.materializations, 0);
-
-    let sort = oracle
-        .cubecl_certificate(&destination, machine, DestinationStrategy::SortReduce)
-        .unwrap();
-    prop_assert_eq!(
-        sort.fused.scalar_work,
-        sort.vertices
-            + active_edges * sort.expression_work
-            + active_edges * reduction_depth(active_edges)
-            + active_edges
-    );
-    assert_sequential_cost(
-        sort.with_materialized_csr_control,
-        sort.materialized_csr_control,
-        sort.fused,
-    )?;
-    Ok(())
-}
-
-#[test]
-fn proptest_cubecl_resource_certificates() {
-    let oracle = RefCell::new(LeanOracle::start().unwrap());
-    let mut runner = TestRunner::new(Config {
-        cases: semantic_cases(),
-        ..Config::default()
-    });
-    runner
-        .run(&graph_case(), |case| {
-            compare_cubecl_certificate(&mut oracle.borrow_mut(), &case)
+            compare_fine_semantics(&oracle, &exec, &case)
         })
         .unwrap();
 }
 
 #[test]
-fn scale_graph_crosses_previous_oracle_limits() {
+fn large_graph_matches_independent_cpu_oracle() {
     let vertices = std::env::var("TRAVERSAL_ALGEBRA_SCALE_VERTICES")
         .ok()
         .and_then(|value| value.parse().ok())
@@ -879,7 +610,7 @@ fn scale_graph_crosses_previous_oracle_limits() {
     assert!(case.destinations.len() > 8 * 33);
 
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-    let mut oracle = LeanOracle::start().unwrap();
-    compare_core(&mut oracle, &exec, &case).unwrap();
-    compare_fine_semantics(&mut oracle, &exec, &case).unwrap();
+    let oracle = CpuOracle::new();
+    compare_core(&oracle, &exec, &case).unwrap();
+    compare_fine_semantics(&oracle, &exec, &case).unwrap();
 }

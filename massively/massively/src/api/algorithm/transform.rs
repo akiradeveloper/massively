@@ -1,6 +1,36 @@
-use cubecl::prelude::Runtime;
+use cubecl::prelude::{CubeType, Runtime};
 
-use crate::{Error, Executor, MItem, MIter, MIterMut, MStorage, MVec, op::UnaryOp};
+use crate::{Error, Executor, MAllocItem, MIter, MIterMut, MStorage, MVec, op::UnaryOp};
+
+struct TransformOperation<'a, R: Runtime, Input, Op> {
+    exec: &'a Executor<R>,
+    input: Input,
+    op: Op,
+}
+
+impl<R, Item, Input, Op> crate::api::iter::OutputOperation<R, Item>
+    for TransformOperation<'_, R, Input, Op>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+    Input: MIter<R>,
+    Op: UnaryOp<Input::Item, Output = Item>,
+{
+    type Result = Result<(), Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        crate::transform::transform_fixed(
+            self.exec,
+            crate::api::iter::lower_fixed::<R, _>(self.input),
+            self.op,
+            output,
+        )
+    }
+}
 
 /// Copies every input row into caller-provided storage.
 ///
@@ -21,9 +51,8 @@ use crate::{Error, Executor, MItem, MIter, MIterMut, MStorage, MVec, op::UnaryOp
 pub fn copy<R, Input, Output>(exec: &Executor<R>, input: Input, output: Output) -> Result<(), Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MItem<R>,
-    Output: MIterMut<R, Item = Input::Item>,
+    Input: MIter<R, Item = Output::Item>,
+    Output: MIterMut<R>,
 {
     transform_into(exec, input, crate::op::Identity, output)
 }
@@ -63,7 +92,7 @@ where
     R: Runtime,
     Input: MIter<R>,
     Op: UnaryOp<Input::Item>,
-    Op::Output: MItem<R>,
+    Op::Output: MAllocItem<R>,
 {
     let len = input.len()? as usize;
     let output = exec.alloc::<Op::Output>(len);
@@ -82,14 +111,8 @@ pub(crate) fn transform_into<R, Input, Output, Op>(
 where
     R: Runtime,
     Input: MIter<R>,
-    Output: MIterMut<R, Item = <Op as UnaryOp<Input::Item>>::Output>,
-    Op: UnaryOp<Input::Item>,
-    Op::Output: MItem<R>,
+    Output: MIterMut<R>,
+    Op: UnaryOp<Input::Item, Output = Output::Item>,
 {
-    crate::transform::transform_fixed(
-        exec,
-        crate::api::iter::lower_fixed::<R, _>(input),
-        op,
-        output.lower_output(),
-    )
+    output.run_output_operation(TransformOperation { exec, input, op })
 }

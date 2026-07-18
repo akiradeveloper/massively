@@ -18,7 +18,7 @@ use cubecl::prelude::*;
 use std::{marker::PhantomData, ops::RangeBounds};
 
 use crate::{
-    Error, Executor, MItem, MIter, MIterMut, MStorage, MVec, op::BinaryPredicateOp,
+    Error, Executor, MAllocItem, MIter, MIterMut, MStorage, MVec, op::BinaryPredicateOp,
     op::PredicateOp, op::ReductionOp, op::UnaryOp,
 };
 
@@ -293,7 +293,7 @@ where
     Input: MIter<R>,
     InputOffsets: MIter<R, Item = u32>,
     Op: UnaryOp<Input::Item>,
-    Op::Output: MItem<R>,
+    Op::Output: MAllocItem<R>,
 {
     type Output = SegmentIterator<MVec<R, Op::Output>, InputOffsets>;
 
@@ -315,9 +315,8 @@ where
     R: Runtime,
     Input: MIter<R>,
     InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R, Item = <Op as UnaryOp<Input::Item>>::Output>,
-    Op: UnaryOp<Input::Item>,
-    Op::Output: MItem<R>,
+    Output: MIterMut<R>,
+    Op: UnaryOp<Input::Item, Output = Output::Item>,
 {
     fn run_into(
         self,
@@ -335,10 +334,9 @@ impl<R, Input, InputOffsets, Output, Less>
     LengthPreservingExecutableInto<R, Input, InputOffsets, Output> for ForEachSegment<Sort<Less>>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MItem<R>,
+    Input: MIter<R, Item = Output::Item>,
     InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R, Item = Input::Item>,
+    Output: MIterMut<R>,
     Less: BinaryPredicateOp<Input::Item>,
 {
     fn run_into(
@@ -355,11 +353,11 @@ where
         let values = crate::api::iter::lower_fixed::<R, _>(values);
         let ordering = crate::ordering::sort_control_with(exec, values.clone(), less)?;
         let sorted_ids = exec.alloc::<u32>(value_len);
-        crate::indexed::apply_permutation(
+        crate::api::algorithm::apply_permutation_into(
             exec,
             crate::api::iter::lower_fixed::<R, _>(control.ids.slice(..)),
             ordering.column(),
-            <crate::DeviceSliceMut<u32> as MIterMut<R>>::lower_output(sorted_ids.slice_mut(..)),
+            sorted_ids.slice_mut(..),
         )?;
 
         let id_ordering = crate::ordering::sort_control_with(
@@ -368,13 +366,13 @@ where
             control::LessU32,
         )?;
         let permutation = exec.alloc::<u32>(value_len);
-        crate::indexed::apply_permutation(
+        crate::api::algorithm::apply_permutation_into(
             exec,
             crate::api::iter::lower_fixed::<R, _>(ordering.slice(..)),
             id_ordering.column(),
-            <crate::DeviceSliceMut<u32> as MIterMut<R>>::lower_output(permutation.slice_mut(..)),
+            permutation.slice_mut(..),
         )?;
-        crate::indexed::apply_permutation(exec, values, permutation.column(), output.lower_output())
+        crate::api::algorithm::apply_permutation_into(exec, values, permutation.column(), output)
     }
 }
 
@@ -383,11 +381,10 @@ impl<R, Input, InputOffsets, Output, Op>
     for ForEachSegment<AdjacentDifference<Op>>
 where
     R: Runtime,
-    Input: MIter<R> + Clone,
-    Input::Item: MItem<R>,
+    Input: MIter<R, Item = Output::Item> + Clone,
     InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R, Item = Input::Item>,
-    Output::SliceMut: MIterMut<R, Item = Input::Item>,
+    Output: MIterMut<R>,
+    Output::SliceMut: MIterMut<R, Item = Output::Item>,
     Op: ReductionOp<Input::Item>,
 {
     fn run_into(
@@ -415,10 +412,9 @@ impl<R, Input, InputOffsets, Output, Op>
     for ForEachSegment<InclusiveScan<Op>>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MItem<R> + crate::api::iter::ScratchAbi<R>,
+    Input: MIter<R, Item = Output::Item>,
     InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R, Item = Input::Item>,
+    Output: MIterMut<R>,
     Op: ReductionOp<Input::Item>,
 {
     fn run_into(
@@ -449,7 +445,7 @@ where
     Input: MIter<R, Item = Init>,
     InputOffsets: MIter<R, Item = u32>,
     Output: MIterMut<R, Item = Init>,
-    Init: MItem<R> + crate::api::iter::ScratchAbi<R>,
+    Init: CubeType,
     Op: ReductionOp<Init>,
 {
     fn run_into(
@@ -477,10 +473,9 @@ impl<R, Input, InputOffsets, Output> LengthPreservingExecutableInto<R, Input, In
     for ForEachSegment<Reverse>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MItem<R>,
+    Input: MIter<R, Item = Output::Item>,
     InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R, Item = Input::Item>,
+    Output: MIterMut<R>,
 {
     fn run_into(
         self,
@@ -500,10 +495,9 @@ impl<R, Input, InputOffsets, Output, OutputOffsets, Equal>
     for ForEachSegment<Unique<Equal>>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MItem<R>,
+    Input: MIter<R, Item = Output::Item>,
     InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R, Item = Input::Item>,
+    Output: MIterMut<R>,
     OutputOffsets: MIterMut<R, Item = u32>,
     Equal: BinaryPredicateOp<Input::Item>,
 {
@@ -587,7 +581,7 @@ pub(crate) fn reduce_segments<R, Values, Offsets, Output, Op>(
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: MItem<R> + crate::api::iter::ScratchAbi<R> + Copy,
+    Values::Item: MAllocItem<R> + Copy,
     Offsets: MIter<R, Item = u32>,
     Output: MIterMut<R, Item = Values::Item>,
     Op: ReductionOp<Values::Item>,
@@ -596,8 +590,7 @@ where
     let value_len = values.len()? as usize;
     let control = control::SegmentControl::new(exec, offsets, value_len)?;
     let keys = exec.alloc::<u32>(control.segment_count);
-    let reduced =
-        <<Values::Item as MItem<R>>::Storage as MStorage<R>>::allocate(exec, control.segment_count);
+    let reduced = exec.alloc::<Values::Item>(control.segment_count);
     let count = crate::vector::reduce_by_key_into(
         exec,
         control.ids.slice(..),
@@ -609,8 +602,7 @@ where
         reduced.slice_mut(..),
     )?;
 
-    let result =
-        <<Values::Item as MItem<R>>::Storage as MStorage<R>>::allocate(exec, control.segment_count);
+    let result = exec.alloc::<Values::Item>(control.segment_count);
     result.slice_mut(..).fill_with(exec, init)?;
     if count != 0 {
         let indices = exec.alloc::<u32>(count as usize);
@@ -640,10 +632,9 @@ impl<R, Input, InputOffsets, Output, OutputOffsets, Pred>
     for ForEachSegment<Filter<Pred>>
 where
     R: Runtime,
-    Input: MIter<R> + Clone,
-    Input::Item: MItem<R>,
+    Input: MIter<R, Item = Output::Item> + Clone,
     InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R, Item = Input::Item>,
+    Output: MIterMut<R>,
     OutputOffsets: MIterMut<R, Item = u32>,
     Pred: PredicateOp<Input::Item>,
 {
@@ -681,7 +672,7 @@ where
     Input: MIter<R, Item = Init>,
     InputOffsets: MIter<R, Item = u32>,
     Output: MIterMut<R, Item = Init>,
-    Init: CubeType + MItem<R> + crate::api::iter::ScratchAbi<R> + Copy,
+    Init: MAllocItem<R> + Copy,
     Op: ReductionOp<Input::Item>,
 {
     fn run_into(
@@ -829,7 +820,7 @@ macro_rules! impl_owned_length_preserving_input {
         where
             R: Runtime,
             Input: MIter<R>,
-            Input::Item: MItem<R>,
+            Input::Item: MAllocItem<R>,
             InputOffsets: MIter<R, Item = u32>,
             $( $bound )+
         {
@@ -865,7 +856,7 @@ where
     R: Runtime,
     Input: MIter<R, Item = Init>,
     InputOffsets: MIter<R, Item = u32>,
-    Init: MItem<R>,
+    Init: MAllocItem<R>,
     Op: ReductionOp<Init>,
 {
     type Output = SegmentIterator<MVec<R, Input::Item>, InputOffsets>;
@@ -891,7 +882,7 @@ impl<R, Input, InputOffsets> Executable<R, Input, InputOffsets> for ForEachSegme
 where
     R: Runtime,
     Input: MIter<R>,
-    Input::Item: MItem<R>,
+    Input::Item: MAllocItem<R>,
     InputOffsets: MIter<R, Item = u32>,
 {
     type Output = SegmentIterator<MVec<R, Input::Item>, InputOffsets>;
@@ -918,7 +909,7 @@ impl<R, Input, InputOffsets, Op> Executable<R, Input, InputOffsets>
 where
     R: Runtime,
     Input: MIter<R> + Clone,
-    Input::Item: MItem<R>,
+    Input::Item: MAllocItem<R>,
     InputOffsets: MIter<R, Item = u32>,
     Op: ReductionOp<Input::Item>,
 {
@@ -951,7 +942,7 @@ macro_rules! impl_owned_compacting {
         where
             R: Runtime,
             Input: MIter<R> + Clone,
-            Input::Item: MItem<R>,
+            Input::Item: MAllocItem<R>,
             InputOffsets: MIter<R, Item = u32>,
             $( $bound )+
         {
@@ -986,7 +977,7 @@ where
     R: Runtime,
     Input: MIter<R, Item = Init>,
     InputOffsets: MIter<R, Item = u32>,
-    Init: MItem<R> + MItem<R> + Copy,
+    Init: MAllocItem<R> + Copy,
     Op: ReductionOp<Init>,
 {
     type Output = MVec<R, Input::Item>;

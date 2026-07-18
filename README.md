@@ -110,7 +110,7 @@ results. It also proves that normalization does not introduce an algorithmic
 blow-up under the stated language-level cost model. These claims concern the
 algebra, not the speed of a particular GPU or the formal correctness of every
 Rust graph algorithm. The Rust/CubeCL implementation is checked separately
-against a compiled Lean oracle with generated property tests.
+against an independent sequential CPU oracle with generated property tests.
 
 The non-specialist summary, exact proof boundary, Lean development, and oracle
 are collected in the [Traversal Algebra artifact](traversal-algebra/). The
@@ -272,9 +272,11 @@ lazy::permute(values, indices)         = lazy indexed view
 lazy::reverse(input)                    = lazy reversed view
 ```
 
-Input and output items support up to twelve columns. Output iterators are always
-created before an algorithm runs. An operation that intentionally changes a
-row schema expresses that conversion explicitly with `transform`.
+Input and output items support up to twelve columns. Keys passed to by-key
+algorithms are limited to three columns; their value items retain the full
+twelve-column limit. Output iterators are always created before an algorithm
+runs. An operation that intentionally changes a row schema expresses that
+conversion explicitly with `transform`.
 
 ### Lazy Iterators
 

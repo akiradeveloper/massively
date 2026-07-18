@@ -23,6 +23,159 @@ impl BinaryPredicateOp<usize> for IndexEqual {
     }
 }
 
+struct ScatterOperation<'a, R: Runtime, Values, Indices> {
+    exec: &'a Executor<R>,
+    values: Values,
+    indices: Indices,
+}
+
+impl<R, Item, Values, Indices> crate::api::iter::OutputOperation<R, Item>
+    for ScatterOperation<'_, R, Values, Indices>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+    Values: MIter<R, Item = Item>,
+    Indices: MIter<R, Item = usize>,
+{
+    type Result = Result<(), Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        crate::core::scatter::scatter(
+            self.exec,
+            crate::api::iter::lower::<R, _>(self.values),
+            crate::api::iter::lower::<R, _>(self.indices),
+            output,
+        )
+    }
+}
+
+struct ScatterWhereOperation<'a, R: Runtime, Values, Indices, Stencil> {
+    exec: &'a Executor<R>,
+    values: Values,
+    indices: Indices,
+    stencil: Stencil,
+}
+
+impl<R, Item, Values, Indices, Stencil> crate::api::iter::OutputOperation<R, Item>
+    for ScatterWhereOperation<'_, R, Values, Indices, Stencil>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+    Values: MIter<R, Item = Item>,
+    Indices: MIter<R, Item = usize>,
+    Stencil: MIter<R, Item = bool>,
+{
+    type Result = Result<(), Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        crate::core::scatter::scatter_where(
+            self.exec,
+            crate::api::iter::lower::<R, _>(self.values),
+            crate::api::iter::lower::<R, _>(self.indices),
+            crate::api::iter::lower::<R, _>(self.stencil),
+            output,
+        )
+    }
+}
+
+struct ScatterReduceOperation<'a, R: Runtime, Values, Indices, Item, Op> {
+    exec: &'a Executor<R>,
+    values: Values,
+    indices: Indices,
+    init: Item,
+    op: Op,
+}
+
+impl<R, Item, Values, Indices, Op> crate::api::iter::OutputOperation<R, Item>
+    for ScatterReduceOperation<'_, R, Values, Indices, Item, Op>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+    Values: MIter<R, Item = Item>,
+    Indices: MIter<R, Item = usize>,
+    Op: ReductionOp<Item>,
+{
+    type Result = Result<(), Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        let len = self.values.len()?;
+        let indices_len = self.indices.len()?;
+        if len != indices_len {
+            return Err(Error::LengthMismatch {
+                left: len,
+                right: indices_len,
+            });
+        }
+        if len == 0 {
+            return Ok(());
+        }
+
+        let indices = crate::api::iter::lower::<R, _>(self.indices);
+        let sorted_values =
+            <Item as crate::allocation::ScratchStorage<R>>::alloc_scratch(self.exec, len);
+        let values = crate::api::iter::lower_fixed::<R, _>(self.values);
+        let permutation =
+            crate::ordering::sort_control_with(self.exec, indices.clone(), IndexLess)?;
+        crate::indexed::gather_u32(
+            self.exec,
+            values,
+            permutation.column(),
+            sorted_values.write(),
+        )?;
+
+        let heads = crate::ordering::unique_head_flags_ordered::<R, _, IndexEqual>(
+            self.exec,
+            indices.clone(),
+            &permutation,
+        )?;
+        let head_control =
+            crate::selection::SelectionControl::from_flags(self.exec, heads.clone())?;
+        let unique_positions = self.exec.alloc::<u32>(head_control.count() as usize);
+        crate::indexed::gather_u32(
+            self.exec,
+            permutation.column(),
+            head_control.indices().column(),
+            unique_positions.slice_mut(..),
+        )?;
+
+        let sorted_values = crate::read::FixedRead::new(sorted_values.read());
+        let reduced_values = <Item as crate::allocation::ScratchStorage<R>>::alloc_scratch(
+            self.exec,
+            head_control.count() as usize,
+        );
+        crate::core::by_key::reduce_values_by_heads_lowered(
+            self.exec,
+            sorted_values,
+            &heads,
+            &head_control,
+            self.init,
+            self.op,
+            reduced_values.write(),
+        )?;
+
+        let reduced_values = crate::read::FixedRead::new(RowStorage::read(&reduced_values));
+        crate::core::scatter_reduce::apply::<R, _, _, _, Op>(
+            self.exec,
+            reduced_values,
+            indices,
+            &unique_positions,
+            output,
+        )
+    }
+}
+
 /// Writes each input item to the position given by its index.
 ///
 /// # Examples
@@ -55,17 +208,15 @@ pub fn scatter<R, Values, Indices, Output>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Values: MIter<R>,
-    Values::Item: crate::MItem<R>,
+    Values: MIter<R, Item = Output::Item>,
     Indices: MIter<R, Item = usize>,
-    Output: MIterMut<R, Item = Values::Item>,
+    Output: MIterMut<R>,
 {
-    crate::core::scatter::scatter(
+    output.run_output_operation(ScatterOperation {
         exec,
-        crate::api::iter::lower::<R, _>(values),
-        crate::api::iter::lower::<R, _>(indices),
-        output.lower_output(),
-    )
+        values,
+        indices,
+    })
 }
 
 /// Scatters from stored `u32` indices after converting them at the read boundary.
@@ -77,20 +228,19 @@ pub(crate) fn scatter_raw<R, Values, Indices, Output>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Values: MIter<R>,
-    Values::Item: crate::MItem<R>,
+    Values: MIter<R, Item = Output::Item>,
     Indices: MIter<R, Item = u32>,
-    Output: MIterMut<R, Item = Values::Item>,
+    Output: MIterMut<R>,
 {
-    crate::core::scatter::scatter(
+    let indices = crate::Transform::new(
+        crate::api::iter::lower::<R, _>(indices),
+        crate::op::U32ToUsize,
+    );
+    output.run_output_operation(ScatterOperation {
         exec,
-        crate::api::iter::lower::<R, _>(values),
-        crate::Transform::new(
-            crate::api::iter::lower::<R, _>(indices),
-            crate::op::U32ToUsize,
-        ),
-        output.lower_output(),
-    )
+        values,
+        indices,
+    })
 }
 
 /// Scatters selected rows while preserving other output rows.
@@ -135,19 +285,17 @@ pub fn scatter_where<R, Values, Indices, Stencil, Output>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Values: MIter<R>,
-    Values::Item: crate::MItem<R>,
+    Values: MIter<R, Item = Output::Item>,
     Indices: MIter<R, Item = usize>,
     Stencil: MIter<R, Item = bool>,
-    Output: MIterMut<R, Item = Values::Item>,
+    Output: MIterMut<R>,
 {
-    crate::core::scatter::scatter_where(
+    output.run_output_operation(ScatterWhereOperation {
         exec,
-        crate::api::iter::lower::<R, _>(values),
-        crate::api::iter::lower::<R, _>(indices),
-        crate::api::iter::lower::<R, _>(stencil),
-        output.lower_output(),
-    )
+        values,
+        indices,
+        stencil,
+    })
 }
 
 /// Reduces colliding scatter proposals and combines each result with its destination.
@@ -206,22 +354,18 @@ pub fn scatter_reduce<R, Values, Indices, Output, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Values: MIter<R>,
-    Values::Item: crate::MItem<R>,
+    Values: MIter<R, Item = Output::Item>,
     Indices: MIter<R, Item = usize>,
-    Output: MIterMut<R, Item = Values::Item>,
+    Output: MIterMut<R>,
     Op: ReductionOp<Values::Item>,
 {
-    let indices_len = indices.len()?;
-    scatter_reduce_lowered(
+    output.run_output_operation(ScatterReduceOperation {
         exec,
         values,
-        indices_len,
-        crate::api::iter::lower::<R, _>(indices),
+        indices,
         init,
         op,
-        output,
-    )
+    })
 }
 
 /// Scatter-reduces stored `u32` indices after converting them at the read boundary.
@@ -235,92 +379,22 @@ pub(crate) fn scatter_reduce_raw<R, Values, Indices, Output, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Values: MIter<R>,
-    Values::Item: crate::MItem<R>,
+    Values: MIter<R, Item = Output::Item>,
     Indices: MIter<R, Item = u32>,
-    Output: MIterMut<R, Item = Values::Item>,
+    Output: MIterMut<R>,
     Op: ReductionOp<Values::Item>,
 {
-    let indices_len = indices.len()?;
     let indices = crate::Transform::new(
         crate::api::iter::lower::<R, _>(indices),
         crate::op::U32ToUsize,
     );
-    scatter_reduce_lowered(exec, values, indices_len, indices, init, op, output)
-}
-
-fn scatter_reduce_lowered<R, Values, Indices, Output, Op>(
-    exec: &Executor<R>,
-    values: Values,
-    indices_len: usize,
-    indices: Indices,
-    init: Values::Item,
-    op: Op,
-    output: Output,
-) -> Result<(), Error>
-where
-    R: Runtime,
-    Values: MIter<R>,
-    Values::Item: crate::MItem<R>,
-    Indices: crate::core::facade::KernelInput<R, Item = usize>,
-    Output: MIterMut<R, Item = Values::Item>,
-    Op: ReductionOp<Values::Item>,
-{
-    let len = values.len()?;
-    if len != indices_len {
-        return Err(Error::LengthMismatch {
-            left: len,
-            right: indices_len,
-        });
-    }
-    if len == 0 {
-        return Ok(());
-    }
-
-    let len_usize = len;
-    let sorted_values =
-        <Output::Item as crate::allocation::ScratchStorage<R>>::alloc_scratch(exec, len_usize);
-    let values = crate::api::iter::lower_fixed::<R, _>(values);
-    let permutation = crate::ordering::sort_control_with(exec, indices.clone(), IndexLess)?;
-    crate::indexed::gather_u32(exec, values, permutation.column(), sorted_values.write())?;
-
-    let heads = crate::ordering::unique_head_flags_ordered::<R, _, IndexEqual>(
+    output.run_output_operation(ScatterReduceOperation {
         exec,
-        indices.clone(),
-        &permutation,
-    )?;
-    let head_control = crate::selection::SelectionControl::from_flags(exec, heads.clone())?;
-    let unique_positions = exec.alloc::<u32>(head_control.count() as usize);
-    crate::indexed::gather_u32(
-        exec,
-        permutation.column(),
-        head_control.indices().column(),
-        unique_positions.slice_mut(..),
-    )?;
-
-    let sorted_values = crate::read::FixedRead::new(sorted_values.read());
-    let reduced_values = <Output::Item as crate::allocation::ScratchStorage<R>>::alloc_scratch(
-        exec,
-        head_control.count() as usize,
-    );
-    crate::core::by_key::reduce_values_by_heads_lowered(
-        exec,
-        sorted_values,
-        &heads,
-        &head_control,
+        values,
+        indices,
         init,
         op,
-        reduced_values.write(),
-    )?;
-
-    let reduced_values = crate::read::FixedRead::new(RowStorage::read(&reduced_values));
-    crate::core::scatter_reduce::apply::<R, _, _, _, Op>(
-        exec,
-        reduced_values,
-        indices,
-        &unique_positions,
-        output.lower_output(),
-    )
+    })
 }
 
 #[cfg(test)]

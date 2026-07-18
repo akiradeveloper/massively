@@ -1,4 +1,4 @@
-\section{Machine-checked and executable artifact}
+\section{Machine-checked proof and implementation validation}
 
 The Lean development~\cite{demoura2021lean4} mirrors the definitions above.
 Table~\ref{tab:correspondence} records stable declaration names rather than
@@ -77,29 +77,28 @@ namespace.}
 \label{tab:correspondence}
 \end{table}
 
-The proof project contains no admitted theorem.  Its executable definitions
-provide two implementation checks.  First, Lean evaluates a named regression
-corpus containing empty graphs, isolated vertices, parallel edges, self-loops,
-and repeated frontier entries, then emits the inputs and expected results as
-Rust source.  Second, the same definitions compile to a native oracle accepting
-arbitrary valid CSR graphs and frontiers.  A property-based Rust harness
-generates bounded inputs, queries this Lean oracle, and compares edge contexts
-and both reductions with the public Massively GPU operations.  Counterexamples
-are shrunk at the graph and frontier level; no independent Rust traversal
-semantics is present in the harness.
+The proof project contains no admitted theorem and produces no executable
+oracle.  Its responsibility ends at machine-checking the mathematical language
+and abstract resource results.  Implementation validation is deliberately
+independent: a small sequential Rust oracle owns raw CSR arrays and directly
+evaluates ordered traversal, source/destination/edge reads, products, maps,
+emission, and both reductions.  It shares no traversal or reduction code with
+Massively.
 
-The persistent oracle also serializes the proved abstract CubeCL resource
-certificate for scalar queries.  Generated tests vary workgroup and subgroup
-geometry and check graph dimensions, exact fused emission/source/destination
-formulas, the modeled CSR-control work, atomic counts, and every field of the
-sequential control-plus-terminal decomposition.  These checks validate the
-protocol boundary; the universal equations are Lean theorems rather than
-conclusions drawn from the finite campaign.
+A property-based Rust harness generates valid CSR graphs, frontiers, and value
+columns, evaluates them with this CPU reference, and compares the results with
+the public Massively GPU operations.  Small structural cases shrink at the
+graph and frontier level; seeded multigraph, hub, bipartite, regular, and
+parallel/self-loop families supply boundary coverage.  A separate deterministic
+case contains 65,537 vertices and 393,222 edges so scale coverage does not
+compromise counterexample shrinking.
 
-Passing finitely many generated inputs demonstrates agreement on those inputs;
-it does not prove universal implementation correspondence.  The trusted
-boundary includes the Lean compiler, a small textual protocol, the Rust test
-harness, CubeCL, and the device stack.  End-to-end verification of that stack
-is explicitly outside the theorem's scope: the running implementation and
-property tests establish artifact-level implementability, while
-Theorem~\ref{thm:ta-bsp-equivalence} concerns the mathematical languages.
+Passing finitely many generated inputs demonstrates agreement between the two
+implementations on those inputs; it does not prove that either Rust
+implementation refines the Lean model.  The implementation-test trusted
+boundary includes the CPU reference, Rust test harness, CubeCL, and the device
+stack.  End-to-end verification of that stack is explicitly outside the
+theorem's scope: the property tests provide engineering evidence, while
+Theorem~\ref{thm:ta-bsp-equivalence} concerns the mathematical languages.  The
+symbolic CubeCL resource equations remain universal Lean theorems rather than
+runtime certificates transported through the test harness.

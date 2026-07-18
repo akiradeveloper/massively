@@ -1,8 +1,131 @@
-use cubecl::prelude::Runtime;
+use cubecl::prelude::{CubeType, Runtime};
 
 use crate::{
-    Error, Executor, MItem, MIter, MIterMut, MStorage, MVec, op::PredicateOp, op::UnaryOp,
+    Error, Executor, MAllocItem, MIter, MIterMut, MStorage, MVec, op::PredicateOp, op::UnaryOp,
 };
+
+struct CopyWhereOperation<'a, R: Runtime, Input, Stencil, const REMOVE: bool> {
+    exec: &'a Executor<R>,
+    input: Input,
+    stencil: Stencil,
+}
+
+impl<R, Item, Input, Stencil, const REMOVE: bool> crate::api::iter::OutputOperation<R, Item>
+    for CopyWhereOperation<'_, R, Input, Stencil, REMOVE>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+    Input: MIter<R, Item = Item>,
+    Stencil: MIter<R, Item = bool>,
+{
+    type Result = Result<u32, Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        let input = crate::api::iter::lower::<R, _>(self.input);
+        let stencil = crate::api::iter::lower::<R, _>(self.stencil);
+        if REMOVE {
+            crate::selection::remove_where(self.exec, input, stencil, output)
+        } else {
+            crate::selection::copy_where(self.exec, input, stencil, output)
+        }
+    }
+}
+
+struct PartitionOperation<'a, R: Runtime, Input, Pred> {
+    exec: &'a Executor<R>,
+    input: Input,
+    pred: Pred,
+}
+
+impl<R, Item, Input, Pred> crate::api::iter::OutputOperation<R, Item>
+    for PartitionOperation<'_, R, Input, Pred>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+    Input: MIter<R, Item = Item>,
+    Pred: PredicateOp<Item>,
+{
+    type Result = Result<u32, Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        crate::selection::partition(
+            self.exec,
+            crate::api::iter::lower_fixed::<R, _>(self.input),
+            self.pred,
+            output,
+        )
+    }
+}
+
+struct ReplaceWhereOperation<'a, R: Runtime, Item, Stencil> {
+    exec: &'a Executor<R>,
+    value: Item,
+    stencil: Stencil,
+}
+
+impl<R, Item, Stencil> crate::api::iter::OutputOperation<R, Item>
+    for ReplaceWhereOperation<'_, R, Item, Stencil>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+    Stencil: MIter<R, Item = bool>,
+{
+    type Result = Result<(), Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        crate::selection::replace_where(
+            self.exec,
+            self.value,
+            crate::api::iter::lower::<R, _>(self.stencil),
+            output,
+        )
+    }
+}
+
+struct TransformWhereOperation<'a, R: Runtime, Input, Op, Stencil> {
+    exec: &'a Executor<R>,
+    input: Input,
+    op: Op,
+    stencil: Stencil,
+}
+
+impl<R, Item, Input, Op, Stencil> crate::api::iter::OutputOperation<R, Item>
+    for TransformWhereOperation<'_, R, Input, Op, Stencil>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+    Input: MIter<R>,
+    Op: UnaryOp<Input::Item, Output = Item>,
+    Stencil: MIter<R, Item = bool>,
+{
+    type Result = Result<(), Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        crate::selection::transform_where(
+            self.exec,
+            crate::api::iter::lower::<R, _>(self.input),
+            self.op,
+            crate::api::iter::lower::<R, _>(self.stencil),
+            output,
+        )
+    }
+}
 
 /// Copies rows whose stencil is true.
 ///
@@ -29,7 +152,7 @@ pub fn copy_where<R, Input, Item, Stencil>(
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
-    Item: MItem<R>,
+    Item: MAllocItem<R>,
     Stencil: MIter<R, Item = bool>,
 {
     let capacity = input.len()? as usize;
@@ -49,17 +172,15 @@ pub(crate) fn copy_where_into<R, Input, Stencil, Output>(
 ) -> Result<u32, Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MItem<R>,
+    Input: MIter<R, Item = Output::Item>,
     Stencil: MIter<R, Item = bool>,
-    Output: MIterMut<R, Item = Input::Item>,
+    Output: MIterMut<R>,
 {
-    crate::selection::copy_where(
+    output.run_output_operation(CopyWhereOperation::<_, _, _, false> {
         exec,
-        crate::api::iter::lower::<R, _>(input),
-        crate::api::iter::lower::<R, _>(stencil),
-        output.lower_output(),
-    )
+        input,
+        stencil,
+    })
 }
 
 /// Copies rows selected by a stored `u32` stencil after converting it at the read boundary.
@@ -71,20 +192,19 @@ pub(crate) fn copy_where_raw_into<R, Input, Stencil, Output>(
 ) -> Result<u32, Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MItem<R>,
+    Input: MIter<R, Item = Output::Item>,
     Stencil: MIter<R, Item = u32>,
-    Output: MIterMut<R, Item = Input::Item>,
+    Output: MIterMut<R>,
 {
-    crate::selection::copy_where(
+    let stencil = crate::Transform::new(
+        crate::api::iter::lower::<R, _>(stencil),
+        crate::op::U32ToBool,
+    );
+    output.run_output_operation(CopyWhereOperation::<_, _, _, false> {
         exec,
-        crate::api::iter::lower::<R, _>(input),
-        crate::Transform::new(
-            crate::api::iter::lower::<R, _>(stencil),
-            crate::op::U32ToBool,
-        ),
-        output.lower_output(),
-    )
+        input,
+        stencil,
+    })
 }
 
 /// Copies rows whose stencil is false.
@@ -112,7 +232,7 @@ pub fn remove_where<R, Input, Item, Stencil>(
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
-    Item: MItem<R>,
+    Item: MAllocItem<R>,
     Stencil: MIter<R, Item = bool>,
 {
     let capacity = input.len()? as usize;
@@ -132,17 +252,15 @@ pub(crate) fn remove_where_into<R, Input, Stencil, Output>(
 ) -> Result<u32, Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MItem<R>,
+    Input: MIter<R, Item = Output::Item>,
     Stencil: MIter<R, Item = bool>,
-    Output: MIterMut<R, Item = Input::Item>,
+    Output: MIterMut<R>,
 {
-    crate::selection::remove_where(
+    output.run_output_operation(CopyWhereOperation::<_, _, _, true> {
         exec,
-        crate::api::iter::lower::<R, _>(input),
-        crate::api::iter::lower::<R, _>(stencil),
-        output.lower_output(),
-    )
+        input,
+        stencil,
+    })
 }
 
 /// Copies rows rejected by a stored `u32` stencil after converting it at the read boundary.
@@ -154,20 +272,19 @@ pub(crate) fn remove_where_raw_into<R, Input, Stencil, Output>(
 ) -> Result<u32, Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MItem<R>,
+    Input: MIter<R, Item = Output::Item>,
     Stencil: MIter<R, Item = u32>,
-    Output: MIterMut<R, Item = Input::Item>,
+    Output: MIterMut<R>,
 {
-    crate::selection::remove_where(
+    let stencil = crate::Transform::new(
+        crate::api::iter::lower::<R, _>(stencil),
+        crate::op::U32ToBool,
+    );
+    output.run_output_operation(CopyWhereOperation::<_, _, _, true> {
         exec,
-        crate::api::iter::lower::<R, _>(input),
-        crate::Transform::new(
-            crate::api::iter::lower::<R, _>(stencil),
-            crate::op::U32ToBool,
-        ),
-        output.lower_output(),
-    )
+        input,
+        stencil,
+    })
 }
 
 /// Stably partitions passing items before failing items.
@@ -205,7 +322,7 @@ pub fn partition<R, Input, Item, Pred>(
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
-    Item: MItem<R>,
+    Item: MAllocItem<R>,
     Pred: PredicateOp<Item>,
 {
     let len = input.len()? as usize;
@@ -224,17 +341,11 @@ pub(crate) fn partition_into<R, Input, Output, Pred>(
 ) -> Result<u32, Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MItem<R>,
-    Output: MIterMut<R, Item = Input::Item>,
+    Input: MIter<R, Item = Output::Item>,
+    Output: MIterMut<R>,
     Pred: PredicateOp<Input::Item>,
 {
-    crate::selection::partition(
-        exec,
-        crate::api::iter::lower_fixed::<R, _>(input),
-        pred,
-        output.lower_output(),
-    )
+    output.run_output_operation(PartitionOperation { exec, input, pred })
 }
 
 /// Fills every output item with one value.
@@ -307,12 +418,11 @@ where
     Stencil: MIter<R, Item = bool>,
     Output: MIterMut<R>,
 {
-    crate::selection::replace_where(
+    output.run_output_operation(ReplaceWhereOperation {
         exec,
         value,
-        crate::api::iter::lower::<R, _>(stencil),
-        output.lower_output(),
-    )
+        stencil,
+    })
 }
 
 /// Applies an operation where the stencil is true.
@@ -369,17 +479,15 @@ where
     R: Runtime,
     Input: MIter<R>,
     Stencil: MIter<R, Item = bool>,
-    Output: MIterMut<R, Item = <Op as UnaryOp<Input::Item>>::Output>,
-    Op: UnaryOp<Input::Item>,
-    Op::Output: MItem<R>,
+    Output: MIterMut<R>,
+    Op: UnaryOp<Input::Item, Output = Output::Item>,
 {
-    crate::selection::transform_where(
+    output.run_output_operation(TransformWhereOperation {
         exec,
-        crate::api::iter::lower::<R, _>(input),
+        input,
         op,
-        crate::api::iter::lower::<R, _>(stencil),
-        output.lower_output(),
-    )
+        stencil,
+    })
 }
 
 /// Applies a selected transform from a stored `u32` stencil after converting it at the read boundary.
@@ -394,18 +502,17 @@ where
     R: Runtime,
     Input: MIter<R>,
     Stencil: MIter<R, Item = u32>,
-    Output: MIterMut<R, Item = <Op as UnaryOp<Input::Item>>::Output>,
-    Op: UnaryOp<Input::Item>,
-    Op::Output: MItem<R>,
+    Output: MIterMut<R>,
+    Op: UnaryOp<Input::Item, Output = Output::Item>,
 {
-    crate::selection::transform_where(
+    let stencil = crate::Transform::new(
+        crate::api::iter::lower::<R, _>(stencil),
+        crate::op::U32ToBool,
+    );
+    output.run_output_operation(TransformWhereOperation {
         exec,
-        crate::api::iter::lower::<R, _>(input),
+        input,
         op,
-        crate::Transform::new(
-            crate::api::iter::lower::<R, _>(stencil),
-            crate::op::U32ToBool,
-        ),
-        output.lower_output(),
-    )
+        stencil,
+    })
 }

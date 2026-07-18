@@ -58,20 +58,6 @@ pub trait MStorage<R: Runtime>: Sized {
         Bounds: RangeBounds<usize>;
 }
 
-/// Sealed physical contract for algorithms that require scratch storage.
-#[doc(hidden)]
-pub(crate) trait ScratchAbi<R: Runtime>:
-    KernelRow + crate::RowAlloc<R> + crate::core::allocation::ScratchStorage<R>
-{
-}
-
-impl<R, Item> ScratchAbi<R> for Item
-where
-    R: Runtime,
-    Item: KernelRow + crate::RowAlloc<R> + crate::core::allocation::ScratchStorage<R>,
-{
-}
-
 /// Sealed storage-shape dispatch for algorithms that materialize before
 /// sorting. Public iterator APIs remain independent of physical arity.
 pub(crate) trait SortAbi<R: Runtime>: KernelRow + crate::RowAlloc<R> {
@@ -111,52 +97,100 @@ where
     }
 }
 
-/// Backend-only capabilities carried by every storable public row.
+/// Internal algorithm dispatch carried by every canonically allocatable row.
 #[doc(hidden)]
-pub(crate) trait Sealed<R: Runtime>: ScratchAbi<R> + SortAbi<R> {}
+pub(crate) trait ItemDispatch<R: Runtime> {
+    type Item: CubeType + Send + Sync + Sized + 'static;
 
-impl<R, Item> Sealed<R> for Item
-where
-    R: Runtime,
-    Item: ScratchAbi<R> + SortAbi<R>,
-{
+    fn reduce<Input, Op>(
+        exec: &Executor<R>,
+        input: Input,
+        init: Self::Item,
+        op: Op,
+    ) -> Result<Self::Item, Error>
+    where
+        Input: MIter<R, Item = Self::Item>,
+        Op: crate::op::ReductionOp<Self::Item>;
+
+    fn exclusive_scan_into<Input, Output, Op>(
+        exec: &Executor<R>,
+        input: Input,
+        init: Self::Item,
+        op: Op,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Input: MIter<R, Item = Self::Item>,
+        Output: MIterMut<R, Item = Self::Item>,
+        Op: crate::op::ReductionOp<Self::Item>;
+
+    fn sort_into<Input, Output, Less>(
+        exec: &Executor<R>,
+        input: Input,
+        less: Less,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Input: MIter<R, Item = Self::Item>,
+        Output: MIterMut<R, Item = Self::Item>,
+        Less: crate::op::BinaryPredicateOp<Self::Item>;
 }
 
-/// A scalar or compound numeric key with a stable radix ordering.
-///
-/// Scalar leaves may be `u8`, `u16`, `u32`, `u64`, `i8`, `i16`, `i32`, `i64`,
-/// `f32`, or `f64`, provided the runtime supports that scalar type. Integers use
-/// their natural ascending numeric order. Floating-point leaves use the same
-/// total order as [`f32::total_cmp`] and [`f64::total_cmp`]. Compound keys use
-/// lexicographic leaf order, with the leftmost leaf as the primary key.
-pub trait RadixKey<R: Runtime>: MItem<R> {
-    #[doc(hidden)]
-    fn radix_permutation(
-        exec: &Executor<R>,
-        keys: &MVec<R, Self>,
-        len: usize,
-    ) -> Result<crate::DeviceVec<R, u32>, Error>;
-}
-
-#[doc(hidden)]
-#[allow(private_bounds)]
-impl<R, Item> RadixKey<R> for Item
+impl<R, Item> ItemDispatch<R> for Item
 where
     R: Runtime,
-    Item: MItem<R>,
-    MVec<R, Item>: crate::radix::RadixStorage<R>,
+    Item: SortAbi<R> + crate::core::allocation::ScratchStorage<R>,
+    <Item as crate::RowAlloc<R>>::RowStorage: MStorage<R, Item = Item>,
 {
-    fn radix_permutation(
+    type Item = Item;
+
+    fn reduce<Input, Op>(
         exec: &Executor<R>,
-        keys: &MVec<R, Self>,
-        len: usize,
-    ) -> Result<crate::DeviceVec<R, u32>, Error> {
-        crate::radix::permutation(exec, keys, len)
+        input: Input,
+        init: Item,
+        op: Op,
+    ) -> Result<Item, Error>
+    where
+        Input: MIter<R, Item = Item>,
+        Op: crate::op::ReductionOp<Item>,
+    {
+        crate::reduce::reduce(exec, lower_fixed::<R, _>(input), init, op)
+    }
+
+    fn exclusive_scan_into<Input, Output, Op>(
+        exec: &Executor<R>,
+        input: Input,
+        init: Item,
+        op: Op,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Input: MIter<R, Item = Item>,
+        Output: MIterMut<R, Item = Item>,
+        Op: crate::op::ReductionOp<Item>,
+    {
+        output.run_output_operation(ExclusiveScanOperation {
+            exec,
+            input,
+            init,
+            op,
+        })
+    }
+
+    fn sort_into<Input, Output, Less>(
+        exec: &Executor<R>,
+        input: Input,
+        less: Less,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Input: MIter<R, Item = Item>,
+        Output: MIterMut<R, Item = Item>,
+        Less: crate::op::BinaryPredicateOp<Item>,
+    {
+        output.run_output_operation(SortOperation { exec, input, less })
     }
 }
-
-/// Owned device storage for a flat row type.
-pub type MVec<R, Item> = <Item as MItem<R>>::Storage;
 
 pub(crate) fn resolve_iter_range<Bounds>(len: usize, range: Bounds) -> (usize, usize)
 where
@@ -244,35 +278,216 @@ where
 {
 }
 
-#[doc(hidden)]
+/// Item capability for allocating canonical owned device storage.
+///
+/// This is the capability required by [`Executor::alloc`] and algorithms that
+/// return [`MVec`]. Temporary storage and algorithm dispatch are internal
+/// implementation details, not separate public item capabilities.
 #[allow(private_bounds)]
-pub trait MItem<R: Runtime>: KernelRow + Sealed<R> {
+pub trait MAllocItem<R: Runtime>: CubeType + Send + Sync + Sized + 'static {
     /// The owned SoA storage used for this flat row.
     #[doc(hidden)]
     type Storage: MStorage<R, Item = Self>;
+
+    #[doc(hidden)]
+    type Dispatch: ItemDispatch<R, Item = Self>;
 }
 
 #[doc(hidden)]
-impl<R, Item> MItem<R> for Item
+impl<R, Item> MAllocItem<R> for Item
 where
     R: Runtime,
-    Item: KernelRow + crate::RowAlloc<R> + Sealed<R>,
+    Item: crate::RowAlloc<R> + ItemDispatch<R, Item = Item>,
     <Item as crate::RowAlloc<R>>::RowStorage: MStorage<R, Item = Item>,
 {
     type Storage = <Item as crate::RowAlloc<R>>::RowStorage;
+    type Dispatch = Item;
+}
+
+/// Backward-compatible name for [`MAllocItem`].
+#[doc(hidden)]
+pub use MAllocItem as MItem;
+
+/// Owned device storage for a flat row type.
+pub type MVec<R, Item> = <Item as MAllocItem<R>>::Storage;
+
+trait RadixKeyArity {}
+
+impl RadixKeyArity for crate::S1 {}
+impl RadixKeyArity for crate::S2 {}
+impl RadixKeyArity for crate::S3 {}
+
+mod radix_key_private {
+    pub trait Sealed {}
+
+    impl<Item> Sealed for Item
+    where
+        Item: crate::StorageLayout,
+        Item::StorageArity: super::RadixKeyArity,
+    {
+    }
+}
+
+/// A one-, two-, or three-column numeric key with a stable radix ordering.
+///
+/// Scalar leaves may be `u8`, `u16`, `u32`, `u64`, `i8`, `i16`, `i32`, `i64`,
+/// `f32`, or `f64`, provided the runtime supports that scalar type. Integers use
+/// their natural ascending numeric order. Floating-point leaves use the same
+/// total order as [`f32::total_cmp`] and [`f64::total_cmp`]. Two- and
+/// three-column keys use lexicographic leaf order, with the leftmost leaf as the
+/// primary key.
+#[allow(private_bounds)]
+pub trait RadixKey<R: Runtime>: MAllocItem<R> + radix_key_private::Sealed {
+    #[doc(hidden)]
+    fn radix_permutation(
+        exec: &Executor<R>,
+        keys: &MVec<R, Self>,
+        len: usize,
+    ) -> Result<crate::DeviceVec<R, u32>, Error>;
 }
 
 #[doc(hidden)]
-pub(crate) trait MutableItem<R: Runtime>:
-    KernelRow + crate::core::allocation::ScratchStorage<R>
+#[allow(private_bounds)]
+impl<R, Item> RadixKey<R> for Item
+where
+    R: Runtime,
+    Item: MAllocItem<R> + radix_key_private::Sealed,
+    MVec<R, Item>: crate::radix::RadixStorage<R>,
 {
+    fn radix_permutation(
+        exec: &Executor<R>,
+        keys: &MVec<R, Self>,
+        len: usize,
+    ) -> Result<crate::DeviceVec<R, u32>, Error> {
+        crate::radix::permutation(exec, keys, len)
+    }
 }
 
-impl<R, Item> MutableItem<R> for Item
+/// A lowered destination whose concrete ABI is known inside the crate.
+#[doc(hidden)]
+pub(crate) trait ConcreteOutput<R, Item>:
+    crate::output::OutputExpression<Item = Item>
+    + crate::output::LowerOutputExpression
+    + crate::output::ReadOutput
+    + crate::output::StageOutput<R, crate::read::Env0>
+    + private::KernelOutput<R>
+    + crate::selection::FillOutput<R>
+    + crate::output::SliceOutput
 where
     R: Runtime,
     Item: KernelRow + crate::core::allocation::ScratchStorage<R>,
+    Self::Slots:
+        crate::output::PaddedOutputSlots<Leaves = <Item as crate::StorageLayout>::StorageLeaves>,
 {
+}
+
+impl<R, Item, Output> ConcreteOutput<R, Item> for Output
+where
+    R: Runtime,
+    Item: KernelRow + crate::core::allocation::ScratchStorage<R>,
+    Output: crate::output::OutputExpression<Item = Item>
+        + crate::output::LowerOutputExpression
+        + crate::output::ReadOutput
+        + crate::output::StageOutput<R, crate::read::Env0>
+        + private::KernelOutput<R>
+        + crate::selection::FillOutput<R>
+        + crate::output::SliceOutput,
+    Output::Slots:
+        crate::output::PaddedOutputSlots<Leaves = <Item as crate::StorageLayout>::StorageLeaves>,
+{
+}
+
+/// An operation that is type-checked only after a concrete output ABI is known.
+#[doc(hidden)]
+pub(crate) trait OutputOperation<R: Runtime, Item: CubeType + Send + Sync + 'static> {
+    type Result;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: KernelRow + crate::core::allocation::ScratchStorage<R>,
+        Output: ConcreteOutput<R, Item>;
+}
+
+struct FillOperation<'a, R: Runtime, Item> {
+    exec: &'a Executor<R>,
+    value: Item,
+}
+
+struct ExclusiveScanOperation<'a, R: Runtime, Input, Item, Op> {
+    exec: &'a Executor<R>,
+    input: Input,
+    init: Item,
+    op: Op,
+}
+
+impl<R, Item, Input, Op> OutputOperation<R, Item> for ExclusiveScanOperation<'_, R, Input, Item, Op>
+where
+    R: Runtime,
+    Item: KernelRow + crate::allocation::ScratchStorage<R>,
+    Input: MIter<R, Item = Item>,
+    Op: crate::op::ReductionOp<Item>,
+{
+    type Result = Result<(), Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: ConcreteOutput<R, Item>,
+    {
+        crate::scan::exclusive_scan(
+            self.exec,
+            lower_fixed::<R, _>(self.input),
+            self.init,
+            self.op,
+            output,
+        )
+    }
+}
+
+struct SortOperation<'a, R: Runtime, Input, Less> {
+    exec: &'a Executor<R>,
+    input: Input,
+    less: Less,
+}
+
+impl<R, Item, Input, Less> OutputOperation<R, Item> for SortOperation<'_, R, Input, Less>
+where
+    R: Runtime,
+    Item: SortAbi<R> + crate::allocation::ScratchStorage<R>,
+    <Item as crate::RowAlloc<R>>::RowStorage: MStorage<R, Item = Item>,
+    Input: MIter<R, Item = Item>,
+    Less: crate::op::BinaryPredicateOp<Item>,
+{
+    type Result = Result<(), Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: ConcreteOutput<R, Item>,
+    {
+        crate::ordering::sort(
+            self.exec,
+            lower_fixed::<R, _>(self.input),
+            self.less,
+            output,
+        )
+    }
+}
+
+impl<R, Item> OutputOperation<R, Item> for FillOperation<'_, R, Item>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+{
+    type Result = Result<(), Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: KernelRow + crate::core::allocation::ScratchStorage<R>,
+        Output: ConcreteOutput<R, Item>,
+    {
+        crate::selection::fill(self.exec, self.value, output)
+    }
 }
 
 /// Public read-only logical row stream.
@@ -330,13 +545,13 @@ pub trait MIter<R: Runtime>: Clone + Sized {
 ///
 /// Device mutable slices and values returned by the `zipN` helpers implement
 /// this trait. Their logical item is always a native flat tuple.
-#[allow(private_bounds)]
+#[allow(private_bounds, private_interfaces)]
 pub trait MIterMut<R: Runtime>: Sized {
     /// Semantic value stored by one output row.
     ///
-    /// A preallocated destination needs a physical storage layout, but it does
-    /// not need to be allocatable as new owned storage.
-    type Item: MutableItem<R>;
+    /// Writing to a preallocated destination does not imply that the value can
+    /// be allocated as new owned storage.
+    type Item: CubeType + Send + Sync + 'static;
 
     #[doc(hidden)]
     type Slice;
@@ -363,17 +578,12 @@ pub trait MIterMut<R: Runtime>: Sized {
     /// Internal fixed-ABI output tree. This is a structural lowering contract
     /// and contains no algorithm operations.
     #[doc(hidden)]
-    type OutputSlots: crate::output::PaddedOutputSlots<
-            Leaves = <Self::Item as crate::StorageLayout>::StorageLeaves,
-        > + crate::output::OutputSlotEnvironment<
-            StorageArity = <Self::Item as crate::StorageLayout>::StorageArity,
-        >;
+    type OutputSlots;
 
     #[doc(hidden)]
     type LoweredOutput: crate::output::OutputExpression<Item = Self::Item>
         + crate::output::LowerOutputExpression<Slots = Self::OutputSlots>
         + crate::output::StageOutput<R, crate::read::Env0>
-        + private::KernelOutput<R>
         + crate::selection::FillOutput<R>
         + crate::output::SliceOutput;
 
@@ -382,8 +592,14 @@ pub trait MIterMut<R: Runtime>: Sized {
 
     #[doc(hidden)]
     fn fill_with(self, exec: &Executor<R>, value: Self::Item) -> Result<(), Error> {
-        crate::selection::fill(exec, value, self.lower_output())
+        self.run_output_operation(FillOperation { exec, value })
     }
+
+    #[doc(hidden)]
+    #[allow(private_bounds, private_interfaces)]
+    fn run_output_operation<Operation>(self, operation: Operation) -> Operation::Result
+    where
+        Operation: OutputOperation<R, Self::Item>;
 }
 
 #[doc(hidden)]
@@ -430,11 +646,7 @@ where
         + crate::output::StageOutput<R, crate::read::Env0>
         + crate::selection::FillOutput<R>
         + crate::output::SliceOutput,
-    Output::Item: crate::StorageLayout<
-            StorageLeaves: private::KernelValue<
-                StorageArity = <Output::Item as crate::StorageLayout>::StorageArity,
-            > + private::KernelOutputLeaves,
-        > + crate::core::allocation::ScratchStorage<R>,
+    Output::Item: KernelRow + crate::core::allocation::ScratchStorage<R>,
     Output::Slots: crate::output::PaddedOutputSlots<
             Leaves = <Output::Item as crate::StorageLayout>::StorageLeaves,
         > + crate::output::OutputSlotEnvironment<
@@ -472,6 +684,14 @@ where
 
     fn lower_output(self) -> Self::LoweredOutput {
         self
+    }
+
+    #[allow(private_bounds, private_interfaces)]
+    fn run_output_operation<Operation>(self, operation: Operation) -> Operation::Result
+    where
+        Operation: OutputOperation<R, Self::Item>,
+    {
+        operation.run(self)
     }
 }
 
@@ -564,7 +784,7 @@ impl<'a, R, Storage> MIterMut<R> for StorageSliceMut<'a, R, Storage>
 where
     R: Runtime,
     Storage: crate::RowStorage<R>,
-    Storage::Item: MutableItem<R>,
+    Storage::Item: KernelRow + crate::core::allocation::ScratchStorage<R>,
     Storage::Read: private::KernelInput<R, Item = Storage::Item>
         + private::IterLength
         + crate::read::SliceExpression,
@@ -602,6 +822,14 @@ where
 
     fn lower_output(self) -> Self::LoweredOutput {
         crate::RowStorage::slice_mut(self.storage, self.start..self.start + self.len)
+    }
+
+    #[allow(private_bounds, private_interfaces)]
+    fn run_output_operation<Operation>(self, operation: Operation) -> Operation::Result
+    where
+        Operation: OutputOperation<R, Self::Item>,
+    {
+        operation.run(self.lower_output())
     }
 }
 
@@ -674,7 +902,7 @@ where
         + crate::output::SliceOutput
         + private::KernelOutput<R>,
     <Zip<Left::LoweredOutput, Right::LoweredOutput> as crate::output::OutputExpression>::Item:
-        MutableItem<R>,
+        KernelRow + crate::core::allocation::ScratchStorage<R>,
     <Zip<Left::LoweredOutput, Right::LoweredOutput> as crate::output::LowerOutputExpression>::Slots:
         crate::output::PaddedOutputSlots<
             Leaves = <<Zip<Left::LoweredOutput, Right::LoweredOutput> as crate::output::OutputExpression>::Item as crate::StorageLayout>::StorageLeaves,
@@ -731,6 +959,14 @@ where
 
     fn lower_output(self) -> Self::LoweredOutput {
         Zip::new(self.0.lower_output(), self.1.lower_output())
+    }
+
+    #[allow(private_bounds, private_interfaces)]
+    fn run_output_operation<Operation>(self, operation: Operation) -> Operation::Result
+    where
+        Operation: OutputOperation<R, Self::Item>,
+    {
+        operation.run(self.lower_output())
     }
 }
 
@@ -1030,7 +1266,7 @@ mod tests {
 
     #[test]
     fn value_only_by_key_algorithms_accept_read_only_keys() {
-        assert_not_impl_any!(ReadOnlyValue: MItem<WgpuRuntime>);
+        assert_not_impl_any!(ReadOnlyValue: MAllocItem<WgpuRuntime>);
 
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 

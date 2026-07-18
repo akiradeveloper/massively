@@ -297,13 +297,10 @@ pub(crate) fn transform<R, Input, Output, Op>(
 where
     R: Runtime,
     Input: ReadExpression,
-    Op: UnaryOp<Input::Item>,
-    Op::Output: crate::api::iter::KernelRow,
+    Op: UnaryOp<Input::Item, Output = Output::Item>,
     Transform<Input, Op>:
-        ReadExpression<Item = Op::Output> + LowerReadExpression + StageRead<R, Env0>,
-    Output: OutputExpression<Item = <Op as UnaryOp<Input::Item>>::Output>
-        + LowerOutputExpression
-        + StageOutput<R, Env0>,
+        ReadExpression<Item = Output::Item> + LowerReadExpression + StageRead<R, Env0>,
+    Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
     Output::Slots: PaddedOutputSlots,
     Dispatch<A13, S12>: MaterializeDispatch<
             R,

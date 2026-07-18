@@ -220,16 +220,15 @@ pub trait IndexedCopyInput<R: Runtime, Indices, Output>: ReadExpression + Sized 
 impl<R, Values, Indices, Output> IndexedCopyInput<R, Indices, Output> for Values
 where
     R: Runtime,
-    Values: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
-    Values::Item: StorageLayout,
+    Values: ReadExpression<Item = Output::Item> + LowerReadExpression + StageRead<R, Env0>,
     Indices: ReadExpression<Item = usize> + LowerReadExpression + StageRead<R, Env0>,
-    <Values::Item as StorageLayout>::StorageLeaves: StorePadded12,
-    <<Values::Item as StorageLayout>::StorageLeaves as CubeType>::ExpandType: StorePadded12Expand,
-    Output: crate::output::OutputExpression<Item = Values::Item>
+    <Output::Item as StorageLayout>::StorageLeaves: StorePadded12,
+    <<Output::Item as StorageLayout>::StorageLeaves as CubeType>::ExpandType: StorePadded12Expand,
+    Output: crate::output::OutputExpression
         + crate::output::LowerOutputExpression
         + crate::output::StageOutput<R, Env0>,
     Output::Slots:
-        crate::output::PaddedOutputSlots<Leaves = <Values::Item as StorageLayout>::StorageLeaves>,
+        crate::output::PaddedOutputSlots<Leaves = <Output::Item as StorageLayout>::StorageLeaves>,
 {
     fn indexed_copy_selected(
         self,

@@ -6,7 +6,7 @@
 use cubecl::prelude::*;
 
 use crate::{
-    Error, Executor, MItem, MIter, MIterMut, MStorage, MVec,
+    Error, Executor, MAllocItem, MIter, MIterMut, MStorage, MVec,
     op::BinaryPredicateOp,
     op::ReductionOp,
     op::UnaryOp,
@@ -122,7 +122,7 @@ where
     R: Runtime,
     Expr: EdgeExpr<R> + EdgeExprImpl<R>,
     Map: UnaryOp<Expr::Item>,
-    Map::Output: MItem<R> + Copy,
+    Map::Output: MAllocItem<R> + Copy,
 {
     /// Returns one mapped item per traversed edge.
     pub fn emit(self, exec: &Executor<R>) -> Result<MVec<R, Map::Output>, Error> {
@@ -146,7 +146,7 @@ where
     R: Runtime,
     Expr: EdgeExpr<R> + EdgeExprImpl<R>,
     Map: UnaryOp<Expr::Item>,
-    Map::Output: MItem<R> + Copy,
+    Map::Output: MAllocItem<R> + Copy,
 {
     /// Maps every selected edge and reduces results independently for each input source.
     pub fn reduce_by_source<ReduceOp>(
@@ -213,7 +213,6 @@ where
         output: Output,
     ) -> Result<(), Error>
     where
-        Map::Output: crate::api::iter::ScratchAbi<R>,
         Output: MIterMut<R, Item = Map::Output>,
         ReduceOp: ReductionOp<Map::Output>,
     {
@@ -264,7 +263,7 @@ where
         Map: UnaryOp<Expr::Item, Output = u32>,
         State: MIter<R, Item = u32>,
         StateOutput: MIterMut<R, Item = u32>,
-        u32: crate::RowAlloc<R, RowStorage = crate::DeviceVec<R, u32>> + MItem<R>,
+        u32: crate::RowAlloc<R, RowStorage = crate::DeviceVec<R, u32>> + MAllocItem<R>,
     {
         let capacity = self.traversal.control.output_len as usize;
         let mut next = exec.alloc::<u32>(capacity);

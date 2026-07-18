@@ -63,19 +63,19 @@ pub(crate) use core::{
     radix, read, reduce, scan, search, segmented, selection, storage, transform, value,
 };
 
-#[doc(hidden)]
-pub use api::iter::Zipped;
 pub use api::iter::{
-    MItem, MIter, MIterMut, MStorage, MVec, RadixKey, zip2, zip3, zip4, zip5, zip6, zip7, zip8,
-    zip9, zip10, zip11, zip12,
+    MAllocItem, MIter, MIterMut, MStorage, MVec, RadixKey, zip2, zip3, zip4, zip5, zip6, zip7,
+    zip8, zip9, zip10, zip11, zip12,
 };
+#[doc(hidden)]
+pub use api::iter::{MItem, Zipped};
 #[doc(hidden)]
 pub use api::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor};
 pub use api::{Error, lazy, op, util};
 /// Common public data and operation types.
 pub mod prelude {
     pub use crate::{
-        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MItem, MIter, MIterMut, MStorage, MVec,
-        RadixKey, zip2, zip3, zip4, zip5, zip6, zip7, zip8, zip9, zip10, zip11, zip12,
+        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MAllocItem, MIter, MIterMut, MStorage,
+        MVec, RadixKey, zip2, zip3, zip4, zip5, zip6, zip7, zip8, zip9, zip10, zip11, zip12,
     };
 }

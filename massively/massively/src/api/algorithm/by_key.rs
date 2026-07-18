@@ -1,11 +1,210 @@
 #![allow(private_bounds)]
 
-use cubecl::prelude::Runtime;
+use cubecl::prelude::{CubeType, Runtime};
 
 use crate::{
-    Error, Executor, MItem, MIter, MIterMut, MStorage, MVec, RadixKey, op::BinaryPredicateOp,
+    Error, Executor, MAllocItem, MIter, MIterMut, MStorage, MVec, RadixKey, op::BinaryPredicateOp,
     op::ReductionOp,
 };
+
+struct SortByKeyOperation<'a, R: Runtime, Keys, Values, Less, ValueOutput> {
+    exec: &'a Executor<R>,
+    keys: Keys,
+    values: Values,
+    less: Less,
+    value_output: ValueOutput,
+}
+
+impl<R, KeyItem, Keys, Values, Less, ValueOutput> crate::api::iter::OutputOperation<R, KeyItem>
+    for SortByKeyOperation<'_, R, Keys, Values, Less, ValueOutput>
+where
+    R: Runtime,
+    KeyItem: crate::api::iter::SortAbi<R>,
+    Keys: MIter<R, Item = KeyItem>,
+    Values: MIter<R, Item = ValueOutput::Item>,
+    Less: BinaryPredicateOp<KeyItem>,
+    ValueOutput: MIterMut<R>,
+{
+    type Result = Result<(), Error>;
+
+    fn run<KeyLowered>(self, key_output: KeyLowered) -> Self::Result
+    where
+        KeyItem: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        KeyLowered: crate::api::iter::ConcreteOutput<R, KeyItem>,
+    {
+        let ordering = crate::ordering::sort_keys_with_control(
+            self.exec,
+            crate::api::iter::lower_fixed::<R, _>(self.keys),
+            self.less,
+            key_output,
+        )?;
+        crate::api::algorithm::indexed::gather_raw_into(
+            self.exec,
+            self.values,
+            ordering.permutation().column(),
+            self.value_output,
+        )
+    }
+}
+
+struct ByKeyScanOperation<'a, R: Runtime, Keys, Values, Equal, Item, Op> {
+    exec: &'a Executor<R>,
+    keys: Keys,
+    values: Values,
+    equal: Equal,
+    init: Option<Item>,
+    op: Op,
+}
+
+impl<R, Item, Keys, Values, Equal, Op> crate::api::iter::OutputOperation<R, Item>
+    for ByKeyScanOperation<'_, R, Keys, Values, Equal, Item, Op>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+    Keys: MIter<R>,
+    Values: MIter<R, Item = Item>,
+    Equal: BinaryPredicateOp<Keys::Item>,
+    Op: ReductionOp<Item>,
+{
+    type Result = Result<(), Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        let keys = crate::api::iter::lower_fixed::<R, _>(self.keys);
+        let values = crate::api::iter::lower_fixed::<R, _>(self.values);
+        if let Some(init) = self.init {
+            crate::core::by_key::exclusive_scan_by_key_lowered(
+                self.exec, keys, values, self.equal, init, self.op, output,
+            )
+        } else {
+            crate::core::by_key::inclusive_scan_by_key_lowered(
+                self.exec, keys, values, self.equal, self.op, output,
+            )
+        }
+    }
+}
+
+struct ReduceByKeyValueOperation<'a, R: Runtime, Keys, Values, Equal, ValueItem, Op, KeyOutput> {
+    exec: &'a Executor<R>,
+    keys: Keys,
+    values: Values,
+    equal: Equal,
+    init: ValueItem,
+    op: Op,
+    key_output: KeyOutput,
+}
+
+struct ReduceByKeyKeyOperation<'a, R: Runtime, Keys, Values, Equal, ValueItem, Op, ValueOutput> {
+    exec: &'a Executor<R>,
+    keys: Keys,
+    values: Values,
+    equal: Equal,
+    init: ValueItem,
+    op: Op,
+    value_output: ValueOutput,
+}
+
+impl<R, KeyItem, ValueItem, Keys, Values, Equal, Op, ValueOutput>
+    crate::api::iter::OutputOperation<R, KeyItem>
+    for ReduceByKeyKeyOperation<'_, R, Keys, Values, Equal, ValueItem, Op, ValueOutput>
+where
+    R: Runtime,
+    KeyItem: CubeType + Send + Sync + 'static,
+    ValueItem: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+    Keys: MIter<R, Item = KeyItem>,
+    Values: MIter<R, Item = ValueItem>,
+    Equal: BinaryPredicateOp<KeyItem>,
+    Op: ReductionOp<ValueItem>,
+    ValueOutput: crate::api::iter::ConcreteOutput<R, ValueItem>,
+{
+    type Result = Result<u32, Error>;
+
+    fn run<KeyOutput>(self, key_output: KeyOutput) -> Self::Result
+    where
+        KeyItem: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        KeyOutput: crate::api::iter::ConcreteOutput<R, KeyItem>,
+    {
+        crate::core::by_key::reduce_by_key_lowered(
+            self.exec,
+            crate::api::iter::lower_fixed::<R, _>(self.keys),
+            crate::api::iter::lower_fixed::<R, _>(self.values),
+            self.equal,
+            self.init,
+            self.op,
+            key_output,
+            self.value_output,
+        )
+    }
+}
+
+impl<R, KeyItem, ValueItem, Keys, Values, Equal, Op, KeyOutput>
+    crate::api::iter::OutputOperation<R, ValueItem>
+    for ReduceByKeyValueOperation<'_, R, Keys, Values, Equal, ValueItem, Op, KeyOutput>
+where
+    R: Runtime,
+    KeyItem: CubeType + Send + Sync + 'static,
+    ValueItem: CubeType + Send + Sync + 'static,
+    Keys: MIter<R, Item = KeyItem>,
+    Values: MIter<R, Item = ValueItem>,
+    Equal: BinaryPredicateOp<KeyItem>,
+    Op: ReductionOp<ValueItem>,
+    KeyOutput: MIterMut<R, Item = KeyItem>,
+{
+    type Result = Result<u32, Error>;
+
+    fn run<ValueOutput>(self, value_output: ValueOutput) -> Self::Result
+    where
+        ValueItem: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        ValueOutput: crate::api::iter::ConcreteOutput<R, ValueItem>,
+    {
+        self.key_output
+            .run_output_operation(ReduceByKeyKeyOperation {
+                exec: self.exec,
+                keys: self.keys,
+                values: self.values,
+                equal: self.equal,
+                init: self.init,
+                op: self.op,
+                value_output,
+            })
+    }
+}
+
+struct UniqueByKeyOperation<'a, R: Runtime, Keys, Values, Equal> {
+    exec: &'a Executor<R>,
+    keys: Keys,
+    values: Values,
+    equal: Equal,
+}
+
+impl<R, Item, Keys, Values, Equal> crate::api::iter::OutputOperation<R, Item>
+    for UniqueByKeyOperation<'_, R, Keys, Values, Equal>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+    Keys: MIter<R>,
+    Values: MIter<R, Item = Item>,
+    Equal: BinaryPredicateOp<Keys::Item>,
+{
+    type Result = Result<u32, Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        crate::core::by_key::unique_by_key(
+            self.exec,
+            crate::api::iter::lower_fixed::<R, _>(self.keys),
+            crate::api::iter::lower_fixed::<R, _>(self.values),
+            self.equal,
+            output,
+        )
+    }
+}
 
 /// Stably sorts keys and applies the same ordering to values.
 ///
@@ -50,7 +249,7 @@ where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
-    Values::Item: MItem<R>,
+    Values::Item: MAllocItem<R>,
     Less: BinaryPredicateOp<Keys::Item>,
 {
     let len = keys.len()? as usize;
@@ -62,8 +261,9 @@ where
 /// Stably radix-sorts keys in ascending order and applies the same ordering to values.
 ///
 /// Integer keys use their numeric order. Floating-point keys use the same total
-/// ordering as `f32::total_cmp` and `f64::total_cmp`. Compound keys produced by
-/// `zip2` through `zip12` are ordered lexicographically from left to right.
+/// ordering as `f32::total_cmp` and `f64::total_cmp`. Keys may contain up to
+/// three columns; compound keys produced by `zip2` or `zip3` are ordered
+/// lexicographically from left to right.
 ///
 /// # Examples
 ///
@@ -88,7 +288,7 @@ where
     Keys: MIter<R>,
     Keys::Item: RadixKey<R>,
     Values: MIter<R>,
-    Values::Item: MItem<R>,
+    Values::Item: MAllocItem<R>,
 {
     let len = keys.len()?;
     let value_output = exec.alloc::<Values::Item>(len);
@@ -108,9 +308,8 @@ where
     R: Runtime,
     Keys: MIter<R>,
     Keys::Item: RadixKey<R>,
-    Values: MIter<R>,
-    Values::Item: MItem<R>,
-    ValueOutput: MIterMut<R, Item = Values::Item>,
+    Values: MIter<R, Item = ValueOutput::Item>,
+    ValueOutput: MIterMut<R>,
 {
     let key_len = keys.len()?;
     let value_len = values.len()?;
@@ -122,11 +321,11 @@ where
     }
     let key_storage = crate::api::algorithm::transform(exec, keys, crate::op::Identity)?;
     let permutation = <Keys::Item as RadixKey<R>>::radix_permutation(exec, &key_storage, key_len)?;
-    crate::indexed::apply_permutation(
+    crate::api::algorithm::indexed::gather_raw_into(
         exec,
-        crate::api::iter::lower_fixed::<R, _>(values),
+        values,
         permutation.column(),
-        value_output.lower_output(),
+        value_output,
     )
 }
 
@@ -142,10 +341,9 @@ pub(crate) fn sort_values_by_key_into<R, Keys, Values, Less, ValueOutput>(
 where
     R: Runtime,
     Keys: MIter<R>,
-    Values: MIter<R>,
-    Values::Item: MItem<R>,
+    Values: MIter<R, Item = ValueOutput::Item>,
     Less: BinaryPredicateOp<Keys::Item>,
-    ValueOutput: MIterMut<R, Item = Values::Item>,
+    ValueOutput: MIterMut<R>,
 {
     let key_len = keys.len()?;
     let value_len = values.len()?;
@@ -160,11 +358,11 @@ where
         crate::api::iter::lower_fixed::<R, _>(keys),
         less,
     )?;
-    crate::indexed::apply_permutation(
+    crate::api::algorithm::indexed::gather_raw_into(
         exec,
-        crate::api::iter::lower_fixed::<R, _>(values),
+        values,
         permutation.column(),
-        value_output.lower_output(),
+        value_output,
     )
 }
 
@@ -182,11 +380,10 @@ where
     R: Runtime,
     Keys: MIter<R>,
     Keys::Item: crate::api::iter::SortAbi<R>,
-    Values: MIter<R>,
-    Values::Item: MItem<R>,
+    Values: MIter<R, Item = ValueOutput::Item>,
     Less: BinaryPredicateOp<Keys::Item>,
     KeyOutput: MIterMut<R, Item = Keys::Item>,
-    ValueOutput: MIterMut<R, Item = Values::Item>,
+    ValueOutput: MIterMut<R>,
 {
     let key_len = keys.len()?;
     let value_len = values.len()?;
@@ -196,16 +393,13 @@ where
             right: value_len as usize,
         });
     }
-    let keys = crate::api::iter::lower_fixed::<R, _>(keys);
-    let values = crate::api::iter::lower_fixed::<R, _>(values);
-    let ordering =
-        crate::ordering::sort_keys_with_control(exec, keys, less, key_output.lower_output())?;
-    crate::indexed::apply_permutation(
+    key_output.run_output_operation(SortByKeyOperation {
         exec,
         values,
-        ordering.permutation().column(),
-        value_output.lower_output(),
-    )
+        keys,
+        less,
+        value_output,
+    })
 }
 
 /// Computes an inclusive scan within each adjacent equal-key segment.
@@ -259,7 +453,7 @@ where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
-    Values::Item: MItem<R>,
+    Values::Item: MAllocItem<R>,
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
 {
@@ -282,21 +476,19 @@ pub(crate) fn inclusive_scan_by_key_into<R, Keys, Values, Equal, Op, Output>(
 where
     R: Runtime,
     Keys: MIter<R>,
-    Values: MIter<R>,
-    Values::Item: MItem<R>,
-    Values::Item: crate::api::iter::ScratchAbi<R>,
+    Values: MIter<R, Item = Output::Item>,
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
-    Output: MIterMut<R, Item = Values::Item>,
+    Output: MIterMut<R>,
 {
-    crate::core::by_key::inclusive_scan_by_key_lowered(
+    output.run_output_operation(ByKeyScanOperation {
         exec,
-        crate::api::iter::lower_fixed::<R, _>(keys),
-        crate::api::iter::lower_fixed::<R, _>(values),
+        keys,
+        values,
         equal,
+        init: None,
         op,
-        output.lower_output(),
-    )
+    })
 }
 
 /// Computes an exclusive scan within each adjacent equal-key segment.
@@ -352,7 +544,7 @@ where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
-    Values::Item: MItem<R>,
+    Values::Item: MAllocItem<R>,
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
 {
@@ -376,21 +568,19 @@ pub(crate) fn exclusive_scan_by_key_into<R, Keys, Values, Equal, Op, Output>(
 where
     R: Runtime,
     Keys: MIter<R>,
-    Values: MIter<R>,
-    Values::Item: MItem<R> + crate::api::iter::ScratchAbi<R>,
+    Values: MIter<R, Item = Output::Item>,
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
-    Output: MIterMut<R, Item = Values::Item>,
+    Output: MIterMut<R>,
 {
-    crate::core::by_key::exclusive_scan_by_key_lowered(
+    output.run_output_operation(ByKeyScanOperation {
         exec,
-        crate::api::iter::lower_fixed::<R, _>(keys),
-        crate::api::iter::lower_fixed::<R, _>(values),
+        keys,
+        values,
         equal,
-        init,
+        init: Some(init),
         op,
-        output.lower_output(),
-    )
+    })
 }
 
 /// Reduces each adjacent equal-key segment.
@@ -446,9 +636,9 @@ pub fn reduce_by_key<R, Keys, Values, KeyItem, ValueItem, Equal, Op>(
 where
     R: Runtime,
     Keys: MIter<R, Item = KeyItem>,
-    KeyItem: MItem<R>,
+    KeyItem: MAllocItem<R>,
     Values: MIter<R, Item = ValueItem>,
-    ValueItem: MItem<R>,
+    ValueItem: MAllocItem<R>,
     Equal: BinaryPredicateOp<KeyItem>,
     Op: ReductionOp<ValueItem>,
 {
@@ -484,25 +674,22 @@ pub(crate) fn reduce_by_key_into<R, Keys, Values, Equal, Op, KeyOutput, ValueOut
 ) -> Result<u32, Error>
 where
     R: Runtime,
-    Keys: MIter<R>,
-    Keys::Item: MItem<R>,
-    Values: MIter<R>,
-    Values::Item: MItem<R> + crate::api::iter::ScratchAbi<R>,
+    Keys: MIter<R, Item = KeyOutput::Item>,
+    Values: MIter<R, Item = ValueOutput::Item>,
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
-    KeyOutput: MIterMut<R, Item = Keys::Item>,
-    ValueOutput: MIterMut<R, Item = Values::Item>,
+    KeyOutput: MIterMut<R>,
+    ValueOutput: MIterMut<R>,
 {
-    crate::core::by_key::reduce_by_key_lowered(
+    value_output.run_output_operation(ReduceByKeyValueOperation {
         exec,
-        crate::api::iter::lower_fixed::<R, _>(keys),
-        crate::api::iter::lower_fixed::<R, _>(values),
+        keys,
+        values,
         equal,
         init,
         op,
-        key_output.lower_output(),
-        value_output.lower_output(),
-    )
+        key_output,
+    })
 }
 
 /// Keeps the first value of every adjacent equal-key run.
@@ -551,7 +738,7 @@ where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
-    Values::Item: MItem<R>,
+    Values::Item: MAllocItem<R>,
     Equal: BinaryPredicateOp<Keys::Item>,
 {
     let capacity = keys.len()? as usize;
@@ -573,16 +760,14 @@ pub(crate) fn unique_by_key_into<R, Keys, Values, Equal, ValueOutput>(
 where
     R: Runtime,
     Keys: MIter<R>,
-    Values: MIter<R>,
-    Values::Item: MItem<R>,
+    Values: MIter<R, Item = ValueOutput::Item>,
     Equal: BinaryPredicateOp<Keys::Item>,
-    ValueOutput: MIterMut<R, Item = Values::Item>,
+    ValueOutput: MIterMut<R>,
 {
-    crate::core::by_key::unique_by_key(
+    value_output.run_output_operation(UniqueByKeyOperation {
         exec,
-        crate::api::iter::lower_fixed::<R, _>(keys),
-        crate::api::iter::lower_fixed::<R, _>(values),
+        keys,
+        values,
         equal,
-        value_output.lower_output(),
-    )
+    })
 }

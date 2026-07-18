@@ -1,6 +1,130 @@
-use cubecl::prelude::Runtime;
+use cubecl::prelude::{CubeType, Runtime};
 
-use crate::{Error, Executor, MItem, MIter, MIterMut, MStorage, MVec};
+use crate::{Error, Executor, MAllocItem, MIter, MIterMut, MStorage, MVec};
+
+struct GatherOperation<'a, R: Runtime, Values, Indices> {
+    exec: &'a Executor<R>,
+    values: Values,
+    indices: Indices,
+}
+
+impl<R, Item, Values, Indices> crate::api::iter::OutputOperation<R, Item>
+    for GatherOperation<'_, R, Values, Indices>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+    Values: MIter<R, Item = Item>,
+    Indices: MIter<R, Item = usize>,
+{
+    type Result = Result<(), Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        crate::indexed::gather_direct(
+            self.exec,
+            crate::api::iter::lower::<R, _>(self.values),
+            crate::api::iter::lower::<R, _>(self.indices),
+            output,
+        )
+    }
+}
+
+struct GatherWhereOperation<'a, R: Runtime, Values, Indices, Stencil> {
+    exec: &'a Executor<R>,
+    values: Values,
+    indices: Indices,
+    stencil: Stencil,
+}
+
+struct ApplyPermutationOperation<'a, R: Runtime, Input> {
+    exec: &'a Executor<R>,
+    input: Input,
+    indices: crate::Column<u32>,
+}
+
+impl<R, Item, Input> crate::api::iter::OutputOperation<R, Item>
+    for ApplyPermutationOperation<'_, R, Input>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+    Input: crate::core::facade::KernelInput<R, Item = Item>,
+{
+    type Result = Result<(), Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        crate::indexed::apply_permutation(self.exec, self.input, self.indices, output)
+    }
+}
+
+pub(crate) fn apply_permutation_into<R, Input, Output>(
+    exec: &Executor<R>,
+    input: Input,
+    indices: crate::Column<u32>,
+    output: Output,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Input: crate::core::facade::KernelInput<R, Item = Output::Item>,
+    Output: MIterMut<R>,
+{
+    output.run_output_operation(ApplyPermutationOperation {
+        exec,
+        input,
+        indices,
+    })
+}
+
+impl<R, Item, Values, Indices, Stencil> crate::api::iter::OutputOperation<R, Item>
+    for GatherWhereOperation<'_, R, Values, Indices, Stencil>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+    Values: MIter<R, Item = Item>,
+    Indices: MIter<R, Item = usize>,
+    Stencil: MIter<R, Item = bool>,
+{
+    type Result = Result<(), Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        let control = crate::selection::FlagInput::selected_control(
+            crate::api::iter::lower::<R, _>(self.stencil),
+            self.exec,
+        )?;
+        if control.count() == 0 {
+            return Ok(());
+        }
+
+        let scratch = <Item as crate::allocation::ScratchStorage<R>>::alloc_scratch(
+            self.exec,
+            control.count() as usize,
+        );
+        crate::indexed::IndexedCopyInput::indexed_copy_selected(
+            crate::api::iter::lower::<R, _>(self.values),
+            self.exec,
+            crate::api::iter::lower::<R, _>(self.indices),
+            Some(control.indices()),
+            true,
+            crate::RowStorage::write(&scratch),
+        )?;
+        crate::core::scatter::scatter(
+            self.exec,
+            crate::RowStorage::read(&scratch),
+            crate::Transform::new(control.indices().column(), crate::op::U32ToUsize),
+            output,
+        )
+    }
+}
 
 /// Gathers `values[indices[i]]` into owned device storage.
 ///
@@ -26,7 +150,7 @@ pub fn gather<R, Values, Item, Indices>(
 where
     R: Runtime,
     Values: MIter<R, Item = Item>,
-    Item: MItem<R>,
+    Item: MAllocItem<R>,
     Indices: MIter<R, Item = usize>,
 {
     let len = indices.len()? as usize;
@@ -45,17 +169,15 @@ pub(crate) fn gather_into<R, Values, Indices, Output>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Values: MIter<R>,
-    Values::Item: MItem<R>,
+    Values: MIter<R, Item = Output::Item>,
     Indices: MIter<R, Item = usize>,
-    Output: MIterMut<R, Item = Values::Item>,
+    Output: MIterMut<R>,
 {
-    crate::indexed::gather_direct(
+    output.run_output_operation(GatherOperation {
         exec,
-        crate::api::iter::lower::<R, _>(values),
-        crate::api::iter::lower::<R, _>(indices),
-        output.lower_output(),
-    )
+        values,
+        indices,
+    })
 }
 
 /// Gathers from stored `u32` indices after converting them at the read boundary.
@@ -67,17 +189,19 @@ pub(crate) fn gather_raw_into<R, Values, Indices, Output>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Values: MIter<R>,
-    Values::Item: MItem<R>,
+    Values: MIter<R, Item = Output::Item>,
     Indices: MIter<R, Item = u32>,
-    Output: MIterMut<R, Item = Values::Item>,
+    Output: MIterMut<R>,
 {
-    crate::indexed::gather_u32(
-        exec,
-        crate::api::iter::lower::<R, _>(values),
+    let indices = crate::Transform::new(
         crate::api::iter::lower::<R, _>(indices),
-        output.lower_output(),
-    )
+        crate::op::U32ToUsize,
+    );
+    output.run_output_operation(GatherOperation {
+        exec,
+        values,
+        indices,
+    })
 }
 
 /// Gathers selected rows while preserving other output rows.
@@ -122,11 +246,10 @@ pub fn gather_where<R, Values, Indices, Stencil, Output>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Values: MIter<R>,
-    Values::Item: MItem<R>,
+    Values: MIter<R, Item = Output::Item>,
     Indices: MIter<R, Item = usize>,
     Stencil: MIter<R, Item = bool>,
-    Output: MIterMut<R, Item = Values::Item>,
+    Output: MIterMut<R>,
 {
     let indices_len = indices.len()?;
     let stencil_len = stencil.len()?;
@@ -144,32 +267,12 @@ where
         });
     }
 
-    let control = crate::selection::FlagInput::selected_control(
-        crate::api::iter::lower::<R, _>(stencil),
+    output.run_output_operation(GatherWhereOperation {
         exec,
-    )?;
-    if control.count() == 0 {
-        return Ok(());
-    }
-
-    let scratch = <Output::Item as crate::allocation::ScratchStorage<R>>::alloc_scratch(
-        exec,
-        control.count() as usize,
-    );
-    crate::indexed::IndexedCopyInput::indexed_copy_selected(
-        crate::api::iter::lower::<R, _>(values),
-        exec,
-        crate::api::iter::lower::<R, _>(indices),
-        Some(control.indices()),
-        true,
-        crate::RowStorage::write(&scratch),
-    )?;
-    crate::core::scatter::scatter(
-        exec,
-        crate::RowStorage::read(&scratch),
-        crate::Transform::new(control.indices().column(), crate::op::U32ToUsize),
-        output.lower_output(),
-    )
+        values,
+        indices,
+        stencil,
+    })
 }
 
 /// Reverses values into owned device storage.
@@ -190,7 +293,7 @@ pub fn reverse<R, Values, Item>(exec: &Executor<R>, values: Values) -> Result<MV
 where
     R: Runtime,
     Values: MIter<R, Item = Item>,
-    Item: MItem<R>,
+    Item: MAllocItem<R>,
 {
     let len = values.len()? as usize;
     let output = exec.alloc::<Item>(len);
@@ -207,17 +310,16 @@ pub(crate) fn reverse_into<R, Values, Output>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Values: MIter<R>,
-    Values::Item: MItem<R>,
-    Output: MIterMut<R, Item = Values::Item>,
+    Values: MIter<R, Item = Output::Item>,
+    Output: MIterMut<R>,
 {
     let len = values.len()? as usize;
-    crate::indexed::gather_u32(
+    let indices = crate::Transform::new(crate::ReverseCounting::new(len), crate::op::U32ToUsize);
+    output.run_output_operation(GatherOperation {
         exec,
-        crate::api::iter::lower_fixed::<R, _>(values),
-        crate::ReverseCounting::new(len),
-        output.lower_output(),
-    )
+        values,
+        indices,
+    })
 }
 
 #[cfg(test)]

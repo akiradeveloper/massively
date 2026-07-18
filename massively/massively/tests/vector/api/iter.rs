@@ -1,15 +1,71 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
-    Executor, MIter, MIterMut, MStorage, lazy, op::Identity, op::UnaryOp, vector::gather,
-    vector::transform, zip2, zip3, zip4, zip5, zip6, zip7, zip8, zip9, zip10, zip11, zip12,
+    Executor, MAllocItem, MIter, MIterMut, MStorage, MVec, lazy, op::Identity, op::UnaryOp,
+    vector::gather, vector::transform, zip2, zip3, zip4, zip5, zip6, zip7, zip8, zip9, zip10,
+    zip11, zip12,
 };
+
+fn allocate_for_output<R, Output>(exec: &Executor<R>, output: &Output) -> MVec<R, Output::Item>
+where
+    R: Runtime,
+    Output: MIterMut<R>,
+    Output::Item: MAllocItem<R>,
+{
+    exec.alloc::<Output::Item>(MIterMut::len(output).unwrap())
+}
+
+fn transform_where_into<R, Input, Stencil, Output, Op>(
+    exec: &Executor<R>,
+    input: Input,
+    op: Op,
+    stencil: Stencil,
+    output: Output,
+) -> Result<(), massively::Error>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    Stencil: MIter<R, Item = bool>,
+    Output: MIterMut<R>,
+    Op: UnaryOp<Input::Item, Output = Output::Item>,
+{
+    massively::vector::transform_where(exec, input, op, stencil, output)
+}
 
 struct AddThree;
 struct IdentityTriple;
 struct SumFour;
 struct AddPair;
 struct EncodeBoolIndex;
+
+#[test]
+fn custom_functions_can_request_owned_allocation() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let first = exec.to_device(&[0_u32; 3]);
+    let second = exec.to_device(&[0_u32; 3]);
+    let output = zip2(first.slice_mut(..), second.slice_mut(..));
+
+    let owned = allocate_for_output(&exec, &output);
+    assert_eq!(MStorage::len(&owned).unwrap(), 3);
+}
+
+#[test]
+fn custom_preallocated_functions_do_not_need_allocation_bound() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let input = exec.to_device(&[1_u32, 2, 3]);
+    let output = exec.to_device(&[0_u32; 3]);
+
+    transform_where_into(
+        &exec,
+        input.slice(..),
+        Identity,
+        lazy::constant(true).take(3),
+        output.slice_mut(..),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 3]);
+}
 
 #[cubecl::cube]
 impl UnaryOp<(u32, u32, u32)> for AddThree {

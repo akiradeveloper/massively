@@ -116,7 +116,12 @@ where
         crate::api::iter::lower_fixed::<R, _>(values),
         less,
     )?;
-    crate::transform::materialize(exec, bounds.column(), output.lower_output())
+    crate::api::algorithm::transform::transform_into(
+        exec,
+        bounds.column(),
+        crate::op::Identity,
+        output,
+    )
 }
 
 /// Finds the upper bound of each value.
@@ -186,7 +191,12 @@ where
         crate::api::iter::lower_fixed::<R, _>(values),
         less,
     )?;
-    crate::transform::materialize(exec, bounds.column(), output.lower_output())
+    crate::api::algorithm::transform::transform_into(
+        exec,
+        bounds.column(),
+        crate::op::Identity,
+        output,
+    )
 }
 
 /// Returns whether two ranges contain equal items.

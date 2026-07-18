@@ -4,7 +4,7 @@
 
 use std::{fmt::Debug, marker::PhantomData, sync::Arc};
 
-use crate::{Error, Result, protocol::EncodedExpr};
+use crate::{Error, Result};
 
 /// One traversed CSR edge and its public structural identifiers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -12,18 +12,6 @@ pub struct EdgeContext {
     pub source: u32,
     pub destination: u32,
     pub edge: u32,
-}
-
-/// A committed Lean-generated regression case.
-#[derive(Clone, Copy, Debug)]
-pub struct OracleCase {
-    pub name: &'static str,
-    pub offsets: &'static [u32],
-    pub destinations: &'static [u32],
-    pub frontier: &'static [u32],
-    pub expected_edges: &'static [EdgeContext],
-    pub expected_source_counts: &'static [u32],
-    pub expected_destination_counts: &'static [u32],
 }
 
 /// A host-owned compressed sparse row topology.
@@ -113,6 +101,50 @@ enum ScalarNode {
     Add(Box<ScalarNode>, Box<ScalarNode>),
 }
 
+impl ScalarNode {
+    fn validate(&self, vertices: usize, edges: usize) -> Result<()> {
+        match self {
+            Self::Source(values) | Self::Destination(values) if values.len() != vertices => {
+                Err(Error::InvalidInput(format!(
+                    "oracle vertex column length {} does not equal vertex count {vertices}",
+                    values.len()
+                )))
+            }
+            Self::Edge(values) if values.len() != edges => Err(Error::InvalidInput(format!(
+                "oracle edge column length {} does not equal edge count {edges}",
+                values.len()
+            ))),
+            Self::Add(left, right) => {
+                left.validate(vertices, edges)?;
+                right.validate(vertices, edges)
+            }
+            Self::SourceId
+            | Self::DestinationId
+            | Self::EdgeId
+            | Self::Source(_)
+            | Self::Destination(_)
+            | Self::Edge(_)
+            | Self::Constant(_) => Ok(()),
+        }
+    }
+
+    fn evaluate(&self, context: EdgeContext) -> Result<u32> {
+        match self {
+            Self::SourceId => Ok(context.source),
+            Self::DestinationId => Ok(context.destination),
+            Self::EdgeId => Ok(context.edge),
+            Self::Source(values) => Ok(values[context.source as usize]),
+            Self::Destination(values) => Ok(values[context.destination as usize]),
+            Self::Edge(values) => Ok(values[context.edge as usize]),
+            Self::Constant(value) => Ok(*value),
+            Self::Add(left, right) => left
+                .evaluate(context)?
+                .checked_add(right.evaluate(context)?)
+                .ok_or(Error::ArithmeticOverflow),
+        }
+    }
+}
+
 /// A scalar edge-context expression.
 #[derive(Clone, Debug)]
 pub struct ScalarExpr(ScalarNode);
@@ -184,20 +216,20 @@ where
 pub trait FlatLeaves {
     type Item: Clone + Debug + PartialEq + Eq;
 
-    fn assemble(columns: &[Vec<u32>]) -> Result<Vec<Self::Item>>;
+    fn assemble(columns: Vec<Vec<u32>>) -> Result<Vec<Self::Item>>;
 }
 
 impl FlatLeaves for Last<u32> {
     type Item = u32;
 
-    fn assemble(columns: &[Vec<u32>]) -> Result<Vec<Self::Item>> {
-        let [column] = columns else {
-            return Err(Error::Protocol(format!(
-                "scalar result expected one column, received {}",
-                columns.len()
-            )));
-        };
-        Ok(column.clone())
+    fn assemble(columns: Vec<Vec<u32>>) -> Result<Vec<Self::Item>> {
+        let received = columns.len();
+        let [column]: [Vec<u32>; 1] = columns.try_into().map_err(|_| {
+            Error::Internal(format!(
+                "scalar result expected one column, received {received}"
+            ))
+        })?;
+        Ok(column)
     }
 }
 
@@ -212,17 +244,17 @@ macro_rules! impl_flat_leaves {
         impl FlatLeaves for $leaves {
             type Item = (u32, $(u32_for!($column),)+);
 
-            fn assemble(columns: &[Vec<u32>]) -> Result<Vec<Self::Item>> {
-                let [$first, $( $column, )+] = columns else {
-                    return Err(Error::Protocol(format!(
-                        "product result expected {} columns, received {}",
-                        1usize $(+ { let _ = stringify!($column); 1usize })+,
-                        columns.len()
-                    )));
-                };
+            fn assemble(columns: Vec<Vec<u32>>) -> Result<Vec<Self::Item>> {
+                let expected = 1usize $(+ { let _ = stringify!($column); 1usize })+;
+                let received = columns.len();
+                let [$first, $( $column, )+] = columns.try_into().map_err(|_| {
+                    Error::Internal(format!(
+                        "product result expected {expected} columns, received {received}"
+                    ))
+                })?;
                 let len = $first.len();
                 if $( $column.len() != len )||+ {
-                    return Err(Error::Protocol(
+                    return Err(Error::Internal(
                         "product result columns have different lengths".into(),
                     ));
                 }
@@ -258,8 +290,8 @@ impl_flat_leaves!(Leaves10 => (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9));
 impl_flat_leaves!(Leaves11 => (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10));
 impl_flat_leaves!(Leaves12 => (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11));
 
-/// A typed oracle expression whose scalar leaves can be evaluated by Lean and
-/// reassembled without an arity-specific implementation.
+/// A typed CPU-oracle expression whose scalar leaves are evaluated together
+/// and reassembled without terminal-by-arity implementations.
 pub trait Expression: private::Sealed + Clone + Debug {
     type Item: Clone + Debug + PartialEq + Eq;
 }
@@ -268,9 +300,10 @@ pub trait Expression: private::Sealed + Clone + Debug {
 pub trait ExpressionImpl: Expression {
     type Leaves: FlatLeaves<Item = Self::Item>;
 
-    fn encode_leaves(&self, output: &mut Vec<EncodedExpr>);
     fn leaf_count(&self) -> usize;
-    fn assemble(&self, columns: &[Vec<u32>]) -> Result<Vec<Self::Item>>;
+    fn validate(&self, vertices: usize, edges: usize) -> Result<()>;
+    fn evaluate(&self, context: EdgeContext, output: &mut [u32]) -> Result<()>;
+    fn assemble(&self, columns: Vec<Vec<u32>>) -> Result<Vec<Self::Item>>;
 }
 
 impl private::Sealed for ScalarExpr {}
@@ -282,15 +315,26 @@ impl Expression for ScalarExpr {
 impl ExpressionImpl for ScalarExpr {
     type Leaves = Last<u32>;
 
-    fn encode_leaves(&self, output: &mut Vec<EncodedExpr>) {
-        output.push(EncodedExpr::from_node(&self.0));
-    }
-
     fn leaf_count(&self) -> usize {
         1
     }
 
-    fn assemble(&self, columns: &[Vec<u32>]) -> Result<Vec<Self::Item>> {
+    fn validate(&self, vertices: usize, edges: usize) -> Result<()> {
+        self.0.validate(vertices, edges)
+    }
+
+    fn evaluate(&self, context: EdgeContext, output: &mut [u32]) -> Result<()> {
+        let [value] = output else {
+            return Err(Error::Internal(format!(
+                "scalar expression expected one output leaf, received {}",
+                output.len()
+            )));
+        };
+        *value = self.0.evaluate(context)?;
+        Ok(())
+    }
+
+    fn assemble(&self, columns: Vec<Vec<u32>>) -> Result<Vec<Self::Item>> {
         <Self::Leaves as FlatLeaves>::assemble(columns)
     }
 }
@@ -322,18 +366,32 @@ where
 {
     type Leaves = <Left::Leaves as Concat<Right::Leaves>>::Output;
 
-    fn encode_leaves(&self, output: &mut Vec<EncodedExpr>) {
-        self.left.encode_leaves(output);
-        self.right.encode_leaves(output);
-    }
-
     fn leaf_count(&self) -> usize {
         self.left.leaf_count() + self.right.leaf_count()
     }
 
-    fn assemble(&self, columns: &[Vec<u32>]) -> Result<Vec<Self::Item>> {
+    fn validate(&self, vertices: usize, edges: usize) -> Result<()> {
+        self.left.validate(vertices, edges)?;
+        self.right.validate(vertices, edges)
+    }
+
+    fn evaluate(&self, context: EdgeContext, output: &mut [u32]) -> Result<()> {
+        let left_count = self.left.leaf_count();
+        if output.len() != self.leaf_count() {
+            return Err(Error::Internal(format!(
+                "product expression expected {} output leaves, received {}",
+                self.leaf_count(),
+                output.len()
+            )));
+        }
+        let (left, right) = output.split_at_mut(left_count);
+        self.left.evaluate(context, left)?;
+        self.right.evaluate(context, right)
+    }
+
+    fn assemble(&self, columns: Vec<Vec<u32>>) -> Result<Vec<Self::Item>> {
         if columns.len() != self.leaf_count() {
-            return Err(Error::Protocol(format!(
+            return Err(Error::Internal(format!(
                 "product result expected {} columns, received {}",
                 self.leaf_count(),
                 columns.len()
@@ -533,50 +591,6 @@ fn reduction_query(
     })
 }
 
-impl EncodedExpr {
-    fn from_node(node: &ScalarNode) -> Self {
-        let mut encoded = Self::default();
-        encode_node(node, &mut encoded);
-        encoded
-    }
-}
-
-fn encode_node(node: &ScalarNode, encoded: &mut EncodedExpr) {
-    match node {
-        ScalarNode::SourceId => encoded.tokens.push("sid".into()),
-        ScalarNode::DestinationId => encoded.tokens.push("did".into()),
-        ScalarNode::EdgeId => encoded.tokens.push("eid".into()),
-        ScalarNode::Source(values) => {
-            let column = register_column(&mut encoded.vertex_columns, values);
-            encoded.tokens.push(format!("src{column}"));
-        }
-        ScalarNode::Destination(values) => {
-            let column = register_column(&mut encoded.vertex_columns, values);
-            encoded.tokens.push(format!("dst{column}"));
-        }
-        ScalarNode::Edge(values) => {
-            let column = register_column(&mut encoded.edge_columns, values);
-            encoded.tokens.push(format!("edge{column}"));
-        }
-        ScalarNode::Constant(value) => encoded.tokens.push(format!("c{value}")),
-        ScalarNode::Add(left, right) => {
-            encoded.tokens.push("add".into());
-            encode_node(left, encoded);
-            encode_node(right, encoded);
-        }
-    }
-}
-
-fn register_column(columns: &mut Vec<Arc<[u32]>>, values: &Arc<[u32]>) -> usize {
-    if let Some(index) = columns.iter().position(|column| column == values) {
-        index
-    } else {
-        let index = columns.len();
-        columns.push(values.clone());
-        index
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -592,7 +606,7 @@ mod tests {
     fn nested_products_reassemble_as_flat_rows() {
         let expression = zip2(zip2(source_id(), destination_id()), edge_id());
         let rows = expression
-            .assemble(&[vec![0, 1], vec![1, 0], vec![4, 7]])
+            .assemble(vec![vec![0, 1], vec![1, 0], vec![4, 7]])
             .unwrap();
         assert_eq!(rows, vec![(0, 1, 4), (1, 0, 7)]);
     }

@@ -3,7 +3,7 @@ image_name := "massively-traversal-algebra:lean-4.32.0"
 default:
     @just --list
 
-# Build the reproducible LaTeX/Lean/code-generation environment.
+# Build the reproducible LaTeX/Lean proof environment.
 image:
     docker build --tag {{ image_name }} .
 
@@ -16,17 +16,8 @@ paper: image
 proof: image
     docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/workspace" -w /workspace/proof {{ image_name }} bash -c 'lake build'
 
-# Evaluate the Lean semantics and regenerate the Rust oracle fixtures in Docker.
-generate: proof
-    docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/workspace" -w /workspace/proof {{ image_name }} bash -c 'lake exe codegen ../oracle/src/generated.rs'
-
-# Regenerate fixtures and fail if the committed output was stale.
-check-generated: generate
-    git diff --exit-code -- oracle/src/generated.rs
-
-# Run property-based Massively/Lean comparison on the host GPU stack.
-# `proof` compiles the Lean oracle executable in Docker before host execution.
-oracle: proof
+# Compare the independent sequential CPU oracle with Massively on the host GPU.
+oracle:
     cargo nextest run -p traversal-algebra-oracle --test conformance
 
 # Check complete Traversal Algebra graph algorithms against their CPU oracles.
@@ -38,4 +29,4 @@ bench-graph:
     cargo bench -p graph-algorithms --bench algorithms
 
 # Check the complete research artifact.
-check: paper proof check-generated oracle algorithms
+check: paper proof oracle algorithms

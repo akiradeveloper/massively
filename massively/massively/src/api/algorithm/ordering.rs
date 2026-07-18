@@ -1,8 +1,38 @@
 #![allow(private_bounds)]
 
-use cubecl::prelude::Runtime;
+use cubecl::prelude::{CubeType, Runtime};
 
-use crate::{Error, Executor, MItem, MIter, MIterMut, MStorage, MVec, op::BinaryPredicateOp};
+use crate::{Error, Executor, MAllocItem, MIter, MIterMut, MStorage, MVec, op::BinaryPredicateOp};
+
+struct UniqueOperation<'a, R: Runtime, Input, Equal> {
+    exec: &'a Executor<R>,
+    input: Input,
+    equal: Equal,
+}
+
+impl<R, Item, Input, Equal> crate::api::iter::OutputOperation<R, Item>
+    for UniqueOperation<'_, R, Input, Equal>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+    Input: MIter<R, Item = Item>,
+    Equal: BinaryPredicateOp<Item>,
+{
+    type Result = Result<u32, Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        crate::ordering::unique(
+            self.exec,
+            crate::api::iter::lower_fixed::<R, _>(self.input),
+            self.equal,
+            output,
+        )
+    }
+}
 
 /// Stably sorts an input and returns owned device storage.
 ///
@@ -36,7 +66,7 @@ pub fn sort<R, Input, Item, Less>(
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
-    Item: MItem<R>,
+    Item: MAllocItem<R>,
     Less: BinaryPredicateOp<Item>,
 {
     let len = input.len()? as usize;
@@ -55,13 +85,14 @@ pub(crate) fn sort_into<R, Input, Output, Less>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: crate::api::iter::SortAbi<R>,
-    Output: MIterMut<R, Item = Input::Item>,
+    Input: MIter<R, Item = Output::Item>,
+    Output: MIterMut<R>,
+    Output::Item: MAllocItem<R>,
     Less: BinaryPredicateOp<Input::Item>,
 {
-    let input = crate::api::iter::lower_fixed::<R, _>(input);
-    crate::ordering::sort(exec, input, less, output.lower_output())
+    <<Output::Item as MAllocItem<R>>::Dispatch as crate::api::iter::ItemDispatch<R>>::sort_into(
+        exec, input, less, output,
+    )
 }
 
 /// Finds the first accepted adjacent pair.
@@ -134,7 +165,7 @@ pub fn unique<R, Input, Item, Equal>(
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
-    Item: MItem<R>,
+    Item: MAllocItem<R>,
     Equal: BinaryPredicateOp<Item>,
 {
     let capacity = input.len()? as usize;
@@ -156,17 +187,11 @@ pub(crate) fn unique_into<R, Input, Output, Equal>(
 ) -> Result<u32, Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MItem<R>,
-    Output: MIterMut<R, Item = Input::Item>,
+    Input: MIter<R, Item = Output::Item>,
+    Output: MIterMut<R>,
     Equal: BinaryPredicateOp<Input::Item>,
 {
-    crate::ordering::unique(
-        exec,
-        crate::api::iter::lower_fixed::<R, _>(input),
-        equal,
-        output.lower_output(),
-    )
+    output.run_output_operation(UniqueOperation { exec, input, equal })
 }
 
 /// Returns the first index at which the input ceases to be sorted.

@@ -21,7 +21,7 @@ use crate::{
     },
 };
 
-type FixedReduceStorage<R, Item> = <Item as crate::RowAlloc<R>>::RowStorage;
+type FixedReduceStorage<R, Item> = <Item as crate::core::allocation::ScratchStorage<R>>::Storage;
 type FixedReduceRead<R, Item> =
     crate::read::FixedRead<<FixedReduceStorage<R, Item> as crate::RowStorage<R>>::Read>;
 type FixedReduceOutput<R, Item> = <FixedReduceStorage<R, Item> as crate::RowStorage<R>>::Write;
@@ -1527,7 +1527,7 @@ fn finish_fixed_reduce<R, Item, Op>(
 ) -> Result<Item, Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R> + crate::RowAlloc<R>,
+    Item: crate::core::allocation::ScratchStorage<R>,
     Op: ReductionOp<Item>,
     Dispatch<A13, S12>: ReducePassDispatch<
             R,
@@ -1543,7 +1543,7 @@ where
 {
     while current_len > 1 {
         let next_len = pass_block_count(current_len);
-        let next = exec.alloc_row::<Item>(next_len);
+        let next = Item::alloc_scratch(exec, next_len);
         let input = FixedReduceRead::<R, Item>::new(current.read());
         let output = next.write();
         reduce_pass::<R, _, _, Item, Op>(exec, &input, &output)?;
@@ -1551,12 +1551,12 @@ where
         current_len = next_len;
     }
 
-    let initial = crate::allocation::singleton(exec, init)?;
-    let combined = exec.alloc_row::<Item>(2);
+    let initial = crate::allocation::scratch_singleton(exec, init)?;
+    let combined = Item::alloc_scratch(exec, 2);
     initial.copy_storage(exec, combined.slice_mut(..1))?;
     current.copy_storage(exec, combined.slice_mut(1..))?;
 
-    let result = exec.alloc_row::<Item>(1);
+    let result = Item::alloc_scratch(exec, 1);
     let input = FixedReduceRead::<R, Item>::new(combined.read());
     let output = result.write();
     reduce_pass::<R, _, _, Item, Op>(exec, &input, &output)?;
@@ -1568,7 +1568,7 @@ impl<R, Input, Item, Op, Slots> ReduceDispatch<R, Input, Item, Op, Slots> for Di
 where
     R: Runtime,
     Input: ReadExpression<Item = Item> + LowerReadExpression + StageRead<R, Env0>,
-    Item: crate::api::iter::MItem<R> + crate::RowAlloc<R>,
+    Item: crate::core::allocation::ScratchStorage<R>,
     Op: ReductionOp<Item>,
     Dispatch<A13, S12>: ReducePassDispatch<
             R,
@@ -1598,7 +1598,7 @@ where
             return Ok(init);
         }
         let blocks = pass_block_count(len);
-        let partials = exec.alloc_row::<Item>(blocks);
+        let partials = Item::alloc_scratch(exec, blocks);
         let output = partials.write();
         <Dispatch<A13, S12> as ReducePassDispatch<
             R,

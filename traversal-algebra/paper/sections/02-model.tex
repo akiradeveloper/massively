@@ -41,9 +41,9 @@ row order.  For $F=[v_0,\ldots,v_{k-1}]$, define
 where $+\!+$ denotes sequence concatenation.
 \end{definition}
 
-The regression-oracle model uses natural-number identifiers and assigns no
-meaning to an invalid graph or to a frontier identifier outside $V$; its Lean
-functions remain total for convenient execution.  The completeness model uses
-the type \texttt{Fin $n$} for every vertex reference instead.  Valid sources,
+The introductory row-sequence model uses natural-number identifiers and assigns
+no meaning to an invalid graph or to a frontier identifier outside $V$; its
+Lean functions remain total.  The completeness model uses the type
+\texttt{Fin $n$} for every vertex reference instead.  Valid sources,
 destinations, and frontier entries are therefore enforced by construction in
 the simulation theorems rather than carried as side conditions.

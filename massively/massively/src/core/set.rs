@@ -101,18 +101,18 @@ where
 /// `mode` is 0 for union, 1 for intersection, and 2 for left difference.
 pub(crate) fn set_storage<R, Item, Less, Output>(
     exec: &Executor<R>,
-    left: &<Item as crate::RowAlloc<R>>::RowStorage,
-    right: &<Item as crate::RowAlloc<R>>::RowStorage,
+    left: &<Item as crate::allocation::ScratchStorage<R>>::Storage,
+    right: &<Item as crate::allocation::ScratchStorage<R>>::Storage,
     _less: Less,
     output: Output,
     mode: u8,
 ) -> Result<u32, Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R> + crate::RowAlloc<R>,
+    Item: crate::allocation::ScratchStorage<R>,
     Less: crate::op::BinaryPredicateOp<Item>,
     Item::StorageLeaves: crate::core::facade::KernelValue,
-    <Item as crate::RowAlloc<R>>::RowStorage: crate::RowStorage<R>,
+    <Item as crate::allocation::ScratchStorage<R>>::Storage: crate::RowStorage<R>,
     Output: crate::core::facade::KernelOutput<R>
         + crate::output::OutputExpression<Item = Item>
         + SliceOutput,

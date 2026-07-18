@@ -1,14 +1,6 @@
 name = "traversal-algebra"
 version = "0.1.0"
-defaultTargets = ["TraversalAlgebra", "codegen", "oracle"]
+defaultTargets = ["TraversalAlgebra"]
 
 [[lean_lib]]
 name = "TraversalAlgebra"
-
-[[lean_exe]]
-name = "codegen"
-root = "Codegen"
-
-[[lean_exe]]
-name = "oracle"
-root = "OracleCli"

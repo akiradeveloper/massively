@@ -13,8 +13,8 @@ frontier or resolve concurrent updates can remain implementation choices. This
 separation is intended to make graph programs easier to compose, reason about,
 and optimize as a family.
 
-This directory provides mathematical evidence for that design and tests its
-connection to the Rust/GPU implementation.
+This directory provides mathematical evidence for that design and separately
+tests the Rust/GPU implementation against an independent CPU reference.
 
 The latest prebuilt paper is available as
 [`paper/paper.pdf`](paper/paper.pdf). Its title page records the UTC build date,
@@ -32,8 +32,8 @@ so it can be read directly without installing LaTeX or running Docker.
 - Lean refines terminal execution into a backend-neutral CubeCL hierarchy and
   proves exact symbolic work, span, traffic, synchronization, launch,
   allocation, and materialization formulas.
-- A Lean-compiled oracle and Rust `proptest` compare the mathematical model
-  with `massively::graph` over generated graphs on the host GPU stack.
+- An independent sequential Rust oracle and `proptest` compare expected TA
+  behavior with `massively::graph` over generated graphs on the host GPU stack.
 
 The proof is universal inside its mathematical model. The implementation
 comparison is deliberately separate: it is strong automated test evidence,
@@ -88,7 +88,7 @@ itself, a performance comparison with Gunrock.
 | --- | --- | --- |
 | [`paper/`](paper/) | Explains the theory and arguments for human review. | Research presentation |
 | [`proof/`](proof/) | Defines the languages and machine-checks the theorems in Lean 4. | Universal proof within the stated model |
-| [`oracle/`](oracle/) | Generates bounded graphs, asks compiled Lean for expected results, and compares them with Massively. | Differential and property-test evidence for the implementation |
+| [`oracle/`](oracle/) | Evaluates generated graphs with an independent sequential CPU implementation and compares the results with Massively. | Differential and property-test evidence for the implementation |
 | [`graph-algorithms/`](graph-algorithms/) | Implements complete algorithms with CPU references and GPU benchmarks. | Practical coverage evidence for developers |
 
 Most readers only need this README. The paper is for readers who want the
@@ -117,39 +117,37 @@ Run these commands at the repository root:
 ```text
 just ta::paper             rebuild paper/paper.pdf in Docker
 just ta::proof             check every Lean definition and theorem in Docker
-just ta::generate          evaluate the Lean model and generate Rust fixtures
-just ta::check-generated   verify that committed fixtures are current
-just ta::oracle            compare Lean with Massively on the host GPU
+just ta::oracle            compare the CPU oracle with Massively on the host GPU
 just ta::algorithms        compare complete algorithms with CPU references
 just ta::bench-graph       benchmark complete graph algorithms
 just ta::check             run the complete artifact pipeline
 ```
 
 The same recipes work without the `ta::` prefix from this directory. Docker
-builds the paper, Lean proofs, native oracle, and generated Rust fixtures. The
-comparison with Massively runs on the host so CubeCL can use its GPU stack.
+builds the paper and checks the Lean proofs. The independent CPU/GPU comparison
+runs on the host so CubeCL can use its GPU stack; it does not execute Lean.
 
 By default, `proptest` checks 256 mixed shrinkable and seeded graph-family
 cases. A separate semantic campaign exercises vertex/edge pulls, recursive
 products, maps, and all three observation terminals, and a deterministic
-1,025-vertex case provides scale coverage. A larger campaign can be run with:
+65,537-vertex, 393,222-edge case provides scale coverage. A larger campaign can
+be run with:
 
 ```text
 TRAVERSAL_ALGEBRA_PROPTEST_CASES=4096 just ta::oracle
 ```
 
-The Rust oracle façade keeps a single versioned Lean protocol process alive
-and uploads each CSR graph once. Lean compiles protocol expressions into the
-intrinsically typed traversal syntax. A proved one-pass CSR destination
-lowering keeps larger comparisons practical without replacing the formal
-semantics with an unrelated reference implementation.
+The CPU oracle owns its CSR arrays and evaluates source, destination, and edge
+expressions with direct ordered loops. Emission is one pass over active edges;
+source reduction folds each frontier occurrence independently; destination
+reduction uses one dense accumulator. Recursive products are evaluated through
+one general expression-tree path instead of terminal-by-arity implementations.
+The oracle shares no traversal or reduction implementation with Massively.
 
-The same persistent process serves `CubeClCertificate` values. Certificate
-property tests compare CSR dimensions, varied machine geometry, exact terminal
-and CSR-control formulas, and their fieldwise sequential composition on
-generated graphs. This validates the executable boundary; the universal
-theorems remain in `CubeCLCost.lean` and `OracleCubeCL.lean`.
+Symbolic CubeCL resource claims remain Lean theorems in `CubeCLCost.lean`.
+They are not serialized through the runtime conformance oracle.
 
-No finite test campaign replaces the Lean theorems. Its job is to check that
-the implementation continues to behave like the proved executable model on a
-broad, automatically generated set of inputs.
+No finite test campaign replaces the Lean theorems, and no theorem connects the
+independent Rust oracle or GPU stack to the Lean model. The property campaign's
+separate engineering role is to find disagreements between two independently
+implemented interpretations of TA behavior.

@@ -1,8 +1,43 @@
 #![allow(private_bounds)]
 
-use cubecl::prelude::Runtime;
+use cubecl::prelude::{CubeType, Runtime};
 
-use crate::{Error, Executor, MItem, MIter, MIterMut, MStorage, MVec, op::BinaryPredicateOp};
+use crate::{Error, Executor, MAllocItem, MIter, MIterMut, MStorage, MVec, op::BinaryPredicateOp};
+
+struct SetOperation<'a, R: Runtime, Left, Right, Less, const MODE: u8> {
+    exec: &'a Executor<R>,
+    left: Left,
+    right: Right,
+    less: Less,
+}
+
+impl<R, Item, Left, Right, Less, const MODE: u8> crate::api::iter::OutputOperation<R, Item>
+    for SetOperation<'_, R, Left, Right, Less, MODE>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+    Left: MIter<R, Item = Item>,
+    Right: MIter<R, Item = Item>,
+    Less: BinaryPredicateOp<Item>,
+{
+    type Result = Result<u32, Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        let left = crate::allocation::normalize_lowered_scratch(
+            self.exec,
+            crate::api::iter::lower_fixed::<R, _>(self.left),
+        )?;
+        let right = crate::allocation::normalize_lowered_scratch(
+            self.exec,
+            crate::api::iter::lower_fixed::<R, _>(self.right),
+        )?;
+        crate::core::set::set_storage(self.exec, &left, &right, self.less, output, MODE)
+    }
+}
 
 macro_rules! set_api {
     ($name:ident, $into_name:ident, $mode:literal, $capacity:expr, $doc:literal) => {
@@ -17,7 +52,7 @@ macro_rules! set_api {
             R: Runtime,
             Left: MIter<R, Item = Item>,
             Right: MIter<R, Item = Item>,
-            Item: MItem<R>,
+            Item: MAllocItem<R>,
             Less: BinaryPredicateOp<Item>,
         {
             let left_len = left.len()? as usize;
@@ -40,21 +75,17 @@ macro_rules! set_api {
         ) -> Result<u32, Error>
         where
             R: Runtime,
-            Left: MIter<R>,
-            Right: MIter<R, Item = Left::Item>,
-            Left::Item: crate::api::iter::MItem<R>,
+            Left: MIter<R, Item = Output::Item>,
+            Right: MIter<R, Item = Output::Item>,
             Less: BinaryPredicateOp<Left::Item>,
-            Output: MIterMut<R, Item = Left::Item>,
+            Output: MIterMut<R>,
         {
-            let left = crate::allocation::normalize_lowered(
+            output.run_output_operation(SetOperation::<_, _, _, _, $mode> {
                 exec,
-                crate::api::iter::lower_fixed::<R, _>(left),
-            )?;
-            let right = crate::allocation::normalize_lowered(
-                exec,
-                crate::api::iter::lower_fixed::<R, _>(right),
-            )?;
-            crate::core::set::set_storage(exec, &left, &right, less, output.lower_output(), $mode)
+                left,
+                right,
+                less,
+            })
         }
     };
 }

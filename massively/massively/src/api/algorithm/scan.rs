@@ -1,8 +1,38 @@
 #![allow(private_bounds)]
 
-use cubecl::prelude::Runtime;
+use cubecl::prelude::{CubeType, Runtime};
 
-use crate::{Error, Executor, MItem, MIter, MIterMut, MStorage, MVec, op::ReductionOp};
+use crate::{Error, Executor, MAllocItem, MIter, MIterMut, MStorage, MVec, op::ReductionOp};
+
+struct ScanOperation<'a, R: Runtime, Input, Op, const ADJACENT: bool> {
+    exec: &'a Executor<R>,
+    input: Input,
+    op: Op,
+}
+
+impl<R, Item, Input, Op, const ADJACENT: bool> crate::api::iter::OutputOperation<R, Item>
+    for ScanOperation<'_, R, Input, Op, ADJACENT>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+    Input: MIter<R, Item = Item>,
+    Op: ReductionOp<Item>,
+{
+    type Result = Result<(), Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        let input = crate::api::iter::lower_fixed::<R, _>(self.input);
+        if ADJACENT {
+            crate::scan::adjacent_difference(self.exec, input, self.op, output)
+        } else {
+            crate::scan::inclusive_scan(self.exec, input, self.op, output)
+        }
+    }
+}
 
 /// Computes an inclusive scan and returns owned device storage.
 ///
@@ -36,17 +66,12 @@ pub fn inclusive_scan<R, Input, Item, Op>(
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
-    Item: MItem<R>,
+    Item: MAllocItem<R>,
     Op: ReductionOp<Item>,
 {
     let len = input.len()? as usize;
     let output = exec.alloc::<Item>(len);
-    crate::scan::inclusive_scan(
-        exec,
-        crate::api::iter::lower_fixed::<R, _>(input),
-        op,
-        output.slice_mut(..).lower_output(),
-    )?;
+    inclusive_scan_into(exec, input, op, output.slice_mut(..))?;
     Ok(output)
 }
 
@@ -60,17 +85,11 @@ pub(crate) fn inclusive_scan_into<R, Input, Output, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: crate::api::iter::MItem<R>,
-    Output: MIterMut<R, Item = Input::Item>,
+    Input: MIter<R, Item = Output::Item>,
+    Output: MIterMut<R>,
     Op: ReductionOp<Input::Item>,
 {
-    crate::scan::inclusive_scan(
-        exec,
-        crate::api::iter::lower_fixed::<R, _>(input),
-        op,
-        output.lower_output(),
-    )
+    output.run_output_operation(ScanOperation::<_, _, _, false> { exec, input, op })
 }
 
 /// Computes adjacent reductions while preserving the first item.
@@ -105,7 +124,7 @@ pub fn adjacent_difference<R, Input, Item, Op>(
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
-    Item: MItem<R>,
+    Item: MAllocItem<R>,
     Op: ReductionOp<Item>,
 {
     let len = input.len()? as usize;
@@ -124,17 +143,11 @@ pub(crate) fn adjacent_difference_into<R, Input, Output, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MItem<R>,
-    Output: MIterMut<R, Item = Input::Item>,
+    Input: MIter<R, Item = Output::Item>,
+    Output: MIterMut<R>,
     Op: ReductionOp<Input::Item>,
 {
-    crate::scan::adjacent_difference(
-        exec,
-        crate::api::iter::lower_fixed::<R, _>(input),
-        op,
-        output.lower_output(),
-    )
+    output.run_output_operation(ScanOperation::<_, _, _, true> { exec, input, op })
 }
 
 /// Computes an exclusive scan and returns owned device storage.
@@ -170,17 +183,17 @@ pub fn exclusive_scan<R, Input, Item, Op>(
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
-    Item: MItem<R>,
+    Item: MAllocItem<R>,
     Op: ReductionOp<Item>,
 {
     let len = input.len()? as usize;
     let output = exec.alloc::<Item>(len);
-    crate::scan::exclusive_scan(
+    <<Item as MAllocItem<R>>::Dispatch as crate::api::iter::ItemDispatch<R>>::exclusive_scan_into(
         exec,
-        crate::api::iter::lower_fixed::<R, _>(input),
+        input,
         init,
         op,
-        output.slice_mut(..).lower_output(),
+        output.slice_mut(..),
     )?;
     Ok(output)
 }

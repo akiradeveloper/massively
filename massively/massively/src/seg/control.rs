@@ -1,8 +1,6 @@
 use cubecl::prelude::*;
 
-use crate::{
-    DeviceVec, Error, Executor, MItem, MIter, MIterMut, op::BinaryPredicateOp, op::ReductionOp,
-};
+use crate::{DeviceVec, Error, Executor, MIter, MIterMut, op::BinaryPredicateOp, op::ReductionOp};
 
 const BLOCK_SIZE: u32 = 256;
 
@@ -372,9 +370,8 @@ impl<R: Runtime> SegmentControl<R> {
         output_offsets: OutputOffsets,
     ) -> Result<u32, Error>
     where
-        Input: crate::core::facade::KernelInput<R>,
-        Input::Item: MItem<R>,
-        Output: MIterMut<R, Item = Input::Item>,
+        Input: crate::core::facade::KernelInput<R, Item = Output::Item>,
+        Output: MIterMut<R>,
         OutputOffsets: MIterMut<R, Item = u32>,
     {
         let positions = crate::core::scan::inclusive_scan_u32(exec, &flags)?;
@@ -412,11 +409,11 @@ impl<R: Runtime> SegmentControl<R> {
         )?;
 
         let selection = crate::selection::SelectionControl::from_positions(exec, positions, false)?;
-        crate::indexed::apply_permutation(
+        crate::api::algorithm::apply_permutation_into(
             exec,
             input,
             selection.indices().column(),
-            output.lower_output(),
+            output,
         )?;
         Ok(selection.count())
     }

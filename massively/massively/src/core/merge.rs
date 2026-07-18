@@ -170,7 +170,7 @@ pub struct MergeControl<R: Runtime> {
 
 /// Internal public-API capability for merge control construction.
 #[doc(hidden)]
-pub trait MergeControlInput<R: Runtime, Right, Less>: NormalizeInput<R> {
+pub(crate) trait MergeControlInput<R: Runtime, Right, Less>: NormalizeInput<R> {
     fn merge_control(self, exec: &Executor<R>, right: Right) -> Result<MergeControl<R>, Error>;
 }
 
@@ -254,16 +254,16 @@ where
 /// and value arities therefore never occur in the same dispatch obligation.
 pub(crate) fn apply_storage<R, Item, Output>(
     exec: &Executor<R>,
-    left: &<Item as RowAlloc<R>>::RowStorage,
-    right: &<Item as RowAlloc<R>>::RowStorage,
+    left: &<Item as crate::allocation::ScratchStorage<R>>::Storage,
+    right: &<Item as crate::allocation::ScratchStorage<R>>::Storage,
     control: &MergeControl<R>,
     output: Output,
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R> + RowAlloc<R>,
+    Item: crate::allocation::ScratchStorage<R>,
     Item::StorageLeaves: crate::core::facade::KernelValue,
-    <Item as RowAlloc<R>>::RowStorage: RowStorage<R>,
+    <Item as crate::allocation::ScratchStorage<R>>::Storage: RowStorage<R>,
     Output: crate::core::facade::KernelOutput<R> + crate::output::OutputExpression<Item = Item>,
 {
     let left_len = left.len()?;
@@ -278,7 +278,7 @@ where
     let total = left_len
         .checked_add(right_len)
         .ok_or(Error::LengthTooLarge { len: usize::MAX })?;
-    let combined = exec.alloc_row::<Item>(total);
+    let combined = Item::alloc_scratch(exec, total);
 
     let left_read = crate::read::FixedRead::new(left.read());
     crate::transform::materialize_fixed(exec, &left_read, &combined.slice_mut(..left_len))?;
@@ -296,7 +296,7 @@ where
 
 /// Applies a conceptual concatenation control to one payload pair.
 #[doc(hidden)]
-pub trait ConcatApply<R: Runtime, Right, Output>: NormalizeInput<R> {
+pub(crate) trait ConcatApply<R: Runtime, Right, Output>: NormalizeInput<R> {
     fn concat_apply(
         self,
         exec: &Executor<R>,

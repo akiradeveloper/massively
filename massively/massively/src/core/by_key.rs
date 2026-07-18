@@ -144,13 +144,11 @@ pub(crate) fn reduce_by_key_lowered<R, Keys, Values, Equal, Op, KeyOutput, Value
 ) -> Result<u32, Error>
 where
     R: Runtime,
-    Keys: crate::core::facade::KernelInput<R> + SegmentKeyInput<R, Equal>,
-    Keys::Item: crate::api::iter::KernelRow,
+    Keys: crate::core::facade::KernelInput<R, Item = KeyOutput::Item> + SegmentKeyInput<R, Equal>,
     Values: crate::core::facade::KernelInput<R>,
     Values::Item: ScratchStorage<R>,
     Op: crate::op::ReductionOp<Values::Item>,
-    KeyOutput:
-        crate::core::facade::KernelOutput<R> + crate::output::OutputExpression<Item = Keys::Item>,
+    KeyOutput: crate::core::facade::KernelOutput<R>,
     ValueOutput:
         crate::core::facade::KernelOutput<R> + crate::output::OutputExpression<Item = Values::Item>,
 {

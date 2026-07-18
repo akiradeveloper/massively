@@ -3,7 +3,7 @@
 use cubecl::prelude::*;
 
 use crate::{
-    A13, Counting, DeviceVec, Dispatch, Error, Executor, MStorageElement, ReadExpression, RowAlloc,
+    A13, Counting, DeviceVec, Dispatch, Error, Executor, MStorageElement, ReadExpression,
     RowStorage, S12, StorageLayout, Transform,
     allocation::PrependInput,
     eval::Eval13,
@@ -23,7 +23,7 @@ use crate::{
 
 const BLOCK_SIZE: u32 = 256;
 
-type FixedScanStorage<R, Item> = <Item as crate::RowAlloc<R>>::RowStorage;
+type FixedScanStorage<R, Item> = <Item as crate::allocation::ScratchStorage<R>>::Storage;
 type FixedScanRead<R, Item> =
     crate::read::FixedRead<<FixedScanStorage<R, Item> as RowStorage<R>>::Read>;
 type FixedScanOutput<R, Item> = <FixedScanStorage<R, Item> as RowStorage<R>>::Write;
@@ -1218,7 +1218,7 @@ fn add_fixed_prefixes<R, Output, Item, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R> + crate::RowAlloc<R>,
+    Item: crate::allocation::ScratchStorage<R>,
     Op: ReductionOp<Item>,
     Output: OutputExpression<Item = Item>
         + LowerOutputExpression<Slots: PaddedOutputSlots<Leaves = Item::StorageLeaves>>
@@ -1388,7 +1388,7 @@ fn scan_fixed_storage<R, Item, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R> + crate::RowAlloc<R>,
+    Item: crate::allocation::ScratchStorage<R>,
     Op: ReductionOp<Item>,
     Dispatch<A13, S12>: InclusiveScanPassDispatch<
             R,
@@ -1416,14 +1416,14 @@ where
     }
 
     let blocks = len.div_ceil(BLOCK_SIZE as usize);
-    let partials = exec.alloc_row::<Item>(blocks);
+    let partials = Item::alloc_scratch(exec, blocks);
     let input_read = FixedScanRead::<R, Item>::new(input.read());
     let output_write = output.write();
     let partial_write = partials.write();
     scan_pass::<R, _, _, _, Item, Op>(exec, &input_read, &output_write, &partial_write)?;
 
     if blocks > 1 {
-        let prefixes = exec.alloc_row::<Item>(blocks);
+        let prefixes = Item::alloc_scratch(exec, blocks);
         scan_fixed_storage::<R, Item, Op>(exec, &partials, &prefixes)?;
         add_fixed_prefixes::<R, _, Item, Op>(exec, &prefixes, &output_write, len)?;
     }
@@ -1438,7 +1438,7 @@ where
     Output: OutputExpression<Item = Item>
         + LowerOutputExpression<Slots: PaddedOutputSlots<Leaves = Item::StorageLeaves>>
         + StageOutput<R, Env0>,
-    Item: crate::api::iter::MItem<R> + crate::RowAlloc<R>,
+    Item: crate::allocation::ScratchStorage<R>,
     Op: ReductionOp<Item>,
     Dispatch<A13, S12>: InclusiveScanPassDispatch<
             R,
@@ -1476,7 +1476,7 @@ where
         }
 
         let blocks = len.div_ceil(BLOCK_SIZE as usize);
-        let partials = exec.alloc_row::<Item>(blocks);
+        let partials = Item::alloc_scratch(exec, blocks);
         let partial_write = partials.write();
         <Dispatch<A13, S12> as InclusiveScanPassDispatch<
             R,
@@ -1490,7 +1490,7 @@ where
         >>::run_pass(exec, input, output, &partial_write)?;
 
         if blocks > 1 {
-            let prefixes = exec.alloc_row::<Item>(blocks);
+            let prefixes = Item::alloc_scratch(exec, blocks);
             scan_fixed_storage::<R, Item, Op>(exec, &partials, &prefixes)?;
             add_fixed_prefixes::<R, _, Item, Op>(exec, &prefixes, output, len)?;
         }
@@ -1539,7 +1539,7 @@ pub(crate) fn inclusive_scan<R, Input, Output, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
+    Input: ReadExpression<Item = Output::Item> + LowerReadExpression + StageRead<R, Env0>,
     Op: ReductionOp<Input::Item>,
     Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
     Output::Slots: PaddedOutputSlots,
@@ -1573,11 +1573,11 @@ pub(crate) fn adjacent_difference<R, Input, Output, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Input: ReadExpression,
+    Input: ReadExpression<Item = Output::Item>,
     Op: ReductionOp<Input::Item>,
     Adjacent<Input, Op>:
         ReadExpression<Item = Input::Item> + LowerReadExpression + StageRead<R, Env0>,
-    Output: OutputExpression<Item = Input::Item> + LowerOutputExpression + StageOutput<R, Env0>,
+    Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
     Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
             R,
             Adjacent<Input, Op>,
@@ -1592,7 +1592,7 @@ where
 
 /// Internal public-API capability for a fully generic exclusive scan.
 #[doc(hidden)]
-pub trait ExclusiveScanInput<R: Runtime, Output, Op>: PrependInput<R> {
+pub(crate) trait ExclusiveScanInput<R: Runtime, Output, Op>: PrependInput<R> {
     fn exclusive_scan_into(
         self,
         exec: &Executor<R>,
@@ -1606,8 +1606,7 @@ impl<R, Input, Output, Op> ExclusiveScanInput<R, Output, Op> for Input
 where
     R: Runtime,
     Input: PrependInput<R>,
-    Input::Item: crate::api::iter::MItem<R>
-        + RowAlloc<R, RowStorage = Input::Storage>,
+    Input::Item: crate::allocation::ScratchStorage<R, Storage = Input::Storage>,
     <Input::Item as StorageLayout>::StorageLeaves:
         StorePadded12 + crate::core::facade::KernelValue,
     Input::Storage: RowStorage<R, Item = Input::Item>,
@@ -1637,7 +1636,10 @@ where
     ) -> Result<(), Error> {
         let prefixed = self.prepend(exec, init)?;
         let prefixed_len = prefixed.len()?;
-        let scanned = exec.alloc_row::<Input::Item>(prefixed_len);
+        let scanned = <Input::Item as crate::allocation::ScratchStorage<R>>::alloc_scratch(
+            exec,
+            prefixed_len,
+        );
         inclusive_scan(exec, Input::semantic_read(&prefixed), op, scanned.write())?;
         crate::indexed::gather_u32(
             exec,

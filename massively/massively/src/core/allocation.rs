@@ -7,7 +7,7 @@ use cubecl::prelude::Runtime;
 use crate::{
     Column, DeviceSliceMut, DeviceVec, Dispatch, Error, Executor, MStorageElement, ReadExpression,
     S1, StorageLayout, Zip,
-    api::iter::{MItem, MIter, MIterMut, MStorage, StorageSlice, StorageSliceMut},
+    api::iter::{MAllocItem, MIter, MIterMut, MStorage, StorageSlice, StorageSliceMut},
     output::{
         LowerOutputExpression, OutputExpression, PaddedOutputSlots, SliceOutput, StageOutput,
     },
@@ -247,7 +247,7 @@ pub trait AllocColumns<R: Runtime> {
 
 /// Allocates internal scratch columns for one flat row type.
 pub(crate) trait ScratchStorage<R: Runtime>: crate::api::iter::KernelRow + FlatRow {
-    type Storage: RowStorage<R, Item = Self>;
+    type Storage: RowStorage<R, Item = Self> + CopyStorage<R>;
 
     fn alloc_scratch(exec: &Executor<R>, len: usize) -> Self::Storage;
 }
@@ -257,7 +257,7 @@ where
     R: Runtime,
     Item: crate::api::iter::KernelRow + FlatRow,
     Item::StorageLeaves: FlatLeaves<Item = Item> + AllocColumns<R>,
-    <Item::StorageLeaves as AllocColumns<R>>::Storage: RowStorage<R, Item = Item>,
+    <Item::StorageLeaves as AllocColumns<R>>::Storage: RowStorage<R, Item = Item> + CopyStorage<R>,
 {
     type Storage = <Item::StorageLeaves as AllocColumns<R>>::Storage;
 
@@ -822,7 +822,7 @@ impl<R: Runtime> Executor<R> {
     ///
     /// assert_eq!(exec.to_host(&output).unwrap(), vec![7, 7, 7, 7]);
     /// ```
-    pub fn alloc<Item: MItem<R>>(&self, len: usize) -> crate::MVec<R, Item> {
+    pub fn alloc<Item: MAllocItem<R>>(&self, len: usize) -> crate::MVec<R, Item> {
         <crate::MVec<R, Item> as MStorage<R>>::allocate(self, len)
     }
 
@@ -848,7 +848,7 @@ impl<R: Runtime> Executor<R> {
     /// ```
     pub fn full<Item>(&self, len: usize, value: Item) -> Result<crate::MVec<R, Item>, Error>
     where
-        Item: MItem<R>,
+        Item: MAllocItem<R>,
     {
         let storage = self.alloc::<Item>(len);
         storage.slice_mut(..).fill_with(self, value)?;
@@ -856,46 +856,24 @@ impl<R: Runtime> Executor<R> {
     }
 }
 
-pub(crate) fn singleton<R, Item>(
-    exec: &Executor<R>,
-    value: Item,
-) -> Result<<Item as RowAlloc<R>>::RowStorage, Error>
-where
-    R: Runtime,
-    Item: RowAlloc<R>,
-    <Item as RowAlloc<R>>::RowStorage: RowStorage<R, Item = Item>,
-    <<Item as RowAlloc<R>>::RowStorage as RowStorage<R>>::Write: FillOutput<R>,
-{
-    let storage = exec.alloc_row::<Item>(1);
-    storage.write().fill_output(exec, value)?;
-    Ok(storage)
-}
-
-/// Normalizes an arbitrary read expression into owned flat-row storage.
+/// Normalizes an arbitrary read expression into temporary flat-row storage.
 ///
 /// Consumers that need to add another read leaf (for example a permutation)
 /// use this boundary to turn an `A13` expression back into at most twelve
 /// physical payload leaves.
 #[doc(hidden)]
-pub trait NormalizeInput<R: Runtime>: ReadExpression + Sized {
+pub(crate) trait NormalizeInput<R: Runtime>: ReadExpression + Sized {
     type Storage: RowStorage<R>;
     type SemanticRead: ReadExpression<Item = Self::Item> + LowerReadExpression + StageRead<R, Env0>;
 
     fn normalize(self, exec: &Executor<R>) -> Result<Self::Storage, Error>;
-
-    fn normalize_row(
-        self,
-        exec: &Executor<R>,
-    ) -> Result<<Self::Item as RowAlloc<R>>::RowStorage, Error>
-    where
-        Self::Item: RowAlloc<R>;
 
     fn semantic_read(storage: &Self::Storage) -> Self::SemanticRead;
 }
 
 /// Normalizes an input after a single semantic prefix item.
 #[doc(hidden)]
-pub trait PrependInput<R: Runtime>: NormalizeInput<R> {
+pub(crate) trait PrependInput<R: Runtime>: NormalizeInput<R> {
     fn prepend(self, exec: &Executor<R>, prefix: Self::Item) -> Result<Self::Storage, Error>;
 }
 
@@ -903,7 +881,7 @@ impl<R, Input> PrependInput<R> for Input
 where
     R: Runtime,
     Input: NormalizeInput<R>,
-    Input::Item: RowAlloc<R, RowStorage = Input::Storage>,
+    Input::Item: ScratchStorage<R, Storage = Input::Storage>,
     Input::Storage: CopyStorage<R>,
     Input::Storage: RowStorage<R, Item = Input::Item>,
     <Input::Storage as RowStorage<R>>::Write: crate::selection::FillOutput<R>,
@@ -911,7 +889,7 @@ where
     fn prepend(self, exec: &Executor<R>, prefix: Self::Item) -> Result<Self::Storage, Error> {
         let values = self.normalize(exec)?;
         let len = values.len()?;
-        let prefixed = exec.alloc_row::<Input::Item>(len + 1);
+        let prefixed = Input::Item::alloc_scratch(exec, len + 1);
         prefixed.slice_mut(..1).fill_output(exec, prefix)?;
         values.copy_storage(exec, prefixed.slice_mut(1..))?;
         Ok(prefixed)
@@ -919,6 +897,50 @@ where
 }
 
 impl<R, Input> NormalizeInput<R> for Input
+where
+    R: Runtime,
+    Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
+    Input::Item: ScratchStorage<R>,
+    <Input::Item as StorageLayout>::StorageLeaves: crate::storage::StorePadded12,
+    <Input::Item as ScratchStorage<R>>::Storage: RowStorage<R>,
+    <<Input::Item as ScratchStorage<R>>::Storage as RowStorage<R>>::Write:
+        OutputExpression<Item = Input::Item>,
+    Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
+            R,
+            Input,
+            <<Input::Item as ScratchStorage<R>>::Storage as RowStorage<R>>::Write,
+            crate::read::KernelReadSlots<Input::Slots>,
+            crate::output::KernelOutputSlots<
+                <<Input::Item as ScratchStorage<R>>::Storage as RowStorage<R>>::WriteSlots,
+            >,
+        >,
+{
+    type Storage = <Input::Item as ScratchStorage<R>>::Storage;
+    type SemanticRead = <<Input::Item as ScratchStorage<R>>::Storage as RowStorage<R>>::Read;
+
+    fn normalize(self, exec: &Executor<R>) -> Result<Self::Storage, Error> {
+        let len = self.logical_len()?;
+        let storage = Input::Item::alloc_scratch(exec, len);
+        materialize(exec, self, storage.write())?;
+        Ok(storage)
+    }
+
+    fn semantic_read(storage: &Self::Storage) -> Self::SemanticRead {
+        storage.read()
+    }
+}
+
+/// Normalizes a sortable expression into its canonical owned row storage.
+pub(crate) trait NormalizeOwnedInput<R: Runtime>: ReadExpression + Sized {
+    type OwnedStorage: RowStorage<R>;
+    type OwnedRead: ReadExpression<Item = Self::Item> + LowerReadExpression + StageRead<R, Env0>;
+
+    fn normalize_owned(self, exec: &Executor<R>) -> Result<Self::OwnedStorage, Error>;
+
+    fn owned_read(storage: &Self::OwnedStorage) -> Self::OwnedRead;
+}
+
+impl<R, Input> NormalizeOwnedInput<R> for Input
 where
     R: Runtime,
     Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
@@ -937,51 +959,19 @@ where
             >,
         >,
 {
-    type Storage = <Input::Item as RowAlloc<R>>::RowStorage;
-    type SemanticRead = <<Input::Item as RowAlloc<R>>::RowStorage as RowStorage<R>>::Read;
+    type OwnedStorage = <Input::Item as RowAlloc<R>>::RowStorage;
+    type OwnedRead = <<Input::Item as RowAlloc<R>>::RowStorage as RowStorage<R>>::Read;
 
-    fn normalize(self, exec: &Executor<R>) -> Result<Self::Storage, Error> {
+    fn normalize_owned(self, exec: &Executor<R>) -> Result<Self::OwnedStorage, Error> {
         let len = self.logical_len()?;
         let storage = exec.alloc_row::<Input::Item>(len);
         materialize(exec, self, storage.write())?;
         Ok(storage)
     }
 
-    fn normalize_row(
-        self,
-        exec: &Executor<R>,
-    ) -> Result<<Self::Item as RowAlloc<R>>::RowStorage, Error>
-    where
-        Self::Item: RowAlloc<R>,
-    {
-        self.normalize(exec)
-    }
-
-    fn semantic_read(storage: &Self::Storage) -> Self::SemanticRead {
+    fn owned_read(storage: &Self::OwnedStorage) -> Self::OwnedRead {
         storage.read()
     }
-}
-
-/// Materializes a fixed-ABI read expression into its owned flat-row storage.
-///
-/// Unlike [`NormalizeInput`], this path derives the output layout from the
-/// semantic item's physical leaves.  It therefore needs no arity-specific
-/// algorithm capability on the iterator type.
-pub(crate) fn normalize_lowered<R, Input>(
-    exec: &Executor<R>,
-    input: Input,
-) -> Result<<Input::Item as RowAlloc<R>>::RowStorage, Error>
-where
-    R: Runtime,
-    Input: crate::core::facade::KernelInput<R>,
-    Input::Item: crate::api::iter::MItem<R> + RowAlloc<R>,
-    <Input::Item as StorageLayout>::StorageLeaves: crate::core::facade::KernelValue,
-    <Input::Item as RowAlloc<R>>::RowStorage: RowStorage<R, Item = Input::Item>,
-{
-    let len = input.logical_len()?;
-    let storage = exec.alloc_row::<Input::Item>(len);
-    crate::transform::materialize_fixed(exec, &input, &storage.write())?;
-    Ok(storage)
 }
 
 /// Materializes a fixed-ABI read expression into internal scratch storage.
@@ -1014,8 +1004,8 @@ mod tests {
     type FlatRow3 = (u32, f32, i32);
     type NestedRow3 = (u32, (f32, i32));
 
-    assert_impl_all!(FlatRow3: MItem<WgpuRuntime>);
-    assert_not_impl_any!(NestedRow3: MItem<WgpuRuntime>);
+    assert_impl_all!(FlatRow3: MAllocItem<WgpuRuntime>);
+    assert_not_impl_any!(NestedRow3: MAllocItem<WgpuRuntime>);
 
     #[test]
     fn alloc_stores_a_flat_row_in_independent_columns() {

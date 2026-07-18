@@ -5,7 +5,7 @@
 use cubecl::prelude::Runtime;
 
 use crate::api::iter::Zipped;
-use crate::{DeviceVec, Error, Executor, MItem, MIter, MStorage, Zip};
+use crate::{DeviceVec, Error, Executor, MAllocItem, MIter, MStorage, Zip};
 
 use super::control::TraversalControl;
 
@@ -33,7 +33,7 @@ pub mod private {
 /// that the backend can change its fused representation without exposing traversal control.
 #[allow(private_bounds)]
 pub trait EdgeExpr<R: Runtime>: private::Sealed {
-    type Item: MItem<R>;
+    type Item: MAllocItem<R>;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -95,8 +95,8 @@ impl<R, Values> EdgeExpr<R> for Source<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: MItem<R>,
-    <Values::Item as MItem<R>>::Storage: MStorage<R, Item = Values::Item>,
+    Values::Item: MAllocItem<R>,
+    <Values::Item as MAllocItem<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
     type Item = Values::Item;
 }
@@ -105,8 +105,8 @@ impl<R, Values> EdgeExpr<R> for Destination<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: MItem<R>,
-    <Values::Item as MItem<R>>::Storage: MStorage<R, Item = Values::Item>,
+    Values::Item: MAllocItem<R>,
+    <Values::Item as MAllocItem<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
     type Item = Values::Item;
 }
@@ -115,8 +115,8 @@ impl<R, Values> EdgeExpr<R> for Edge<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: MItem<R>,
-    <Values::Item as MItem<R>>::Storage: MStorage<R, Item = Values::Item>,
+    Values::Item: MAllocItem<R>,
+    <Values::Item as MAllocItem<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
     type Item = Values::Item;
 }
@@ -137,10 +137,10 @@ impl<R, Values> private::EdgeExprImpl<R> for Source<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: MItem<R>,
-    <Values::Item as MItem<R>>::Storage: MStorage<R, Item = Values::Item>,
+    Values::Item: MAllocItem<R>,
+    <Values::Item as MAllocItem<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
-    type Storage = <Values::Item as MItem<R>>::Storage;
+    type Storage = <Values::Item as MAllocItem<R>>::Storage;
 
     fn materialize(
         self,
@@ -162,10 +162,10 @@ impl<R, Values> private::EdgeExprImpl<R> for Destination<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: MItem<R>,
-    <Values::Item as MItem<R>>::Storage: MStorage<R, Item = Values::Item>,
+    Values::Item: MAllocItem<R>,
+    <Values::Item as MAllocItem<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
-    type Storage = <Values::Item as MItem<R>>::Storage;
+    type Storage = <Values::Item as MAllocItem<R>>::Storage;
 
     fn materialize(
         self,
@@ -187,10 +187,10 @@ impl<R, Values> private::EdgeExprImpl<R> for Edge<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: MItem<R>,
-    <Values::Item as MItem<R>>::Storage: MStorage<R, Item = Values::Item>,
+    Values::Item: MAllocItem<R>,
+    <Values::Item as MAllocItem<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
-    type Storage = <Values::Item as MItem<R>>::Storage;
+    type Storage = <Values::Item as MAllocItem<R>>::Storage;
 
     fn materialize(
         self,
@@ -257,7 +257,7 @@ where
     Left: EdgeExpr<R> + private::EdgeExprImpl<R>,
     Right: EdgeExpr<R> + private::EdgeExprImpl<R>,
     Zip<Left::Storage, Right::Storage>: MStorage<R>,
-    <Zip<Left::Storage, Right::Storage> as MStorage<R>>::Item: MItem<R>,
+    <Zip<Left::Storage, Right::Storage> as MStorage<R>>::Item: MAllocItem<R>,
 {
     type Item = <Zip<Left::Storage, Right::Storage> as MStorage<R>>::Item;
 }
@@ -268,7 +268,7 @@ where
     Left: EdgeExpr<R> + private::EdgeExprImpl<R>,
     Right: EdgeExpr<R> + private::EdgeExprImpl<R>,
     Zip<Left::Storage, Right::Storage>: MStorage<R>,
-    <Zip<Left::Storage, Right::Storage> as MStorage<R>>::Item: MItem<R>,
+    <Zip<Left::Storage, Right::Storage> as MStorage<R>>::Item: MAllocItem<R>,
 {
     type Storage = Zip<Left::Storage, Right::Storage>;
 

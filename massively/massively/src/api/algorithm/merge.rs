@@ -1,8 +1,95 @@
 #![allow(private_bounds)]
 
-use cubecl::prelude::Runtime;
+use cubecl::prelude::{CubeType, Runtime};
 
-use crate::{Error, Executor, MItem, MIter, MIterMut, MStorage, MVec, op::BinaryPredicateOp};
+use crate::{Error, Executor, MAllocItem, MIter, MIterMut, MStorage, MVec, op::BinaryPredicateOp};
+
+struct MergeOperation<'a, R: Runtime, Left, Right, Less> {
+    exec: &'a Executor<R>,
+    left: Left,
+    right: Right,
+    less: Less,
+}
+
+impl<R, Item, Left, Right, Less> crate::api::iter::OutputOperation<R, Item>
+    for MergeOperation<'_, R, Left, Right, Less>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+    Left: MIter<R, Item = Item>,
+    Right: MIter<R, Item = Item>,
+    Less: BinaryPredicateOp<Item>,
+{
+    type Result = Result<(), Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        let left = crate::allocation::normalize_lowered_scratch(
+            self.exec,
+            crate::api::iter::lower_fixed::<R, _>(self.left),
+        )?;
+        let right = crate::allocation::normalize_lowered_scratch(
+            self.exec,
+            crate::api::iter::lower_fixed::<R, _>(self.right),
+        )?;
+        let control = crate::merge::merge_control_fixed(
+            self.exec,
+            crate::read::FixedRead::new(crate::RowStorage::read(&left)),
+            crate::read::FixedRead::new(crate::RowStorage::read(&right)),
+            self.less,
+        )?;
+        crate::merge::apply_storage(self.exec, &left, &right, &control, output)
+    }
+}
+
+struct MergeByKeyOperation<'a, R: Runtime, LeftKeys, LeftValues, RightKeys, RightValues, Less> {
+    exec: &'a Executor<R>,
+    left_keys: LeftKeys,
+    left_values: LeftValues,
+    right_keys: RightKeys,
+    right_values: RightValues,
+    less: Less,
+}
+
+impl<R, Item, LeftKeys, LeftValues, RightKeys, RightValues, Less>
+    crate::api::iter::OutputOperation<R, Item>
+    for MergeByKeyOperation<'_, R, LeftKeys, LeftValues, RightKeys, RightValues, Less>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+    LeftKeys: MIter<R>,
+    LeftValues: MIter<R, Item = Item>,
+    RightKeys: MIter<R, Item = LeftKeys::Item>,
+    RightValues: MIter<R, Item = Item>,
+    Less: BinaryPredicateOp<LeftKeys::Item>,
+{
+    type Result = Result<(), Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        let control = crate::merge::merge_control_fixed(
+            self.exec,
+            crate::api::iter::lower_fixed::<R, _>(self.left_keys),
+            crate::api::iter::lower_fixed::<R, _>(self.right_keys),
+            self.less,
+        )?;
+        let left_values = crate::allocation::normalize_lowered_scratch(
+            self.exec,
+            crate::api::iter::lower_fixed::<R, _>(self.left_values),
+        )?;
+        let right_values = crate::allocation::normalize_lowered_scratch(
+            self.exec,
+            crate::api::iter::lower_fixed::<R, _>(self.right_values),
+        )?;
+        crate::merge::apply_storage(self.exec, &left_values, &right_values, &control, output)
+    }
+}
 
 /// Stably merges two sorted ranges.
 ///
@@ -39,7 +126,7 @@ where
     R: Runtime,
     Left: MIter<R, Item = Item>,
     Right: MIter<R, Item = Item>,
-    Item: MItem<R>,
+    Item: MAllocItem<R>,
     Less: BinaryPredicateOp<Item>,
 {
     let left_len = left.len()? as usize;
@@ -63,23 +150,17 @@ pub(crate) fn merge_into<R, Left, Right, Less, Output>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Left: MIter<R>,
-    Right: MIter<R, Item = Left::Item>,
-    Left::Item: crate::api::iter::MItem<R>,
+    Left: MIter<R, Item = Output::Item>,
+    Right: MIter<R, Item = Output::Item>,
     Less: BinaryPredicateOp<Left::Item>,
-    Output: MIterMut<R, Item = Left::Item>,
+    Output: MIterMut<R>,
 {
-    let left =
-        crate::allocation::normalize_lowered(exec, crate::api::iter::lower_fixed::<R, _>(left))?;
-    let right =
-        crate::allocation::normalize_lowered(exec, crate::api::iter::lower_fixed::<R, _>(right))?;
-    let control = crate::merge::merge_control_fixed(
+    output.run_output_operation(MergeOperation {
         exec,
-        crate::read::FixedRead::new(crate::RowStorage::read(&left)),
-        crate::read::FixedRead::new(crate::RowStorage::read(&right)),
+        left,
+        right,
         less,
-    )?;
-    crate::merge::apply_storage(exec, &left, &right, &control, output.lower_output())
+    })
 }
 
 /// Stably merges key/value ranges using the ordering of the keys.
@@ -133,7 +214,7 @@ where
     LeftValues: MIter<R>,
     RightKeys: MIter<R, Item = LeftKeys::Item>,
     RightValues: MIter<R, Item = LeftValues::Item>,
-    LeftValues::Item: MItem<R>,
+    LeftValues::Item: MAllocItem<R>,
     Less: BinaryPredicateOp<LeftKeys::Item>,
 {
     let left_len = left_keys.len()? as usize;
@@ -176,33 +257,18 @@ pub(crate) fn merge_by_key_into<
 where
     R: Runtime,
     LeftKeys: MIter<R>,
-    LeftValues: MIter<R>,
+    LeftValues: MIter<R, Item = ValueOutput::Item>,
     RightKeys: MIter<R, Item = LeftKeys::Item>,
-    RightValues: MIter<R, Item = LeftValues::Item>,
-    LeftValues::Item: crate::api::iter::MItem<R>,
+    RightValues: MIter<R, Item = ValueOutput::Item>,
     Less: BinaryPredicateOp<LeftKeys::Item>,
-    ValueOutput: MIterMut<R, Item = LeftValues::Item>,
+    ValueOutput: MIterMut<R>,
 {
-    let control = crate::merge::merge_control_fixed(
+    value_output.run_output_operation(MergeByKeyOperation {
         exec,
-        crate::api::iter::lower_fixed::<R, _>(left_keys),
-        crate::api::iter::lower_fixed::<R, _>(right_keys),
+        left_keys,
+        left_values,
+        right_keys,
+        right_values,
         less,
-    )?;
-
-    let left_values = crate::allocation::normalize_lowered(
-        exec,
-        crate::api::iter::lower_fixed::<R, _>(left_values),
-    )?;
-    let right_values = crate::allocation::normalize_lowered(
-        exec,
-        crate::api::iter::lower_fixed::<R, _>(right_values),
-    )?;
-    crate::merge::apply_storage(
-        exec,
-        &left_values,
-        &right_values,
-        &control,
-        value_output.lower_output(),
-    )
+    })
 }

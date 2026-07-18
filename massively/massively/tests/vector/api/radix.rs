@@ -1,8 +1,19 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Error, Executor, MStorage, lazy, op::UnaryOp, vector, zip3, zip7, zip12};
+use massively::{
+    Error, Executor, MStorage, RadixKey, lazy, op::UnaryOp, vector, zip3, zip7, zip12,
+};
+use static_assertions::{assert_impl_all, assert_not_impl_any};
 
 struct CompoundKey;
+
+#[test]
+fn radix_keys_are_limited_to_three_columns() {
+    assert_impl_all!(u32: RadixKey<WgpuRuntime>);
+    assert_impl_all!((u32, u32): RadixKey<WgpuRuntime>);
+    assert_impl_all!((u32, u32, u32): RadixKey<WgpuRuntime>);
+    assert_not_impl_any!((u32, u32, u32, u32): RadixKey<WgpuRuntime>);
+}
 
 #[cubecl::cube]
 impl UnaryOp<u32> for CompoundKey {
@@ -161,18 +172,18 @@ fn compound_radix_keys_reorder_seven_value_columns_once() {
 }
 
 #[test]
-fn twelve_key_and_value_columns_use_the_single_recursive_control_path() {
+fn three_key_columns_reorder_twelve_value_columns_once() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let rows = [
-        [0_u32; 12],
-        std::array::from_fn(|column| u32::from(column == 11)),
-        [0_u32; 12],
-        std::array::from_fn(|column| u32::from(column == 0)),
-        std::array::from_fn(|column| u32::from(column == 1)),
-        [0_u32; 12],
-        std::array::from_fn(|column| u32::from(column == 10)),
+        [0_u32, 0, 0],
+        [0_u32, 0, 1],
+        [0_u32, 0, 0],
+        [1_u32, 0, 0],
+        [0_u32, 1, 0],
+        [0_u32, 0, 0],
+        [0_u32, 1, 1],
     ];
-    let key_columns: Vec<Vec<u32>> = (0..12)
+    let key_columns: Vec<Vec<u32>> = (0..3)
         .map(|column| rows.iter().map(|row| row[column]).collect())
         .collect();
     let value_columns: Vec<Vec<u32>> = (0..12_u32)
@@ -193,19 +204,10 @@ fn twelve_key_and_value_columns_use_the_single_recursive_control_path() {
 
     let output = vector::radix_sort_by_key(
         &exec,
-        zip12(
+        zip3(
             key_devices[0].slice(..),
             key_devices[1].slice(..),
             key_devices[2].slice(..),
-            key_devices[3].slice(..),
-            key_devices[4].slice(..),
-            key_devices[5].slice(..),
-            key_devices[6].slice(..),
-            key_devices[7].slice(..),
-            key_devices[8].slice(..),
-            key_devices[9].slice(..),
-            key_devices[10].slice(..),
-            key_devices[11].slice(..),
         ),
         zip12(
             value_devices[0].slice(..),

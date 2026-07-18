@@ -5,7 +5,7 @@ use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 use crate::{
-    A13, DeviceVec, Dispatch, Error, Executor, MStorageElement, ReadExpression, RowAlloc,
+    A13, DeviceVec, Dispatch, Error, Executor, MStorageElement, ReadExpression,
     arg_reduce::{ArgReduceDispatch, ArgReductionOp, arg_reduce},
     eval::Eval13,
     launch::cube_count_1d,
@@ -552,25 +552,26 @@ pub trait SortInput<R: Runtime, Less, Output>: ReadExpression + Sized {
 impl<R, Input, Less, Output> SortInput<R, Less, Output> for Input
 where
     R: Runtime,
-    Input: crate::allocation::NormalizeInput<R>,
+    Input: crate::allocation::NormalizeOwnedInput<R>,
     Less: BinaryPredicateOp<Input::Item>,
     Output: OutputExpression<Item = Input::Item> + LowerOutputExpression + StageOutput<R, Env0>,
-    Input::Item: RowAlloc<R, RowStorage = Input::Storage> + crate::api::iter::SortAbi<R>,
+    Input::Item:
+        crate::RowAlloc<R, RowStorage = Input::OwnedStorage> + crate::api::iter::SortAbi<R>,
     Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
             R,
-            Input::SemanticRead,
+            Input::OwnedRead,
             Output,
-            crate::read::KernelReadSlots<<Input::SemanticRead as LowerReadExpression>::Slots>,
+            crate::read::KernelReadSlots<<Input::OwnedRead as LowerReadExpression>::Slots>,
             crate::output::KernelOutputSlots<<Output as LowerOutputExpression>::Slots>,
         >,
     <Output as LowerOutputExpression>::Slots: crate::output::PaddedOutputSlots,
 {
     fn sort_into(self, exec: &Executor<R>, output: Output) -> Result<(), Error> {
-        let temporary = self.normalize(exec)?;
+        let temporary = self.normalize_owned(exec)?;
         let result = <Input::Item as crate::api::iter::SortAbi<R>>::sort_storage::<Less>(
             exec, temporary, false,
         )?;
-        let semantic = Input::semantic_read(&result.sorted_keys);
+        let semantic = Input::owned_read(&result.sorted_keys);
         materialize(exec, semantic, output)
     }
 }
@@ -606,15 +607,16 @@ pub trait SortKeysInput<R: Runtime, Less, Output>: ReadExpression + Sized {
 impl<R, Input, Less, Output> SortKeysInput<R, Less, Output> for Input
 where
     R: Runtime,
-    Input: crate::allocation::NormalizeInput<R>,
+    Input: crate::allocation::NormalizeOwnedInput<R>,
     Less: BinaryPredicateOp<Input::Item>,
     Output: OutputExpression<Item = Input::Item> + LowerOutputExpression + StageOutput<R, Env0>,
-    Input::Item: RowAlloc<R, RowStorage = Input::Storage> + crate::api::iter::SortAbi<R>,
+    Input::Item:
+        crate::RowAlloc<R, RowStorage = Input::OwnedStorage> + crate::api::iter::SortAbi<R>,
     Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
             R,
-            Input::SemanticRead,
+            Input::OwnedRead,
             Output,
-            crate::read::KernelReadSlots<<Input::SemanticRead as LowerReadExpression>::Slots>,
+            crate::read::KernelReadSlots<<Input::OwnedRead as LowerReadExpression>::Slots>,
             crate::output::KernelOutputSlots<<Output as LowerOutputExpression>::Slots>,
         >,
     <Output as LowerOutputExpression>::Slots: crate::output::PaddedOutputSlots,
@@ -624,11 +626,11 @@ where
         exec: &Executor<R>,
         output: Output,
     ) -> Result<sort::OrderingControl<R>, Error> {
-        let temporary = self.normalize(exec)?;
+        let temporary = self.normalize_owned(exec)?;
         let result = <Input::Item as crate::api::iter::SortAbi<R>>::sort_storage::<Less>(
             exec, temporary, true,
         )?;
-        let semantic = Input::semantic_read(&result.sorted_keys);
+        let semantic = Input::owned_read(&result.sorted_keys);
         materialize(exec, semantic, output)?;
         Ok(result.control)
     }

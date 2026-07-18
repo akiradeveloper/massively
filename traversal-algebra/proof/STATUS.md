@@ -4,7 +4,7 @@ This is the detailed theorem and assumption ledger for formal reviewers. For a
 plain-language account of what Traversal Algebra is, what has been proved, and
 what has not been proved, start with the [project overview](../README.md).
 
-This ledger separates machine-checked language results from executable
+This ledger separates machine-checked language results from independent
 implementation validation. Declaration names are the stable interface between
 the paper and the Lean development.
 
@@ -33,21 +33,6 @@ the paper and the Lean development.
   monoid laws.
 - `Verified.TraversalAlgebra.emit`, `reduceBySource`, and
   `reduceByDestination` define the three type-safe public TA terminals.
-- `Oracle.Typed.CheckedCsr` retains exact offset/destination round-trip
-  equations and graph validity for each accepted concrete CSR input.
-  `toOrderedGraph_destinations` and `toOrderedGraph_edgeIds` prove that its
-  typed adjacency rows preserve concrete destinations and global CSR edge
-  positions.
-- Serializable oracle expressions compile to the intrinsically typed TA
-  traversal grammar. `evaluate_correct` identifies execution with
-  `Observation.Terminal.observe`; `emit_zip_values` proves the recursive
-  product reconstruction used by the Rust façade.
-- `evaluateDestinationCsr_correct` proves that the executable one-pass dense
-  array reduction equals the extensional typed destination terminal, and
-  `evaluateCsr_correct` lifts this to every supported terminal.
-- `activeEdgeCount_corresponds` proves that typed and concrete CSR traversals
-  have exactly the same active-edge count, including repeated frontier
-  occurrences.
 
 ### Typed syntax and compiler
 
@@ -167,12 +152,9 @@ the paper and the Lean development.
   `materializedCsrControl_linearWork` proves the closed bound
   `topologyEdges + vertices + 6*frontier + 11*activeEdges + 3`; it therefore
   does not hide sparse-frontier overhead behind an active-edge-only claim.
-- `Oracle.Typed.CubeCL.programWithMaterializedCsrControl_result_correct`
-  connects the costed target back to `evaluateCsr`. The exported-certificate
-  theorems preserve exact emission/source/destination formulas;
-  `certificate_activeEdges` proves the concrete CSR traversal length and
-  `certificate_withMaterializedCsrControl` proves exact sequential cost
-  decomposition.
+- `execute_withMaterializedCsrControl` proves that prefixing the current CSR
+  control contract does not change the terminal observation, while
+  `cost_withMaterializedCsrControl` proves exact sequential cost composition.
 
 ### Explicit terminal observations
 
@@ -259,20 +241,19 @@ exact unit work/depth/local-storage preservation. Sparse frontier behavior and
 all three terminal observation shapes now have separate universal theorems;
 they are no longer entries in the open-proof list.
 
-## Executable implementation validation
+## Implementation validation
 
-The persistent native Lean oracle plus Rust `proptest` compare generated valid
-CSR/frontier/value-column inputs with the public Massively GPU operations.
+An independent sequential Rust CPU oracle plus `proptest` compare generated
+valid CSR/frontier/value-column inputs with the public Massively GPU operations.
 The default campaign mixes shrinkable rows with seeded multigraph, hub,
 bipartite, regular, and parallel/self-loop families; a separate scale case has
-1,025 vertices. The tests observe structural IDs, source/destination/edge
-pulls, recursive products, pointwise maps, ordered emission, and source and
-destination reduction. This is strong artifact-level evidence and produces
-reproducible counterexamples, but remains logically separate from universal
-Rust/CubeCL, compiler, or hardware correspondence.
+65,537 vertices and 393,222 edges. The tests observe structural IDs,
+source/destination/edge pulls, recursive products, pointwise maps, ordered
+emission, and source and destination reduction. This produces reproducible
+counterexamples but remains logically separate from the Lean theorems and from
+universal Rust/CubeCL, compiler, or hardware correspondence.
 
-The protocol also exports proof-backed CubeCL resource certificates. A
-separate generated-graph campaign checks concrete topology/frontier/active-edge
-dimensions, varied workgroup/subgroup geometry, exact scalar emission/source/
-destination formulas, atomic counts, current CSR-control work, and the full
-fieldwise decomposition of control prefix plus fused terminal costs.
+Lean is not executed by the conformance tests. Its role ends at checking the
+mathematical language and abstract CubeCL resource theorems. In particular,
+the symbolic resource equations remain universal results in `CubeCLCost.lean`,
+not runtime certificates transported to Rust.
