@@ -1,9 +1,9 @@
 [workspace]
 members = [
-    "massively/massively",
-    "massively/oracle",
-    "traversal-algebra/graph-algorithms",
-    "traversal-algebra/oracle",
+    "massively",
+    "verification/massively/oracle",
+    "verification/traversal-algebra/graph-algorithms",
+    "verification/traversal-algebra/oracle",
 ]
 resolver = "3"
 

@@ -6,7 +6,7 @@ forbidden='SegmentKeyInput|SegmentedValues|SegmentRead|CanonicalAlloc|CanonicalS
 mapfile -d '' pages < <(
     find target/doc/massively -type f \
         \( -name 'fn.*.html' -o -name 'trait.RadixKey.html' \
-        -o -name 'trait.MAllocItem.html' \
+        -o -name 'trait.MAlloc.html' \
         -o -name 'trait.MIter.html' -o -name 'trait.MIterMut.html' \
         -o -name 'trait.MStorage.html' \) \
         -print0

@@ -113,9 +113,8 @@ Rust graph algorithm. The Rust/CubeCL implementation is checked separately
 against an independent sequential CPU oracle with generated property tests.
 
 The non-specialist summary, exact proof boundary, Lean development, and oracle
-are collected in the [Traversal Algebra artifact](traversal-algebra/). The
-current research paper is also available as a
-[prebuilt PDF](traversal-algebra/paper/paper.pdf).
+are collected in the
+[Traversal Algebra artifact](verification/traversal-algebra/).
 
 The graph layer uses the same device storage, lazy expressions, multi-column
 values, and parallel primitives as the vector API. It is part of the main crate
@@ -200,9 +199,20 @@ published table marks as supported by current Gunrock, plus all four priority
 future ports: connected components, Louvain modularity,
 random walk, and subgraph matching. It also includes personalized PageRank,
 Boolean SpGEMM, and Forman–Ricci curvature. See the
-[`Gunrock comparison table`](traversal-algebra/graph-algorithms#gunrock-comparison)
+[`Gunrock comparison table`](verification/traversal-algebra/graph-algorithms#gunrock-comparison)
 for the exact scope, tested compositions, independent CPU references, and
 generated graph property tests.
+
+## Core Completeness Artifact
+
+The [Massively Core Lean artifact](verification/massively/) treats a conventional
+finite-control priority-CRCW PRAM as an external expressiveness benchmark and
+Massively Core as a separate bulk-synchronous target machine. Lean checks the
+instruction-machine normalization, compilation to pull/map/proposal
+compaction/deterministic reduction/controlled scatter, and preservation of
+every finite execution. The artifact records the precise current model, its
+symbolic schedule costs, and the Rust/CubeCL refinement work that is not yet
+part of this theorem.
 
 ## Core Model
 
@@ -319,11 +329,11 @@ graph algorithms share improvements to Massively's underlying primitives.
 
 Every public algorithm has a runnable, single-column example in the
 [API documentation](https://docs.rs/massively). Integration tests are grouped
-under `massively/massively/tests/vector` and `massively/massively/tests/seg`.
+under `massively/tests/vector` and `massively/tests/seg`.
 Their
 oracle tests compare public functions against CPU AoS references and cover the
 full transform input/output arity matrix. Complete graph algorithm oracles live
-under `traversal-algebra/graph-algorithms/tests` and compare every algorithm with
+under `verification/traversal-algebra/graph-algorithms/tests` and compare every algorithm with
 independent CPU implementations on generated CSR graphs. Tests in `massively`
 itself cover the graph traversal primitives.
 
