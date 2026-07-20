@@ -27,8 +27,8 @@ struct LessU32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for LessU32 {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs < rhs
+    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+        massively::op::mbool(lhs < rhs)
     }
 }
 
@@ -36,8 +36,8 @@ struct EqualU32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for EqualU32 {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs == rhs
+    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+        massively::op::mbool(lhs == rhs)
     }
 }
 
@@ -67,13 +67,13 @@ struct CandidateLess;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<(f32, u32)> for CandidateLess {
-    fn apply(lhs: (f32, u32), rhs: (f32, u32)) -> bool {
-        if lhs.0 != rhs.0 {
+    fn apply(lhs: (f32, u32), rhs: (f32, u32)) -> massively::MBool {
+        massively::op::mbool(if lhs.0 != rhs.0 {
             lhs.0 < rhs.0
         } else {
             // For equal gain, the smaller community is the maximum item.
             lhs.1 > rhs.1
-        }
+        })
     }
 }
 
@@ -81,12 +81,12 @@ struct PairLess;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<(u32, u32)> for PairLess {
-    fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> bool {
-        if lhs.0 != rhs.0 {
+    fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> massively::MBool {
+        massively::op::mbool(if lhs.0 != rhs.0 {
             lhs.0 < rhs.0
         } else {
             lhs.1 < rhs.1
-        }
+        })
     }
 }
 
@@ -94,8 +94,8 @@ struct PairEqual;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<(u32, u32)> for PairEqual {
-    fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> bool {
-        lhs.0 == rhs.0 && lhs.1 == rhs.1
+    fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> massively::MBool {
+        massively::op::mbool(lhs.0 == rhs.0 && lhs.1 == rhs.1)
     }
 }
 
@@ -123,9 +123,10 @@ fn strengths<R: Runtime>(
         exec,
         graph.graph().csr(),
         common::counting_u32(0, graph.graph().vertex_count() as usize),
+        graph.graph().edge_capacity()?,
     )?
     .map(graph::edge(graph.weights().slice(..)), Identity)
-    .reduce_by_source(exec, 0, SumU32)
+    .reduce_by_source(exec, exec.value(0)?, SumU32)
 }
 
 fn local_move<R: Runtime>(
@@ -135,7 +136,7 @@ fn local_move<R: Runtime>(
 ) -> common::Result<DeviceVec<R, u32>> {
     let topology = graph.graph();
     let n = topology.vertex_count();
-    let m2 = vector::reduce(exec, graph.weights().slice(..), 0, SumU32)?;
+    let m2 = vector::reduce(exec, graph.weights().slice(..), exec.value(0)?, SumU32)?.read(exec)?;
     let strength = strengths(exec, graph)?;
     let communities = vector::transform(exec, common::counting_u32(0, n as usize), Identity)?;
     let totals = vector::transform(exec, strength.slice(..), Identity)?;
@@ -172,25 +173,30 @@ fn local_move<R: Runtime>(
             )?;
             let non_self = vector::transform(
                 exec,
-                zip2(destinations, lazy::constant(vertex).take(row_len as usize)),
+                zip2(destinations, lazy::constant(vertex).take(row_len)),
                 Different,
             )?;
-            let neighbor_communities = vector::copy_where(
+            let neighbor_communities = common::materialize_exact(
                 exec,
-                neighbor_communities.slice(..),
-                common::stencil(non_self.slice(..)),
+                vector::copy_where(
+                    exec,
+                    neighbor_communities.slice(..),
+                    common::stencil(non_self.slice(..)),
+                )?,
             )?;
-            let neighbor_weights =
-                vector::copy_where(exec, edge_weights, common::stencil(non_self.slice(..)))?;
-            let neighbor_count = u32::try_from(neighbor_communities.len()).map_err(|_| {
+            let neighbor_weights = common::materialize_exact(
+                exec,
+                vector::copy_where(exec, edge_weights, common::stencil(non_self.slice(..)))?,
+            )?;
+            let neighbor_count = u32::try_from(neighbor_communities.capacity()).map_err(|_| {
                 massively::Error::LengthTooLarge {
-                    len: neighbor_communities.len(),
+                    len: neighbor_communities.capacity(),
                 }
             })?;
 
             // The current community is always an option, even when the vertex
             // currently has no edge back into it.
-            let candidate_capacity = neighbor_communities.len() + 1;
+            let candidate_capacity = neighbor_communities.capacity() + 1;
             let candidate_communities = exec.alloc::<u32>(candidate_capacity);
             let candidate_weights = exec.alloc::<u32>(candidate_capacity);
             vector::scatter(
@@ -224,40 +230,44 @@ fn local_move<R: Runtime>(
                 candidate_weights.slice(..),
                 LessU32,
             )?;
-            let (unique_communities, incident_weights) = vector::reduce_by_key(
+            let (unique_communities, incident_weights) = common::materialize_exact_pair(
                 exec,
-                sorted_communities.slice(..),
-                sorted_weights.slice(..),
-                EqualU32,
-                0,
-                SumU32,
+                vector::reduce_by_key(
+                    exec,
+                    sorted_communities.slice(..),
+                    sorted_weights.slice(..),
+                    EqualU32,
+                    exec.value(0)?,
+                    SumU32,
+                )?,
             )?;
             let candidate_totals = vector::gather(
                 exec,
                 totals.slice(..),
                 common::indices(unique_communities.slice(..)),
             )?;
-            let candidate_count = u32::try_from(unique_communities.len()).map_err(|_| {
+            let candidate_count = u32::try_from(unique_communities.capacity()).map_err(|_| {
                 massively::Error::LengthTooLarge {
-                    len: unique_communities.len(),
+                    len: unique_communities.capacity(),
                 }
             })?;
             let scores = vector::transform(
                 exec,
                 massively::zip4(
                     incident_weights.slice(..),
-                    lazy::constant(vertex_strength).take(candidate_count as usize),
+                    lazy::constant(vertex_strength).take(candidate_count),
                     candidate_totals.slice(..),
-                    lazy::constant(m2).take(candidate_count as usize),
+                    lazy::constant(m2).take(candidate_count),
                 ),
                 GainScore,
             )?;
-            let best_index = vector::max_element(
+            let (present, best_index) = vector::max_element(
                 exec,
                 zip2(scores.slice(..), unique_communities.slice(..)),
                 CandidateLess,
             )?
-            .expect("the current community is always a candidate");
+            .read(exec)?;
+            assert_ne!(present, 0, "the current community is always a candidate");
             let current_location = vector::lower_bound(
                 exec,
                 unique_communities.slice(..),
@@ -265,8 +275,8 @@ fn local_move<R: Runtime>(
                 LessU32,
             )?;
             let current_index = exec.to_host(&current_location)?[0];
-            let best = read_u32(exec, &unique_communities, best_index)?;
-            let best_score = read_f32(exec, &scores, best_index)?;
+            let best = read_u32(exec, &unique_communities, best_index as usize)?;
+            let best_score = read_f32(exec, &scores, best_index as usize)?;
             let current_score = read_f32(exec, &scores, current_index as usize)?;
 
             if best != current && best_score > current_score + 1.0e-6 {
@@ -306,9 +316,11 @@ fn compact<R: Runtime>(
     communities: &DeviceVec<R, u32>,
 ) -> common::Result<(DeviceVec<R, u32>, u32)> {
     let sorted = vector::sort(exec, communities.slice(..), LessU32)?;
-    let unique = vector::unique(exec, sorted.slice(..), EqualU32)?;
-    let count = u32::try_from(unique.len())
-        .map_err(|_| massively::Error::LengthTooLarge { len: unique.len() })?;
+    let unique =
+        common::materialize_exact(exec, vector::unique(exec, sorted.slice(..), EqualU32)?)?;
+    let count = u32::try_from(unique.capacity()).map_err(|_| massively::Error::LengthTooLarge {
+        len: unique.capacity(),
+    })?;
     let labels = vector::lower_bound(exec, unique.slice(..), communities.slice(..), LessU32)?;
     Ok((labels, count))
 }
@@ -324,9 +336,11 @@ fn contract<R: Runtime>(
         exec,
         topology.csr(),
         common::counting_u32(0, topology.vertex_count() as usize),
+        topology.edge_capacity()?,
     )?
     .map(graph::source_id(), Identity)
     .emit(exec)?;
+    let sources = common::materialize_exact(exec, sources)?;
     let source_labels = vector::gather(exec, labels.slice(..), common::indices(sources.slice(..)))?;
     let destination_labels = vector::gather(
         exec,
@@ -336,23 +350,29 @@ fn contract<R: Runtime>(
     let pair_keys = zip2(source_labels.slice(..), destination_labels.slice(..));
     let sorted_pairs = vector::sort(exec, pair_keys.clone(), PairLess)?;
     let sorted_weights = vector::sort_by_key(exec, pair_keys, graph.weights().slice(..), PairLess)?;
-    let (pairs, weights) = vector::reduce_by_key(
+    let (pairs, weights) = common::materialize_exact_pair(
         exec,
-        sorted_pairs.slice(..),
-        sorted_weights.slice(..),
-        PairEqual,
-        0,
-        SumU32,
+        vector::reduce_by_key(
+            exec,
+            sorted_pairs.slice(..),
+            sorted_weights.slice(..),
+            PairEqual,
+            exec.value(0)?,
+            SumU32,
+        )?,
     )?;
     let (pair_sources, pair_destinations) = MStorage::into_columns(pairs);
-    let edge_count = weights.len() as u32;
-    let (row_ids, row_counts) = vector::reduce_by_key(
+    let edge_count = weights.capacity() as u32;
+    let (row_ids, row_counts) = common::materialize_exact_pair(
         exec,
-        pair_sources.slice(..),
-        lazy::constant(1u32).take(edge_count as usize),
-        EqualU32,
-        0,
-        SumU32,
+        vector::reduce_by_key(
+            exec,
+            pair_sources.slice(..),
+            lazy::constant(1u32).take(edge_count),
+            EqualU32,
+            exec.value(0)?,
+            SumU32,
+        )?,
     )?;
     let counts = common::filled(exec, community_count as usize, 0u32)?;
     vector::scatter(
@@ -418,5 +438,19 @@ mod tests {
         let graph = DeviceCsr::from_host(&exec, &host).unwrap();
         let communities = solve(&exec, &graph, 20, 10).unwrap();
         assert_eq!(exec.to_host(&communities).unwrap(), vec![0, 0, 0, 1, 1, 1]);
+    }
+
+    #[test]
+    fn contracts_sparse_graph_after_host_materialization() {
+        let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+        let host = CsrGraph::new(
+            vec![0, 1, 3, 5, 7, 8, 10],
+            vec![4, 2, 3, 1, 5, 1, 5, 0, 2, 3],
+        );
+        let graph = DeviceCsr::from_host(&exec, &host).unwrap();
+        let communities = solve(&exec, &graph, 20, 10).unwrap();
+        let communities = exec.to_host(&communities).unwrap();
+        assert_eq!(communities.len(), 6);
+        assert!(communities.iter().all(|&community| community < 6));
     }
 }

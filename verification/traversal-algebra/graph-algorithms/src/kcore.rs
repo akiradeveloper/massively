@@ -13,12 +13,12 @@ struct CandidateLess;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<(u32, u32)> for CandidateLess {
-    fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> bool {
-        if lhs.1 != rhs.1 {
+    fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> massively::MBool {
+        massively::op::mbool(if lhs.1 != rhs.1 {
             lhs.1 < rhs.1
         } else {
             lhs.0 < rhs.0
-        }
+        })
     }
 }
 
@@ -56,12 +56,13 @@ pub fn solve<R: Runtime>(
     let mut running_core = 0u32;
 
     for _ in 0..n {
-        let vertex = vector::min_element(
+        let (present, vertex) = vector::min_element(
             exec,
             zip2(current_degree.slice(..), removed.slice(..)),
             CandidateLess,
         )?
-        .expect("the active vertex set is nonempty");
+        .read(exec)?;
+        assert_ne!(present, 0, "the active vertex set is nonempty");
         let degree = read_u32(exec, &current_degree, vertex as usize)?;
         running_core = running_core.max(degree);
 

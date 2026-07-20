@@ -95,6 +95,7 @@ macro_rules! define_sort_kernels {
         >(
             $( $slot: &[$leaf], )+
             read_offsets: &[u32],
+            logical_len_buffer: &[u32],
             params: &[u32],
             zero_offsets: &[u32],
             $( $out: &mut [$leaf], )+
@@ -105,8 +106,8 @@ macro_rules! define_sort_kernels {
             let cube_dim = BLOCK_SIZE as usize;
             let global = (CUBE_POS as usize) * cube_dim + local;
             let tile_start = (CUBE_POS as usize) * cube_dim;
-            let logical_len = params[0] as usize;
-            let carry_indices = params[1] != 0u32;
+            let logical_len = logical_len_buffer[0] as usize;
+            let carry_indices = params[0] != 0u32;
             let tile_len = if logical_len > tile_start {
                 let remaining = logical_len - tile_start;
                 if remaining < cube_dim { remaining } else { cube_dim }
@@ -160,7 +161,7 @@ macro_rules! define_sort_kernels {
                             let right_rank = rank - left_rank;
                             if left_rank < left_len
                                 && right_rank > 0usize
-                                && !Less::apply(
+                                && !crate::ordering::binary_predicate::<Item, Less>(
                                     Layout::recompose(Leaves::load($( &$shared_a, )+ zero_offsets, right_start + right_rank - 1usize)),
                                     Layout::recompose(Leaves::load($( &$shared_a, )+ zero_offsets, base + left_rank)),
                                 )
@@ -174,7 +175,7 @@ macro_rules! define_sort_kernels {
                         let right_rank = rank - left_rank;
                         if left_rank < left_len {
                             if right_rank >= right_len
-                                || !Less::apply(
+                                || !crate::ordering::binary_predicate::<Item, Less>(
                                     Layout::recompose(Leaves::load($( &$shared_a, )+ zero_offsets, right_start + right_rank)),
                                     Layout::recompose(Leaves::load($( &$shared_a, )+ zero_offsets, base + left_rank)),
                                 )
@@ -207,7 +208,7 @@ macro_rules! define_sort_kernels {
                             let right_rank = rank - left_rank;
                             if left_rank < left_len
                                 && right_rank > 0usize
-                                && !Less::apply(
+                                && !crate::ordering::binary_predicate::<Item, Less>(
                                     Layout::recompose(Leaves::load($( &$shared_b, )+ zero_offsets, right_start + right_rank - 1usize)),
                                     Layout::recompose(Leaves::load($( &$shared_b, )+ zero_offsets, base + left_rank)),
                                 )
@@ -221,7 +222,7 @@ macro_rules! define_sort_kernels {
                         let right_rank = rank - left_rank;
                         if left_rank < left_len {
                             if right_rank >= right_len
-                                || !Less::apply(
+                                || !crate::ordering::binary_predicate::<Item, Less>(
                                     Layout::recompose(Leaves::load($( &$shared_b, )+ zero_offsets, right_start + right_rank)),
                                     Layout::recompose(Leaves::load($( &$shared_b, )+ zero_offsets, base + left_rank)),
                                 )
@@ -288,16 +289,21 @@ macro_rules! define_sort_kernels {
             $( $slot: &[$leaf], )+
             read_offsets: &[u32],
             input_indices: &[u32],
+            logical_len_buffer: &[u32],
             params: &[u32],
             zero_offsets: &[u32],
             $( $out: &mut [$leaf], )+
             write_offsets: &[u32],
             output_indices: &mut [u32],
         ) {
-            let logical_len = params[0] as usize;
-            let run_width = params[1] as usize;
-            let carry_indices = params[2] != 0u32;
-            let pair_width = if run_width > logical_len - run_width {
+            let logical_len = logical_len_buffer[0] as usize;
+            let run_width = params[0] as usize;
+            let carry_indices = params[1] != 0u32;
+            let pair_width = if logical_len == 0usize {
+                1usize
+            } else if logical_len <= run_width
+                || run_width > logical_len - run_width
+            {
                 logical_len
             } else {
                 run_width * 2usize
@@ -348,7 +354,7 @@ macro_rules! define_sort_kernels {
                             let right_rank = tile_rank_start - left_rank;
                             if left_rank < left_len
                                 && right_rank > 0usize
-                                && !Less::apply(
+                                && !crate::ordering::binary_predicate::<Item, Less>(
                                     Expr::$method($( $slot, )+ read_offsets, right_start + right_rank - 1usize),
                                     Expr::$method($( $slot, )+ read_offsets, base + left_rank),
                                 )
@@ -376,7 +382,7 @@ macro_rules! define_sort_kernels {
                             let right_rank = tile_rank_end - left_rank;
                             if left_rank < left_len
                                 && right_rank > 0usize
-                                && !Less::apply(
+                                && !crate::ordering::binary_predicate::<Item, Less>(
                                     Expr::$method($( $slot, )+ read_offsets, right_start + right_rank - 1usize),
                                     Expr::$method($( $slot, )+ read_offsets, base + left_rank),
                                 )
@@ -445,7 +451,7 @@ macro_rules! define_sort_kernels {
                             let right_rank = local_start - left_rank;
                             if left_rank < left_count
                                 && right_rank > 0usize
-                                && !Less::apply(
+                                && !crate::ordering::binary_predicate::<Item, Less>(
                                     Layout::recompose(Leaves::load(
                                         $( &$shared_a, )+ zero_offsets,
                                         left_count + right_rank - 1usize,
@@ -468,7 +474,7 @@ macro_rules! define_sort_kernels {
                             let output = base + tile_rank_start + local_cursor.read();
                             if left_rank.read() < left_count
                                 && (right_rank.read() >= right_count
-                                    || !Less::apply(
+                                    || !crate::ordering::binary_predicate::<Item, Less>(
                                         Layout::recompose(Leaves::load(
                                             $( &$shared_a, )+ zero_offsets,
                                             left_count + right_rank.read(),
@@ -575,14 +581,17 @@ macro_rules! impl_sort_pass_dispatch {
                 indices: &crate::DeviceVec<R, u32>,
                 carry_indices: bool,
             ) -> Result<(), Error> {
-                let len = input.logical_len()?;
-                if output.logical_len()? < len {
-                    return Err(Error::OutputTooShort { input: len, output: output.logical_len()? });
+                let capacity = input.logical_len()?;
+                if output.logical_len()? < capacity {
+                    return Err(Error::OutputTooShort {
+                        input: capacity,
+                        output: output.logical_len()?,
+                    });
                 }
-                if len == 0 {
+                if capacity == 0 {
                     return Ok(());
                 }
-                let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+                let logical_len = input.logical_extent()?.materialize(exec)?;
                 let mut reads = StagedBindings::new();
                 input.stage_at(exec.client(), exec.id(), &mut reads)?;
                 let mut writes = OutputBindings::new();
@@ -594,7 +603,7 @@ macro_rules! impl_sort_pass_dispatch {
                     exec.client().create_from_slice(u32::as_bytes(&zero_offsets));
                 let params = exec
                     .client()
-                    .create_from_slice(u32::as_bytes(&[len_u32, carry_indices as u32]));
+                    .create_from_slice(u32::as_bytes(&[carry_indices as u32]));
                 unsafe {
                     $block::launch_unchecked::<
                         Item,
@@ -606,15 +615,16 @@ macro_rules! impl_sort_pass_dispatch {
                         R,
                     >(
                         exec.client(),
-                        cube_count_1d(len.div_ceil(BLOCK_ITEMS))?,
+                        cube_count_1d(capacity.div_ceil(BLOCK_ITEMS))?,
                         CubeDim::new_1d(BLOCK_SIZE),
                         $( BufferArg::from_raw_parts(reads.slots[$index].0.clone(), reads.slots[$index].1), )+
                         BufferArg::from_raw_parts(read_offsets, reads.offsets.len()),
-                        BufferArg::from_raw_parts(params, 2),
+                        BufferArg::from_raw_parts(logical_len.handle.clone(), 1),
+                        BufferArg::from_raw_parts(params, 1),
                         BufferArg::from_raw_parts(zero_offsets_handle, zero_offsets.len()),
                         $( BufferArg::from_raw_parts(writes.slots[$index].0.clone(), writes.slots[$index].1), )+
                         BufferArg::from_raw_parts(write_offsets, writes.offsets.len()),
-                        BufferArg::from_raw_parts(indices.handle.clone(), indices.len()),
+                        BufferArg::from_raw_parts(indices.handle.clone(), indices.capacity()),
                     );
                 }
                 Ok(())
@@ -629,11 +639,11 @@ macro_rules! impl_sort_pass_dispatch {
                 width: usize,
                 carry_indices: bool,
             ) -> Result<(), Error> {
-                let len = input.logical_len()?;
-                if len == 0 {
+                let capacity = input.logical_len()?;
+                if capacity == 0 {
                     return Ok(());
                 }
-                let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+                let logical_len = input.logical_extent()?.materialize(exec)?;
                 let width_u32 = u32::try_from(width)
                     .map_err(|_| Error::LengthTooLarge { len: width })?;
                 let mut reads = StagedBindings::new();
@@ -643,15 +653,14 @@ macro_rules! impl_sort_pass_dispatch {
                 let read_offsets = exec.client().create_from_slice(u32::as_bytes(&reads.offsets));
                 let write_offsets = exec.client().create_from_slice(u32::as_bytes(&writes.offsets));
                 let params = exec.client().create_from_slice(u32::as_bytes(&[
-                    len_u32,
                     width_u32,
                     carry_indices as u32,
                 ]));
                 let zero_offsets = vec![$( { let _ = stringify!($leaf); 0u32 } ),+];
                 let zero_offsets_handle =
                     exec.client().create_from_slice(u32::as_bytes(&zero_offsets));
-                let pair_width = width.saturating_mul(2).min(len);
-                let pairs = len.div_ceil(pair_width);
+                let pair_width = width.saturating_mul(2).min(capacity);
+                let pairs = capacity.div_ceil(pair_width);
                 let tiles_per_pair = pair_width.div_ceil(BLOCK_ITEMS * $merge_items);
                 let cubes = pairs.saturating_mul(tiles_per_pair).max(1);
                 unsafe {
@@ -669,12 +678,19 @@ macro_rules! impl_sort_pass_dispatch {
                         CubeDim::new_1d(BLOCK_SIZE),
                         $( BufferArg::from_raw_parts(reads.slots[$index].0.clone(), reads.slots[$index].1), )+
                         BufferArg::from_raw_parts(read_offsets, reads.offsets.len()),
-                        BufferArg::from_raw_parts(input_indices.handle.clone(), input_indices.len()),
-                        BufferArg::from_raw_parts(params, 3),
+                        BufferArg::from_raw_parts(
+                            input_indices.handle.clone(),
+                            input_indices.capacity(),
+                        ),
+                        BufferArg::from_raw_parts(logical_len.handle.clone(), 1),
+                        BufferArg::from_raw_parts(params, 2),
                         BufferArg::from_raw_parts(zero_offsets_handle, zero_offsets.len()),
                         $( BufferArg::from_raw_parts(writes.slots[$index].0.clone(), writes.slots[$index].1), )+
                         BufferArg::from_raw_parts(write_offsets, writes.offsets.len()),
-                        BufferArg::from_raw_parts(output_indices.handle.clone(), output_indices.len()),
+                        BufferArg::from_raw_parts(
+                            output_indices.handle.clone(),
+                            output_indices.capacity(),
+                        ),
                     );
                 }
                 Ok(())
@@ -735,6 +751,7 @@ where
         carry_indices: bool,
     ) -> Result<OrderingResult<R, Self::RowStorage>, Error> {
         let len = input.len()?;
+        let extent = input.logical_extent();
         if len == 0 {
             return Ok(OrderingResult {
                 sorted_keys: input,
@@ -743,8 +760,12 @@ where
         }
 
         let mut current_keys = exec.alloc_row::<Item>(len);
+        current_keys.set_logical_extent(extent.clone());
         let index_len = if carry_indices { len } else { 1 };
         let mut current_indices = exec.alloc_row::<u32>(index_len);
+        if carry_indices {
+            current_indices.set_logical_extent(extent.clone());
+        }
         let input_read = input.read();
         <Dispatch<
             <<<Item as RowAlloc<R>>::RowStorage as RowStorage<R>>::Read as ReadExpression>::ReadArity,
@@ -759,7 +780,11 @@ where
 
         if len > BLOCK_ITEMS {
             let mut next_keys = exec.alloc_row::<Item>(len);
+            next_keys.set_logical_extent(extent.clone());
             let mut next_indices = exec.alloc_row::<u32>(index_len);
+            if carry_indices {
+                next_indices.set_logical_extent(extent);
+            }
             let mut width = BLOCK_ITEMS;
             while width < len {
                 let current_read = current_keys.read();

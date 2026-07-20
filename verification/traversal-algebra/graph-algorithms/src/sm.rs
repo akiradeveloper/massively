@@ -90,12 +90,12 @@ struct PairLess;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<(u32, u32)> for PairLess {
-    fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> bool {
-        if lhs.0 != rhs.0 {
+    fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> massively::MBool {
+        massively::op::mbool(if lhs.0 != rhs.0 {
             lhs.0 < rhs.0
         } else {
             lhs.1 < rhs.1
-        }
+        })
     }
 }
 
@@ -188,17 +188,25 @@ pub fn solve<R: Runtime>(
         exec,
         zip3(
             common::counting_u32(0, candidate_count as usize),
-            lazy::constant(n).take(candidate_count as usize),
-            lazy::constant(k).take(candidate_count as usize),
+            lazy::constant(n).take(candidate_count),
+            lazy::constant(k).take(candidate_count),
         ),
         Injective,
     )?;
 
-    let edge_pairs = graph::traverse(exec, data.csr(), common::counting_u32(0, n as usize))?
+    let edge_pairs = common::materialize_exact(
+        exec,
+        graph::traverse(
+            exec,
+            data.csr(),
+            common::counting_u32(0, n as usize),
+            data.edge_capacity()?,
+        )?
         .map(zip2(graph::source_id(), graph::destination_id()), Identity)
-        .emit(exec)?;
+        .emit(exec)?,
+    )?;
     let sorted_pairs = vector::sort(exec, edge_pairs.slice(..), PairLess)?;
-    let edge_count = sorted_pairs.len()?;
+    let edge_count = sorted_pairs.capacity()?;
     let searchable_len =
         (edge_count as usize)
             .checked_add(1)
@@ -228,9 +236,9 @@ pub fn solve<R: Runtime>(
                 exec,
                 massively::zip4(
                     common::counting_u32(0, candidate_count as usize),
-                    lazy::constant(n).take(candidate_count as usize),
-                    lazy::constant(query_source as u32).take(candidate_count as usize),
-                    lazy::constant(query_destination).take(candidate_count as usize),
+                    lazy::constant(n).take(candidate_count),
+                    lazy::constant(query_source as u32).take(candidate_count),
+                    lazy::constant(query_destination).take(candidate_count),
                 ),
                 DecodePair,
             )?;
@@ -247,13 +255,18 @@ pub fn solve<R: Runtime>(
         }
     }
 
-    let codes = vector::copy_where(
+    let codes = common::materialize_exact(
         exec,
-        common::counting_u32(0, candidate_count as usize),
-        common::stencil(stencil.slice(..)),
+        vector::copy_where(
+            exec,
+            common::counting_u32(0, candidate_count as usize),
+            common::stencil(stencil.slice(..)),
+        )?,
     )?;
-    let match_count = u32::try_from(codes.len())
-        .map_err(|_| massively::Error::LengthTooLarge { len: codes.len() })?;
+    let match_count =
+        u32::try_from(codes.capacity()).map_err(|_| massively::Error::LengthTooLarge {
+            len: codes.capacity(),
+        })?;
     let mapping_count = match_count
         .checked_mul(k)
         .ok_or(massively::Error::LengthTooLarge { len: usize::MAX })?;
@@ -261,7 +274,7 @@ pub fn solve<R: Runtime>(
         exec,
         zip2(
             common::counting_u32(0, mapping_count as usize),
-            lazy::constant(k).take(mapping_count as usize),
+            lazy::constant(k).take(mapping_count),
         ),
         Divide,
     )?;
@@ -269,7 +282,7 @@ pub fn solve<R: Runtime>(
         exec,
         zip2(
             common::counting_u32(0, mapping_count as usize),
-            lazy::constant(k).take(mapping_count as usize),
+            lazy::constant(k).take(mapping_count),
         ),
         Modulo,
     )?;
@@ -282,7 +295,7 @@ pub fn solve<R: Runtime>(
         exec,
         zip3(
             repeated_codes.slice(..),
-            lazy::constant(n).take(mapping_count as usize),
+            lazy::constant(n).take(mapping_count),
             positions.slice(..),
         ),
         Decode,
@@ -308,6 +321,6 @@ mod tests {
         let matches = solve(&exec, &data, &triangle).unwrap();
         assert_eq!(matches.query_vertex_count(), 3);
         assert_eq!(matches.match_count(), 12);
-        assert_eq!(matches.mappings().len(), 36);
+        assert_eq!(matches.mappings().read_len(&exec).unwrap(), 36);
     }
 }

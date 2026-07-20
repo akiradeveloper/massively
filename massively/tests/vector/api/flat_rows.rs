@@ -1,6 +1,6 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{lazy, op::*, vector::*, *};
+use massively::{op::*, vector::*, *};
 
 type Triple = (u32, u32, u32);
 
@@ -27,8 +27,8 @@ struct LessTriple;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<Triple> for LessTriple {
-    fn apply(lhs: Triple, rhs: Triple) -> bool {
-        lhs.0 < rhs.0
+    fn apply(lhs: Triple, rhs: Triple) -> MBool {
+        op::mbool(lhs.0 < rhs.0)
     }
 }
 
@@ -36,8 +36,8 @@ struct LessU32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for LessU32 {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs < rhs
+    fn apply(lhs: u32, rhs: u32) -> MBool {
+        op::mbool(lhs < rhs)
     }
 }
 
@@ -87,8 +87,7 @@ fn copy_where_returns_flat_owned_columns() {
     let b = exec.to_device(&[10_u32, 20, 30, 40]);
     let c = exec.to_device(&[100_u32, 200, 300, 400]);
     let flags = exec.to_device(&[0_u32, 1, 1, 0]);
-    let flags = lazy::transform(flags.slice(..), massively::op::U32ToBool);
-    let output = copy_where(&exec, nested_input!(a, b, c), flags).unwrap();
+    let output = copy_where(&exec, nested_input!(a, b, c), flags.slice(..)).unwrap();
     let (a, b, c) = MStorage::into_columns(output);
 
     assert_eq!(exec.to_host(&a).unwrap(), vec![2, 3]);
@@ -103,8 +102,7 @@ fn gather_returns_flat_owned_columns() {
     let b = exec.to_device(&[10_u32, 20, 30]);
     let c = exec.to_device(&[100_u32, 200, 300]);
     let indices = exec.to_device(&[2_u32, 0]);
-    let indices = lazy::transform(indices.slice(..), massively::op::U32ToUsize);
-    let output = gather(&exec, nested_input!(a, b, c), indices).unwrap();
+    let output = gather(&exec, nested_input!(a, b, c), indices.slice(..)).unwrap();
     let (a, b, c) = MStorage::into_columns(output);
 
     assert_eq!(exec.to_host(&a).unwrap(), vec![3, 1]);
@@ -160,13 +158,11 @@ fn transform_where_writes_a_flat_operation_result() {
     let oa = exec.to_device(&[90_u32, 90, 90]);
     let ob = exec.to_device(&[80_u32, 80, 80]);
     let oc = exec.to_device(&[70_u32, 70, 70]);
-    let flags = lazy::transform(flags.slice(..), massively::op::U32ToBool);
-
     transform_where(
         &exec,
         nested_input!(a, b, c),
         AddOne,
-        flags,
+        flags.slice(..),
         zip3(oa.slice_mut(..), ob.slice_mut(..), oc.slice_mut(..)),
     )
     .unwrap();

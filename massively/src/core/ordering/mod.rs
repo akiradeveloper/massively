@@ -5,11 +5,12 @@ use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 use crate::{
-    A13, DeviceVec, Dispatch, Error, Executor, MStorageElement, ReadExpression,
+    A13, DeviceVec, Dispatch, Error, Executor, MBool, MIndex, MStorageElement, MVal,
+    ReadExpression,
     arg_reduce::{ArgReduceDispatch, ArgReductionOp, arg_reduce},
     eval::Eval13,
     launch::cube_count_1d,
-    op::IndexedBinaryOp,
+    op::{IndexedBinaryOp, UnaryOp},
     output::{LowerOutputExpression, OutputExpression, StageOutput},
     read::{
         AdjacentIndexedTransform, Env0, Env13, KernelReadSlots, LowerReadExpression,
@@ -39,8 +40,8 @@ const SORT_MERGE_ITEMS: usize = 16;
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Less {
-///     fn apply(lhs: u32, rhs: u32) -> bool {
-///         lhs < rhs
+///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+///         op::mbool(lhs < rhs)
 ///     }
 /// }
 ///
@@ -52,7 +53,16 @@ const SORT_MERGE_ITEMS: usize = 16;
 /// ```
 #[cubecl::cube]
 pub trait BinaryPredicateOp<Item: CubeType>: 'static + Send + Sync {
-    fn apply(lhs: Item, rhs: Item) -> bool;
+    fn apply(lhs: Item, rhs: Item) -> MBool;
+}
+
+#[cubecl::cube]
+pub(crate) fn binary_predicate<Item, Op>(lhs: Item, rhs: Item) -> bool
+where
+    Item: CubeType + 'static,
+    Op: BinaryPredicateOp<Item>,
+{
+    crate::op::is_true(Op::apply(lhs, rhs))
 }
 
 #[cubecl::cube]
@@ -72,7 +82,7 @@ where
     Less: BinaryPredicateOp<Item>,
 {
     fn rhs_wins(lhs: Item, rhs: Item) -> bool {
-        Less::apply(rhs, lhs)
+        crate::ordering::binary_predicate::<Item, Less>(rhs, lhs)
     }
 }
 
@@ -83,7 +93,7 @@ where
     Less: BinaryPredicateOp<Item>,
 {
     fn rhs_wins(lhs: Item, rhs: Item) -> bool {
-        !Less::apply(lhs, rhs)
+        !crate::ordering::binary_predicate::<Item, Less>(lhs, rhs)
     }
 }
 
@@ -94,7 +104,7 @@ where
     Less: BinaryPredicateOp<Item>,
 {
     fn rhs_wins(lhs: Item, rhs: Item) -> bool {
-        Less::apply(lhs, rhs)
+        crate::ordering::binary_predicate::<Item, Less>(lhs, rhs)
     }
 }
 
@@ -104,6 +114,54 @@ struct MinU32;
 impl ReductionOp<u32> for MinU32 {
     fn apply(lhs: u32, rhs: u32) -> u32 {
         u32::min(lhs, rhs)
+    }
+}
+
+struct SentinelToOption;
+
+#[cubecl::cube]
+impl UnaryOp<u32> for SentinelToOption {
+    type Output = (MBool, MIndex);
+
+    fn apply(index: u32) -> Self::Output {
+        (crate::op::mbool(index != u32::MAX), index)
+    }
+}
+
+struct SentinelOrEnd;
+
+#[cubecl::cube]
+impl UnaryOp<(u32, u32)> for SentinelOrEnd {
+    type Output = MIndex;
+
+    fn apply(input: (u32, u32)) -> MIndex {
+        if input.0 == u32::MAX {
+            input.1
+        } else {
+            input.0
+        }
+    }
+}
+
+struct SentinelIsAbsent;
+
+#[cubecl::cube]
+impl UnaryOp<u32> for SentinelIsAbsent {
+    type Output = MBool;
+
+    fn apply(index: u32) -> MBool {
+        crate::op::mbool(index == u32::MAX)
+    }
+}
+
+struct SentinelsToOptionPair;
+
+#[cubecl::cube]
+impl UnaryOp<(u32, u32)> for SentinelsToOptionPair {
+    type Output = (MBool, MIndex, MIndex);
+
+    fn apply(input: (u32, u32)) -> Self::Output {
+        (crate::op::mbool(input.0 != u32::MAX), input.0, input.1)
     }
 }
 
@@ -118,7 +176,7 @@ where
     type Output = u32;
 
     fn apply(previous: Item, current: Item, index: u32) -> u32 {
-        if index != 0u32 && Equal::apply(previous, current) {
+        if index != 0u32 && crate::ordering::binary_predicate::<Item, Equal>(previous, current) {
             index - 1u32
         } else {
             4_294_967_295u32
@@ -137,7 +195,7 @@ where
     type Output = u32;
 
     fn apply(previous: Item, current: Item, index: u32) -> u32 {
-        if index != 0u32 && Less::apply(current, previous) {
+        if index != 0u32 && crate::ordering::binary_predicate::<Item, Less>(current, previous) {
             index
         } else {
             4_294_967_295u32
@@ -158,7 +216,7 @@ where
     }
 
     fn apply(previous: Item, current: Item) -> u32 {
-        if Equal::apply(previous, current) {
+        if crate::ordering::binary_predicate::<Item, Equal>(previous, current) {
             0u32
         } else {
             1u32
@@ -179,7 +237,7 @@ where
     }
 
     fn apply(previous: Item, current: Item) -> u32 {
-        if Less::apply(current, previous) {
+        if crate::ordering::binary_predicate::<Item, Less>(current, previous) {
             1u32
         } else {
             0u32
@@ -262,31 +320,30 @@ macro_rules! impl_adjacent_flags_dispatch {
                 input: &Input,
                 order: Option<&DeviceVec<R, u32>>,
             ) -> Result<DeviceVec<R, u32>, Error> {
-                let input_len = input.logical_len()?;
-                let len = order.map_or(input_len, DeviceVec::len);
-                if let Some(order) = order
-                    && order.len() != input_len
-                {
-                    return Err(Error::LengthMismatch {
-                        left: input_len,
-                        right: order.len(),
-                    });
-                }
-                let flags = exec.alloc_row::<u32>(len);
-                if len == 0 {
+                let input_capacity = input.logical_len()?;
+                let input_extent = input.logical_extent()?;
+                let (capacity, extent) = if let Some(order) = order {
+                    let order_extent = order.logical_extent();
+                    let extent = input_extent.zipped(&order_extent)?;
+                    (order.capacity(), extent)
+                } else {
+                    (input_capacity, input_extent)
+                };
+                let mut flags = exec.alloc_row::<u32>(capacity);
+                flags.set_logical_extent(extent.clone());
+                if capacity == 0 {
                     return Ok(flags);
                 }
-                let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
                 let mut reads = StagedBindings::new();
                 input.stage_at(exec.client(), exec.id(), &mut reads)?;
                 reads.pad_to_thirteen(exec.client());
                 let offsets = exec.client().create_from_slice(u32::as_bytes(&reads.offsets));
-                let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len_u32]));
+                let len_handle = extent.materialize(exec)?;
                 let use_order = exec
                     .client()
                     .create_from_slice(u32::as_bytes(&[u32::from(order.is_some())]));
                 let (order, order_len) = order
-                    .map(|order| (order.handle.clone(), order.len()))
+                    .map(|order| (order.handle.clone(), order.capacity()))
                     .unwrap_or_else(|| {
                         (
                             exec.client().create_from_slice(u32::as_bytes(&[0u32])),
@@ -296,14 +353,14 @@ macro_rules! impl_adjacent_flags_dispatch {
                 unsafe {
                     $kernel::launch_unchecked::<Item, $( $leaf, )+ Input::DeviceExpr, Op, R>(
                         exec.client(),
-                        cube_count_1d(len.div_ceil(BLOCK_SIZE as usize))?,
+                        cube_count_1d(capacity.div_ceil(BLOCK_SIZE as usize))?,
                         CubeDim::new_1d(BLOCK_SIZE),
                         $( BufferArg::from_raw_parts(reads.slots[$index].0.clone(), reads.slots[$index].1), )+
                         BufferArg::from_raw_parts(offsets, reads.offsets.len()),
                         BufferArg::from_raw_parts(order, order_len),
                         BufferArg::from_raw_parts(use_order, 1),
-                        BufferArg::from_raw_parts(len_handle, 1),
-                        BufferArg::from_raw_parts(flags.handle.clone(), flags.len()),
+                        BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
+                        BufferArg::from_raw_parts(flags.handle.clone(), flags.capacity()),
                     );
                 }
                 Ok(flags)
@@ -388,7 +445,7 @@ macro_rules! define_block_sort_permutation_kernel {
                             } else {
                                 indices_b[right_start + right_rank - 1usize]
                             };
-                            if !Less::apply(
+                            if !crate::ordering::binary_predicate::<Item, Less>(
                                 Expr::$method($( $slot, )+ offsets, right_index as usize),
                                 Expr::$method($( $slot, )+ offsets, left_index as usize),
                             ) {
@@ -410,7 +467,7 @@ macro_rules! define_block_sort_permutation_kernel {
                                 left_index
                             } else {
                                 let right_index = indices_a[right_start + right_rank];
-                                if !Less::apply(
+                                if !crate::ordering::binary_predicate::<Item, Less>(
                                     Expr::$method($( $slot, )+ offsets, right_index as usize),
                                     Expr::$method($( $slot, )+ offsets, left_index as usize),
                                 ) {
@@ -428,7 +485,7 @@ macro_rules! define_block_sort_permutation_kernel {
                             left_index
                         } else {
                             let right_index = indices_b[right_start + right_rank];
-                            if !Less::apply(
+                            if !crate::ordering::binary_predicate::<Item, Less>(
                                 Expr::$method($( $slot, )+ offsets, right_index as usize),
                                 Expr::$method($( $slot, )+ offsets, left_index as usize),
                             ) {
@@ -483,7 +540,11 @@ macro_rules! define_merge_permutation_kernel {
         ) {
             let logical_len = len[0] as usize;
             let run_width = width[0] as usize;
-            let pair_width = if run_width > logical_len - run_width {
+            let pair_width = if logical_len == 0usize {
+                1usize
+            } else if logical_len <= run_width
+                || run_width > logical_len - run_width
+            {
                 logical_len
             } else {
                 run_width * 2usize
@@ -532,7 +593,7 @@ macro_rules! define_merge_permutation_kernel {
                             if left_rank < left_len && right_rank > 0usize {
                                 let left_index = input[base + left_rank];
                                 let right_index = input[right_start + right_rank - 1usize];
-                                if !Less::apply(
+                                if !crate::ordering::binary_predicate::<Item, Less>(
                                     Expr::$method($( $slot, )+ offsets, right_index as usize),
                                     Expr::$method($( $slot, )+ offsets, left_index as usize),
                                 ) {
@@ -563,7 +624,7 @@ macro_rules! define_merge_permutation_kernel {
                             if left_rank < left_len && right_rank > 0usize {
                                 let left_index = input[base + left_rank];
                                 let right_index = input[right_start + right_rank - 1usize];
-                                if !Less::apply(
+                                if !crate::ordering::binary_predicate::<Item, Less>(
                                     Expr::$method($( $slot, )+ offsets, right_index as usize),
                                     Expr::$method($( $slot, )+ offsets, left_index as usize),
                                 ) {
@@ -629,7 +690,7 @@ macro_rules! define_merge_permutation_kernel {
                             if left_rank < left_count && right_rank > 0usize {
                                 let left_index = shared_indices[left_rank];
                                 let right_index = shared_indices[left_count + right_rank - 1usize];
-                                if !Less::apply(
+                                if !crate::ordering::binary_predicate::<Item, Less>(
                                     Expr::$method($( $slot, )+ offsets, right_index as usize),
                                     Expr::$method($( $slot, )+ offsets, left_index as usize),
                                 ) {
@@ -655,7 +716,7 @@ macro_rules! define_merge_permutation_kernel {
                                 } else {
                                     let right_index =
                                         shared_indices[left_count + right_rank.read()];
-                                    if !Less::apply(
+                                    if !crate::ordering::binary_predicate::<Item, Less>(
                                         Expr::$method($( $slot, )+ offsets, right_index as usize),
                                         Expr::$method($( $slot, )+ offsets, left_index as usize),
                                     ) {
@@ -705,13 +766,14 @@ macro_rules! impl_sort_control_dispatch {
             Input::DeviceExpr: $eval<Item, $( $leaf ),+>,
         {
             fn run(exec: &Executor<R>, input: &Input) -> Result<DeviceVec<R, u32>, Error> {
-                let len = input.logical_len()?;
-                let mut current = exec.alloc_row::<u32>(len);
-                if len == 0 {
+                let capacity = input.logical_len()?;
+                let extent = input.logical_extent()?;
+                let mut current = exec.alloc_row::<u32>(capacity);
+                current.set_logical_extent(extent.clone());
+                if capacity == 0 {
                     return Ok(current);
                 }
-                let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-                let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len_u32]));
+                let len_handle = extent.materialize(exec)?;
                 let mut reads = StagedBindings::new();
                 input.stage_at(exec.client(), exec.id(), &mut reads)?;
                 reads.pad_to_thirteen(exec.client());
@@ -725,25 +787,26 @@ macro_rules! impl_sort_control_dispatch {
                         R,
                     >(
                         exec.client(),
-                        cube_count_1d(len.div_ceil(SORT_BLOCK_ITEMS))?,
+                        cube_count_1d(capacity.div_ceil(SORT_BLOCK_ITEMS))?,
                         CubeDim::new_1d(SORT_BLOCK_SIZE),
                         $( BufferArg::from_raw_parts(reads.slots[$index].0.clone(), reads.slots[$index].1), )+
                         BufferArg::from_raw_parts(offsets.clone(), reads.offsets.len()),
-                        BufferArg::from_raw_parts(len_handle.clone(), 1),
-                        BufferArg::from_raw_parts(current.handle.clone(), current.len()),
+                        BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
+                        BufferArg::from_raw_parts(current.handle.clone(), current.capacity()),
                     );
                 }
-                if len <= SORT_BLOCK_ITEMS {
+                if capacity <= SORT_BLOCK_ITEMS {
                     return Ok(current);
                 }
-                let mut next = exec.alloc_row::<u32>(len);
+                let mut next = exec.alloc_row::<u32>(capacity);
+                next.set_logical_extent(extent);
                 let mut width = SORT_BLOCK_ITEMS;
-                while width < len {
+                while width < capacity {
                     let width_u32 = u32::try_from(width)
                         .map_err(|_| Error::LengthTooLarge { len: width })?;
                     let width_handle = exec.client().create_from_slice(u32::as_bytes(&[width_u32]));
-                    let pair_width = width.saturating_mul(2).min(len);
-                    let pairs = len.div_ceil(pair_width);
+                    let pair_width = width.saturating_mul(2).min(capacity);
+                    let pairs = capacity.div_ceil(pair_width);
                     let tiles_per_pair =
                         pair_width.div_ceil(SORT_BLOCK_ITEMS * SORT_MERGE_ITEMS);
                     let count = cube_count_1d(pairs.saturating_mul(tiles_per_pair).max(1))?;
@@ -754,9 +817,9 @@ macro_rules! impl_sort_control_dispatch {
                             CubeDim::new_1d(SORT_BLOCK_SIZE),
                             $( BufferArg::from_raw_parts(reads.slots[$index].0.clone(), reads.slots[$index].1), )+
                             BufferArg::from_raw_parts(offsets.clone(), reads.offsets.len()),
-                            BufferArg::from_raw_parts(current.handle.clone(), current.len()),
-                            BufferArg::from_raw_parts(next.handle.clone(), next.len()),
-                            BufferArg::from_raw_parts(len_handle.clone(), 1),
+                            BufferArg::from_raw_parts(current.handle.clone(), current.capacity()),
+                            BufferArg::from_raw_parts(next.handle.clone(), next.capacity()),
+                            BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
                             BufferArg::from_raw_parts(width_handle, 1),
                         );
                     }
@@ -995,8 +1058,7 @@ where
 /// Internal public-API capability for adjacent pair search.
 #[doc(hidden)]
 pub trait AdjacentFindInput<R: Runtime, Equal>: ReadExpression + Sized {
-    fn adjacent_find_len(&self) -> Result<usize, Error>;
-    fn first_adjacent_match(self, exec: &Executor<R>) -> Result<Option<u32>, Error>;
+    fn first_adjacent_match(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
 }
 
 impl<R, Input, Equal> AdjacentFindInput<R, Equal> for Input
@@ -1014,20 +1076,16 @@ where
             crate::read::KernelReadSlots<
                 <AdjacentIndexedTransform<Input, FirstAdjacentMatch<Equal>> as LowerReadExpression>::Slots,
             >,
+            Storage = DeviceVec<R, u32>,
         >,
 {
-    fn adjacent_find_len(&self) -> Result<usize, Error> {
-        self.logical_len()
-    }
-
-    fn first_adjacent_match(self, exec: &Executor<R>) -> Result<Option<u32>, Error> {
-        let index = reduce(
+    fn first_adjacent_match(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
+        reduce(
             exec,
             AdjacentIndexedTransform::new(self, FirstAdjacentMatch::<Equal>(PhantomData)),
-            u32::MAX,
+            exec.value(u32::MAX)?.into_scratch_storage(),
             MinU32,
-        )?;
-        Ok((index != u32::MAX).then_some(index))
+        )
     }
 }
 
@@ -1036,21 +1094,23 @@ pub(crate) fn adjacent_find<R, Input, Equal>(
     exec: &Executor<R>,
     input: Input,
     _equal: Equal,
-) -> Result<Option<u32>, Error>
+) -> Result<MVal<R, (MBool, MIndex)>, Error>
 where
     R: Runtime,
     Input: AdjacentFindInput<R, Equal>,
 {
-    if input.adjacent_find_len()? < 2 {
-        return Ok(None);
-    }
-    input.first_adjacent_match(exec)
+    let index = input.first_adjacent_match(exec)?;
+    MVal::from_storage(crate::vector::transform(
+        exec,
+        index.slice(..),
+        SentinelToOption,
+    )?)
 }
 
 /// Internal public-API capability for stable adjacent deduplication.
 #[doc(hidden)]
 pub trait UniqueInput<R: Runtime, Equal, Output>: ReadExpression + Sized {
-    fn unique_into(self, exec: &Executor<R>, output: Output) -> Result<u32, Error>;
+    fn unique_into(self, exec: &Executor<R>, output: Output) -> Result<DeviceVec<R, u32>, Error>;
 }
 
 impl<R, Input, Equal, Output> UniqueInput<R, Equal, Output> for Input
@@ -1062,7 +1122,7 @@ where
         + crate::selection::CopySelected<R, Output>,
     Equal: BinaryPredicateOp<Input::Item>,
 {
-    fn unique_into(self, exec: &Executor<R>, output: Output) -> Result<u32, Error> {
+    fn unique_into(self, exec: &Executor<R>, output: Output) -> Result<DeviceVec<R, u32>, Error> {
         let flags = unique_head_flags::<R, _, Equal>(exec, self.clone())?;
         let control = crate::selection::SelectionControl::from_flags(exec, flags)?;
         self.copy_selected(exec, &control, output)
@@ -1075,7 +1135,7 @@ pub(crate) fn unique<R, Input, Equal, Output>(
     input: Input,
     _equal: Equal,
     output: Output,
-) -> Result<u32, Error>
+) -> Result<DeviceVec<R, u32>, Error>
 where
     R: Runtime,
     Input: UniqueInput<R, Equal, Output>,
@@ -1087,8 +1147,8 @@ where
 /// dispatch from the function signature.
 #[doc(hidden)]
 pub trait SortedInput<R: Runtime, Less>: ReadExpression + Sized {
-    fn sorted_len(&self) -> Result<usize, Error>;
-    fn first_sorted_break(self, exec: &Executor<R>) -> Result<Option<u32>, Error>;
+    fn sorted_extent(&self) -> Result<crate::extent::LogicalExtent, Error>;
+    fn first_sorted_break(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
 }
 
 impl<R, Input, Less> SortedInput<R, Less> for Input
@@ -1106,20 +1166,20 @@ where
             crate::read::KernelReadSlots<
                 <AdjacentIndexedTransform<Input, FirstSortedBreak<Less>> as LowerReadExpression>::Slots,
             >,
+            Storage = DeviceVec<R, u32>,
         >,
 {
-    fn sorted_len(&self) -> Result<usize, Error> {
-        self.logical_len()
+    fn sorted_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.logical_extent()
     }
 
-    fn first_sorted_break(self, exec: &Executor<R>) -> Result<Option<u32>, Error> {
-        let index = reduce(
+    fn first_sorted_break(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
+        reduce(
             exec,
             AdjacentIndexedTransform::new(self, FirstSortedBreak::<Less>(PhantomData)),
-            u32::MAX,
+            exec.value(u32::MAX)?.into_scratch_storage(),
             MinU32,
-        )?;
-        Ok((index != u32::MAX).then_some(index))
+        )
     }
 }
 
@@ -1129,38 +1189,45 @@ pub(crate) fn is_sorted_until<R, Input, Less>(
     exec: &Executor<R>,
     input: Input,
     _less: Less,
-) -> Result<u32, Error>
+) -> Result<MVal<R, MIndex>, Error>
 where
     R: Runtime,
     Input: SortedInput<R, Less>,
 {
-    let len = input.sorted_len()?;
-    let end = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-    Ok(input.first_sorted_break(exec)?.unwrap_or(end))
+    let end = input.sorted_extent()?.materialize(exec)?;
+    let index = input.first_sorted_break(exec)?;
+    MVal::from_storage(crate::vector::transform(
+        exec,
+        crate::zip2(index.slice(..), end.slice(..)),
+        SentinelOrEnd,
+    )?)
 }
 
 /// Returns whether the input is sorted according to `less`.
 pub(crate) fn is_sorted<R, Input, Less>(
     exec: &Executor<R>,
     input: Input,
-    less: Less,
-) -> Result<bool, Error>
+    _less: Less,
+) -> Result<MVal<R, MBool>, Error>
 where
     R: Runtime,
     Input: SortedInput<R, Less>,
 {
-    let len = input.sorted_len()?;
-    let end = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-    Ok(is_sorted_until(exec, input, less)? == end)
+    let index = input.first_sorted_break(exec)?;
+    MVal::from_storage(crate::vector::transform(
+        exec,
+        index.slice(..),
+        SentinelIsAbsent,
+    )?)
 }
 
 /// Internal public-API capability for extremum queries.
 #[doc(hidden)]
 pub trait ExtremumInput<R: Runtime, Less>: ReadExpression + Sized {
     fn extremum_len(&self) -> Result<usize, Error>;
-    fn first_minimum(&self, exec: &Executor<R>) -> Result<Option<u32>, Error>;
-    fn last_minimum(&self, exec: &Executor<R>) -> Result<Option<u32>, Error>;
-    fn first_maximum(&self, exec: &Executor<R>) -> Result<Option<u32>, Error>;
+    fn first_minimum(&self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
+    fn last_minimum(&self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
+    fn first_maximum(&self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
 }
 
 impl<R, Input, Less> ExtremumInput<R, Less> for Input
@@ -1176,15 +1243,15 @@ where
         self.logical_len()
     }
 
-    fn first_minimum(&self, exec: &Executor<R>) -> Result<Option<u32>, Error> {
+    fn first_minimum(&self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
         arg_reduce(exec, self.clone(), ArgMinFirst::<Less>(PhantomData))
     }
 
-    fn last_minimum(&self, exec: &Executor<R>) -> Result<Option<u32>, Error> {
+    fn last_minimum(&self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
         arg_reduce(exec, self.clone(), ArgMinLast::<Less>(PhantomData))
     }
 
-    fn first_maximum(&self, exec: &Executor<R>) -> Result<Option<u32>, Error> {
+    fn first_maximum(&self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
         arg_reduce(exec, self.clone(), ArgMaxFirst::<Less>(PhantomData))
     }
 }
@@ -1194,12 +1261,16 @@ pub(crate) fn min_element<R, Input, Less>(
     exec: &Executor<R>,
     input: Input,
     _less: Less,
-) -> Result<Option<u32>, Error>
+) -> Result<MVal<R, (MBool, MIndex)>, Error>
 where
     R: Runtime,
     Input: ExtremumInput<R, Less>,
 {
-    input.first_minimum(exec)
+    MVal::from_storage(crate::vector::transform(
+        exec,
+        input.first_minimum(exec)?.slice(..),
+        SentinelToOption,
+    )?)
 }
 
 /// Returns the first maximum element index.
@@ -1207,12 +1278,16 @@ pub(crate) fn max_element<R, Input, Less>(
     exec: &Executor<R>,
     input: Input,
     _less: Less,
-) -> Result<Option<u32>, Error>
+) -> Result<MVal<R, (MBool, MIndex)>, Error>
 where
     R: Runtime,
     Input: ExtremumInput<R, Less>,
 {
-    input.first_maximum(exec)
+    MVal::from_storage(crate::vector::transform(
+        exec,
+        input.first_maximum(exec)?.slice(..),
+        SentinelToOption,
+    )?)
 }
 
 /// Returns the last minimum and first maximum indices.
@@ -1220,21 +1295,18 @@ pub(crate) fn minmax_element<R, Input, Less>(
     exec: &Executor<R>,
     input: Input,
     _less: Less,
-) -> Result<Option<(u32, u32)>, Error>
+) -> Result<MVal<R, (MBool, MIndex, MIndex)>, Error>
 where
     R: Runtime,
     Input: ExtremumInput<R, Less>,
 {
-    if input.extremum_len()? == 0 {
-        return Ok(None);
-    }
-    let min = input
-        .last_minimum(exec)?
-        .expect("non-empty input has a minimum");
-    let max = input
-        .first_maximum(exec)?
-        .expect("non-empty input has a maximum");
-    Ok(Some((min, max)))
+    let min = input.last_minimum(exec)?;
+    let max = input.first_maximum(exec)?;
+    MVal::from_storage(crate::vector::transform(
+        exec,
+        crate::zip2(min.slice(..), max.slice(..)),
+        SentinelsToOptionPair,
+    )?)
 }
 
 #[cfg(test)]
@@ -1248,8 +1320,8 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<Seven> for LexicographicLess {
-        fn apply(lhs: Seven, rhs: Seven) -> bool {
-            lhs.0 < rhs.0
+        fn apply(lhs: Seven, rhs: Seven) -> crate::MBool {
+            crate::op::mbool(lhs.0 < rhs.0)
         }
     }
 
@@ -1257,14 +1329,16 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<Seven> for EqualSeven {
-        fn apply(lhs: Seven, rhs: Seven) -> bool {
-            lhs.0 == rhs.0
-                && lhs.1 == rhs.1
-                && lhs.2 == rhs.2
-                && lhs.3 == rhs.3
-                && lhs.4 == rhs.4
-                && lhs.5 == rhs.5
-                && lhs.6 == rhs.6
+        fn apply(lhs: Seven, rhs: Seven) -> crate::MBool {
+            crate::op::mbool(
+                lhs.0 == rhs.0
+                    && lhs.1 == rhs.1
+                    && lhs.2 == rhs.2
+                    && lhs.3 == rhs.3
+                    && lhs.4 == rhs.4
+                    && lhs.5 == rhs.5
+                    && lhs.6 == rhs.6,
+            )
         }
     }
 
@@ -1272,8 +1346,8 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<u32> for LessU32 {
-        fn apply(lhs: u32, rhs: u32) -> bool {
-            lhs < rhs
+        fn apply(lhs: u32, rhs: u32) -> crate::MBool {
+            crate::op::mbool(lhs < rhs)
         }
     }
 
@@ -1300,12 +1374,15 @@ mod tests {
                     ),
                 ),
             );
-            Permute::new(
-                seven,
-                Transform::new(Counting::new(0, 4), crate::op::U32ToUsize),
-            )
+            Permute::new(seven, Counting::new(0, 4))
         };
-        assert!(is_sorted(&exec, make_input(), LexicographicLess).unwrap());
+        assert_eq!(
+            is_sorted(&exec, make_input(), LexicographicLess)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
+            1
+        );
 
         let bad_first = exec.to_device(&[1_u32, 2, 1, 3]);
         let bad_input = Permute::new(
@@ -1325,10 +1402,13 @@ mod tests {
                     ),
                 ),
             ),
-            Transform::new(Counting::new(0, 4), crate::op::U32ToUsize),
+            Counting::new(0, 4),
         );
         assert_eq!(
-            is_sorted_until(&exec, bad_input, LexicographicLess).unwrap(),
+            is_sorted_until(&exec, bad_input, LexicographicLess)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
             2
         );
     }
@@ -1363,10 +1443,7 @@ mod tests {
                 ),
             ),
         );
-        let input = Permute::new(
-            seven,
-            Transform::new(Counting::new(0, len), crate::op::U32ToUsize),
-        );
+        let input = Permute::new(seven, Counting::new(0, len));
         let output = exec.alloc_row::<Seven>(len);
 
         sort(&exec, input, LexicographicLess, output.write()).unwrap();
@@ -1413,22 +1490,23 @@ mod tests {
                         ),
                     ),
                 ),
-                Transform::new(Counting::new(0, 5), crate::op::U32ToUsize),
+                Counting::new(0, 5),
             )
         };
 
         assert_eq!(
-            adjacent_find(&exec, make_input(), EqualSeven).unwrap(),
-            Some(0)
+            adjacent_find(&exec, make_input(), EqualSeven)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
+            (1, 0)
         );
         let output = exec.alloc_row::<Seven>(5);
         let count = unique(&exec, make_input(), EqualSeven, output.write()).unwrap();
+        let count = exec.to_host(&count).unwrap()[0] as usize;
         let (first, _, _, _, _, _, _) = crate::MStorage::into_columns(output);
         assert_eq!(count, 3);
-        assert_eq!(
-            exec.to_host(&first.slice(..count as usize)).unwrap(),
-            vec![1, 2, 3]
-        );
+        assert_eq!(exec.to_host(&first.slice(..count)).unwrap(), vec![1, 2, 3]);
     }
 
     #[test]
@@ -1436,16 +1514,25 @@ mod tests {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let input = exec.to_device(&[2_u32, 1, 3, 1, 3]);
         assert_eq!(
-            min_element(&exec, input.column(), LessU32).unwrap(),
-            Some(1)
+            min_element(&exec, input.column(), LessU32)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
+            (1, 1)
         );
         assert_eq!(
-            max_element(&exec, input.column(), LessU32).unwrap(),
-            Some(2)
+            max_element(&exec, input.column(), LessU32)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
+            (1, 2)
         );
         assert_eq!(
-            minmax_element(&exec, input.column(), LessU32).unwrap(),
-            Some((3, 2))
+            minmax_element(&exec, input.column(), LessU32)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
+            (1, 3, 2)
         );
     }
 }

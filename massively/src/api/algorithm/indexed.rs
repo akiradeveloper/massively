@@ -14,7 +14,7 @@ where
     R: Runtime,
     Item: CubeType + Send + Sync + 'static,
     Values: MIter<R, Item = Item>,
-    Indices: MIter<R, Item = usize>,
+    Indices: MIter<R, Item = crate::MIndex>,
 {
     type Result = Result<(), Error>;
 
@@ -43,6 +43,7 @@ struct ApplyPermutationOperation<'a, R: Runtime, Input> {
     exec: &'a Executor<R>,
     input: Input,
     indices: crate::Column<u32>,
+    active_len: Option<&'a crate::DeviceVec<R, u32>>,
 }
 
 impl<R, Item, Input> crate::api::iter::OutputOperation<R, Item>
@@ -59,7 +60,15 @@ where
         Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
         Output: crate::api::iter::ConcreteOutput<R, Item>,
     {
-        crate::indexed::apply_permutation(self.exec, self.input, self.indices, output)
+        crate::indexed::IndexedCopyInput::indexed_copy_selected(
+            self.input,
+            self.exec,
+            self.indices,
+            None,
+            self.active_len,
+            true,
+            output,
+        )
     }
 }
 
@@ -78,6 +87,27 @@ where
         exec,
         input,
         indices,
+        active_len: None,
+    })
+}
+
+pub(crate) fn apply_permutation_prefix_into<R, Input, Output>(
+    exec: &Executor<R>,
+    input: Input,
+    indices: crate::Column<u32>,
+    active_len: &crate::DeviceVec<R, u32>,
+    output: Output,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Input: crate::core::facade::KernelInput<R, Item = Output::Item>,
+    Output: MIterMut<R>,
+{
+    output.run_output_operation(ApplyPermutationOperation {
+        exec,
+        input,
+        indices,
+        active_len: Some(active_len),
     })
 }
 
@@ -87,8 +117,8 @@ where
     R: Runtime,
     Item: CubeType + Send + Sync + 'static,
     Values: MIter<R, Item = Item>,
-    Indices: MIter<R, Item = usize>,
-    Stencil: MIter<R, Item = bool>,
+    Indices: MIter<R, Item = crate::MIndex>,
+    Stencil: MIter<R, Item = crate::MBool>,
 {
     type Result = Result<(), Error>;
 
@@ -101,26 +131,24 @@ where
             crate::api::iter::lower::<R, _>(self.stencil),
             self.exec,
         )?;
-        if control.count() == 0 {
-            return Ok(());
-        }
-
-        let scratch = <Item as crate::allocation::ScratchStorage<R>>::alloc_scratch(
-            self.exec,
-            control.count() as usize,
-        );
+        let scratch =
+            <Item as crate::allocation::ScratchStorage<R>>::alloc_scratch(self.exec, control.len());
         crate::indexed::IndexedCopyInput::indexed_copy_selected(
             crate::api::iter::lower::<R, _>(self.values),
             self.exec,
             crate::api::iter::lower::<R, _>(self.indices),
             Some(control.indices()),
+            Some(control.count()),
             true,
             crate::RowStorage::write(&scratch),
         )?;
-        crate::core::scatter::scatter(
-            self.exec,
+        crate::indexed::IndexedCopyInput::indexed_copy_selected(
             crate::RowStorage::read(&scratch),
-            crate::Transform::new(control.indices().column(), crate::op::U32ToUsize),
+            self.exec,
+            control.indices().column(),
+            None,
+            Some(control.count()),
+            false,
             output,
         )
     }
@@ -132,13 +160,12 @@ where
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, lazy, op::U32ToUsize, vector::gather};
+/// use massively::{Executor, vector::gather};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let values = exec.to_device(&[10_u32, 20, 30]);
 /// let indices = exec.to_device(&[2_u32, 0, 1]);
-/// let indices = lazy::transform(indices.slice(..), U32ToUsize);
-/// let output = gather(&exec, values.slice(..), indices).unwrap();
+/// let output = gather(&exec, values.slice(..), indices.slice(..)).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![30, 10, 20]);
 /// ```
@@ -151,11 +178,13 @@ where
     R: Runtime,
     Values: MIter<R, Item = Item>,
     Item: MAlloc<R>,
-    Indices: MIter<R, Item = usize>,
+    Indices: MIter<R, Item = crate::MIndex>,
 {
-    let len = indices.len()? as usize;
-    let output = exec.alloc::<Item>(len);
+    let len = indices.capacity()? as usize;
+    let extent = indices.logical_extent()?;
+    let mut output = exec.alloc::<Item>(len);
     gather_into(exec, values, indices, output.slice_mut(..))?;
+    output.set_logical_extent(extent);
     Ok(output)
 }
 
@@ -170,33 +199,9 @@ pub(crate) fn gather_into<R, Values, Indices, Output>(
 where
     R: Runtime,
     Values: MIter<R, Item = Output::Item>,
-    Indices: MIter<R, Item = usize>,
+    Indices: MIter<R, Item = crate::MIndex>,
     Output: MIterMut<R>,
 {
-    output.run_output_operation(GatherOperation {
-        exec,
-        values,
-        indices,
-    })
-}
-
-/// Gathers from stored `u32` indices after converting them at the read boundary.
-pub(crate) fn gather_raw_into<R, Values, Indices, Output>(
-    exec: &Executor<R>,
-    values: Values,
-    indices: Indices,
-    output: Output,
-) -> Result<(), Error>
-where
-    R: Runtime,
-    Values: MIter<R, Item = Output::Item>,
-    Indices: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
-{
-    let indices = crate::Transform::new(
-        crate::api::iter::lower::<R, _>(indices),
-        crate::op::U32ToUsize,
-    );
     output.run_output_operation(GatherOperation {
         exec,
         values,
@@ -212,25 +217,19 @@ where
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{
-///     Executor, lazy,
-///     op::{U32ToBool, U32ToUsize},
-///     vector::gather_where,
-/// };
+/// use massively::{Executor, vector::gather_where};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let values = exec.to_device(&[10_u32, 20, 30]);
 /// let indices = exec.to_device(&[2_u32, 0, 1]);
 /// let stencil = exec.to_device(&[1_u32, 0, 1]);
-/// let indices = lazy::transform(indices.slice(..), U32ToUsize);
-/// let stencil = lazy::transform(stencil.slice(..), U32ToBool);
 /// let output = exec.to_device(&[99_u32, 99, 99]);
 ///
 /// gather_where(
 ///     &exec,
 ///     values.slice(..),
-///     indices,
-///     stencil,
+///     indices.slice(..),
+///     stencil.slice(..),
 ///     output.slice_mut(..),
 /// )
 /// .unwrap();
@@ -247,23 +246,23 @@ pub fn gather_where<R, Values, Indices, Stencil, Output>(
 where
     R: Runtime,
     Values: MIter<R, Item = Output::Item>,
-    Indices: MIter<R, Item = usize>,
-    Stencil: MIter<R, Item = bool>,
+    Indices: MIter<R, Item = crate::MIndex>,
+    Stencil: MIter<R, Item = crate::MBool>,
     Output: MIterMut<R>,
 {
-    let indices_len = indices.len()?;
-    let stencil_len = stencil.len()?;
+    let indices_len = indices.capacity()?;
+    let stencil_len = stencil.capacity()?;
     if indices_len != stencil_len {
         return Err(Error::LengthMismatch {
-            left: indices_len,
-            right: stencil_len,
+            left: indices_len as usize,
+            right: stencil_len as usize,
         });
     }
-    let output_len = output.len()?;
+    let output_len = output.capacity()?;
     if output_len < indices_len {
         return Err(Error::OutputTooShort {
-            input: indices_len,
-            output: output_len,
+            input: indices_len as usize,
+            output: output_len as usize,
         });
     }
 
@@ -293,10 +292,13 @@ pub fn reverse<R, Values, Item>(exec: &Executor<R>, values: Values) -> Result<MV
 where
     R: Runtime,
     Values: MIter<R, Item = Item>,
+    crate::lazy::Reverse<Values>: MIter<R, Item = Item>,
     Item: MAlloc<R>,
 {
-    let len = values.len()? as usize;
-    let output = exec.alloc::<Item>(len);
+    let len = values.capacity()? as usize;
+    let extent = values.logical_extent()?;
+    let mut output = exec.alloc::<Item>(len);
+    output.set_logical_extent(extent);
     reverse_into(exec, values, output.slice_mut(..))?;
     Ok(output)
 }
@@ -311,15 +313,15 @@ pub(crate) fn reverse_into<R, Values, Output>(
 where
     R: Runtime,
     Values: MIter<R, Item = Output::Item>,
+    crate::lazy::Reverse<Values>: MIter<R, Item = Output::Item>,
     Output: MIterMut<R>,
 {
-    let len = values.len()? as usize;
-    let indices = crate::Transform::new(crate::ReverseCounting::new(len), crate::op::U32ToUsize);
-    output.run_output_operation(GatherOperation {
+    crate::api::algorithm::transform::transform_into(
         exec,
-        values,
-        indices,
-    })
+        crate::lazy::Reverse::new(values),
+        crate::op::Identity,
+        output,
+    )
 }
 
 #[cfg(test)]
@@ -338,8 +340,8 @@ mod tests {
         gather_where(
             &exec,
             values.slice(..),
-            crate::lazy::transform(encoded_indices.slice(..), crate::op::U32ToUsize),
-            crate::lazy::transform(encoded_stencil.slice(..), crate::op::U32ToBool),
+            encoded_indices.slice(..),
+            encoded_stencil.slice(..),
             output.slice_mut(..),
         )
         .unwrap();

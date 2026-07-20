@@ -35,12 +35,12 @@ struct SweepOrder;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<(f32, u32)> for SweepOrder {
-    fn apply(lhs: (f32, u32), rhs: (f32, u32)) -> bool {
-        if lhs.0 != rhs.0 {
+    fn apply(lhs: (f32, u32), rhs: (f32, u32)) -> massively::MBool {
+        massively::op::mbool(if lhs.0 != rhs.0 {
             lhs.0 > rhs.0
         } else {
             lhs.1 < rhs.1
-        }
+        })
     }
 }
 
@@ -116,12 +116,12 @@ struct BestPrefix;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<(f32, u32)> for BestPrefix {
-    fn apply(lhs: (f32, u32), rhs: (f32, u32)) -> bool {
-        if lhs.0 != rhs.0 {
+    fn apply(lhs: (f32, u32), rhs: (f32, u32)) -> massively::MBool {
+        massively::op::mbool(if lhs.0 != rhs.0 {
             lhs.0 < rhs.0
         } else {
             lhs.1 < rhs.1
-        }
+        })
     }
 }
 
@@ -159,15 +159,20 @@ pub fn solve<R: Runtime>(
         positions.slice_mut(..),
     )?;
 
-    let earlier = graph::traverse(exec, graph.csr(), common::counting_u32(0, n as usize))?
-        .map(
-            zip2(
-                graph::source(positions.slice(..)),
-                graph::destination(positions.slice(..)),
-            ),
-            EarlierNeighbor,
-        )
-        .reduce_by_source(exec, 0, SumU32)?;
+    let earlier = graph::traverse(
+        exec,
+        graph.csr(),
+        common::counting_u32(0, n as usize),
+        graph.edge_capacity()?,
+    )?
+    .map(
+        zip2(
+            graph::source(positions.slice(..)),
+            graph::destination(positions.slice(..)),
+        ),
+        EarlierNeighbor,
+    )
+    .reduce_by_source(exec, exec.value(0)?, SumU32)?;
     let ordered_degree = vector::gather(exec, degree.slice(..), common::indices(order.slice(..)))?;
     let ordered_earlier =
         vector::gather(exec, earlier.slice(..), common::indices(order.slice(..)))?;
@@ -185,16 +190,17 @@ pub fn solve<R: Runtime>(
         zip3(
             cut.slice(..),
             volume.slice(..),
-            lazy::constant(total_volume).take(n as usize),
+            lazy::constant(total_volume).take(n),
         ),
         Conductance,
     )?;
-    let best = vector::min_element(
+    let (present, best) = vector::min_element(
         exec,
         zip2(conductance.slice(..), common::counting_u32(0, n as usize)),
         BestPrefix,
     )?
-    .expect("a nonempty graph has a nonempty sweep order");
+    .read(exec)?;
+    assert_ne!(present, 0, "a nonempty graph has a nonempty sweep order");
 
     vector::transform(
         exec,

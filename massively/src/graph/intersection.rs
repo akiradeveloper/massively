@@ -2,7 +2,7 @@
 
 use cubecl::prelude::*;
 
-use crate::{Error, Executor, MIter, MIterMut, MVec};
+use crate::{Error, Executor, MIndex, MIter, MIterMut, MVec};
 
 use super::Csr;
 
@@ -53,15 +53,15 @@ pub fn intersect_count<R, Destinations, Offsets, Sources, Targets>(
     graph: Csr<Destinations, Offsets>,
     sources: Sources,
     targets: Targets,
-) -> Result<MVec<R, u32>, Error>
+) -> Result<MVec<R, MIndex>, Error>
 where
     R: Runtime,
-    Destinations: MIter<R, Item = u32>,
-    Offsets: MIter<R, Item = u32>,
-    Sources: MIter<R, Item = u32>,
-    Targets: MIter<R, Item = u32>,
+    Destinations: MIter<R, Item = MIndex>,
+    Offsets: MIter<R, Item = MIndex>,
+    Sources: MIter<R, Item = MIndex>,
+    Targets: MIter<R, Item = MIndex>,
 {
-    let pair_count = sources.len()? as usize;
+    let pair_count = sources.capacity()? as usize;
     let output = exec.alloc::<u32>(pair_count);
     intersect_count_into(exec, graph, sources, targets, output.slice_mut(..))?;
     Ok(output)
@@ -77,15 +77,15 @@ fn intersect_count_into<R, Destinations, Offsets, Sources, Targets, Output>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Destinations: MIter<R, Item = u32>,
-    Offsets: MIter<R, Item = u32>,
-    Sources: MIter<R, Item = u32>,
-    Targets: MIter<R, Item = u32>,
-    Output: MIterMut<R, Item = u32>,
+    Destinations: MIter<R, Item = MIndex>,
+    Offsets: MIter<R, Item = MIndex>,
+    Sources: MIter<R, Item = MIndex>,
+    Targets: MIter<R, Item = MIndex>,
+    Output: MIterMut<R, Item = MIndex>,
 {
-    let pair_count = sources.len()?;
-    let target_count = targets.len()?;
-    let output_count = output.len()?;
+    let pair_count = sources.capacity()?;
+    let target_count = targets.capacity()?;
+    let output_count = output.capacity()?;
     if pair_count != target_count {
         return Err(Error::LengthMismatch {
             left: pair_count as usize,
@@ -113,11 +113,11 @@ where
             exec.client(),
             crate::launch::cube_count_1d((pair_count as usize).div_ceil(BLOCK_SIZE as usize))?,
             CubeDim::new_1d(BLOCK_SIZE),
-            BufferArg::from_raw_parts(offsets.handle.clone(), offsets.len()),
-            BufferArg::from_raw_parts(destinations.handle.clone(), destinations.len()),
-            BufferArg::from_raw_parts(sources.handle.clone(), sources.len()),
-            BufferArg::from_raw_parts(targets.handle.clone(), targets.len()),
-            BufferArg::from_raw_parts(counts.handle.clone(), counts.len()),
+            BufferArg::from_raw_parts(offsets.handle.clone(), offsets.capacity()),
+            BufferArg::from_raw_parts(destinations.handle.clone(), destinations.capacity()),
+            BufferArg::from_raw_parts(sources.handle.clone(), sources.capacity()),
+            BufferArg::from_raw_parts(targets.handle.clone(), targets.capacity()),
+            BufferArg::from_raw_parts(counts.handle.clone(), counts.capacity()),
         );
     }
     crate::vector::transform_into(exec, counts.slice(..), crate::op::Identity, output)

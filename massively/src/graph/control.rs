@@ -2,7 +2,9 @@
 
 use cubecl::prelude::*;
 
-use crate::{DeviceVec, Error, Executor, MIter, seg::control::SegmentControl};
+use crate::{
+    DeviceVec, Error, Executor, MIndex, MIter, MVal, op::UnaryOp, seg::control::SegmentControl,
+};
 
 const BLOCK_SIZE: u32 = 256;
 
@@ -33,12 +35,13 @@ fn traversal_context_kernel(
     vertices: &[u32],
     output_offsets: &[u32],
     output_segment_ids: &[u32],
+    active_len: &[u32],
     sources: &mut [u32],
     destinations: &mut [u32],
     edges: &mut [u32],
 ) {
     let output_index = ABSOLUTE_POS as usize;
-    if output_index < edges.len() {
+    if output_index < edges.len() && output_index < active_len[0] as usize {
         let output_segment = output_segment_ids[output_index] as usize - 1usize;
         let source = vertices[output_segment];
         let edge =
@@ -49,14 +52,41 @@ fn traversal_context_kernel(
     }
 }
 
+struct MinIndex;
+
+#[cubecl::cube]
+impl UnaryOp<(MIndex, MIndex)> for MinIndex {
+    type Output = MIndex;
+
+    fn apply(input: (MIndex, MIndex)) -> MIndex {
+        u32::min(input.0, input.1)
+    }
+}
+
+struct FitsCapacity;
+
+#[cubecl::cube]
+impl UnaryOp<(MIndex, MIndex)> for FitsCapacity {
+    type Output = crate::MBool;
+
+    fn apply(input: (MIndex, MIndex)) -> crate::MBool {
+        crate::op::mbool(input.0 <= input.1)
+    }
+}
+
 pub(crate) struct TraversalControl<R: Runtime> {
     pub(super) output_offsets: DeviceVec<R, u32>,
     pub(super) sources: DeviceVec<R, u32>,
     pub(super) destinations: DeviceVec<R, u32>,
     pub(super) edges: DeviceVec<R, u32>,
-    pub(super) output_len: u32,
-    pub(super) source_count: u32,
-    pub(super) vertex_count: u32,
+    /// Number of materialized edges, clamped to the caller-provided capacity.
+    pub(super) output_len: MVal<R, MIndex>,
+    /// Unclamped number of edges selected by the frontier.
+    pub(super) required_len: MVal<R, MIndex>,
+    pub(super) fits: MVal<R, crate::MBool>,
+    pub(super) capacity: MIndex,
+    pub(super) source_count: MIndex,
+    pub(super) vertex_count: MIndex,
 }
 
 impl<R: Runtime> TraversalControl<R> {
@@ -65,20 +95,21 @@ impl<R: Runtime> TraversalControl<R> {
         destinations: Destinations,
         input_offsets: InputOffsets,
         vertices: Vertices,
+        max_edges: MIndex,
     ) -> Result<Self, Error>
     where
-        Destinations: MIter<R, Item = u32>,
-        InputOffsets: MIter<R, Item = u32>,
-        Vertices: MIter<R, Item = u32>,
+        Destinations: MIter<R, Item = MIndex>,
+        InputOffsets: MIter<R, Item = MIndex>,
+        Vertices: MIter<R, Item = MIndex>,
     {
         let destinations = crate::api::iter::materialize_u32(exec, destinations)?;
         let input_offsets = crate::api::iter::materialize_u32(exec, input_offsets)?;
-        if input_offsets.is_empty() {
+        if input_offsets.capacity() == 0 {
             return Err(Error::LengthMismatch { left: 1, right: 0 });
         }
         let vertices = crate::api::iter::materialize_u32(exec, vertices)?;
-        let source_count = vertices.len();
-        let vertex_count = input_offsets.len() - 1;
+        let source_count = vertices.capacity();
+        let vertex_count = input_offsets.capacity() - 1;
         let source_count_index =
             u32::try_from(source_count).map_err(|_| Error::LengthTooLarge { len: source_count })?;
         let vertex_count_index =
@@ -91,20 +122,35 @@ impl<R: Runtime> TraversalControl<R> {
                     exec.client(),
                     crate::launch::cube_count_1d(source_count.div_ceil(BLOCK_SIZE as usize))?,
                     CubeDim::new_1d(BLOCK_SIZE),
-                    BufferArg::from_raw_parts(input_offsets.handle.clone(), input_offsets.len()),
-                    BufferArg::from_raw_parts(vertices.handle.clone(), vertices.len()),
-                    BufferArg::from_raw_parts(lengths.handle.clone(), lengths.len()),
+                    BufferArg::from_raw_parts(
+                        input_offsets.handle.clone(),
+                        input_offsets.capacity(),
+                    ),
+                    BufferArg::from_raw_parts(vertices.handle.clone(), vertices.capacity()),
+                    BufferArg::from_raw_parts(lengths.handle.clone(), lengths.capacity()),
                 );
             }
         }
 
         let positions = crate::core::scan::inclusive_scan_u32(exec, &lengths)?;
-        let output_len = crate::core::scan::last_u32(exec, &positions)?;
+        let required_len = MVal::from_storage(crate::core::scan::last_u32(exec, &positions)?)?;
+        let capacity = exec.value(max_edges)?;
+        let output_len = MVal::from_storage(crate::vector::transform(
+            exec,
+            crate::zip2(required_len.as_iter(), capacity.as_iter()),
+            MinIndex,
+        )?)?;
+        let fits = MVal::from_storage(crate::vector::transform(
+            exec,
+            crate::zip2(required_len.as_iter(), capacity.as_iter()),
+            FitsCapacity,
+        )?)?;
         let output_offset_count = source_count
             .checked_add(1)
             .ok_or(Error::LengthTooLarge { len: source_count })?;
         let output_offsets = if source_count == 0 {
-            exec.full(1, 0u32)?
+            let zero = exec.value(0u32)?;
+            exec.full(1, &zero)?
         } else {
             let output_offsets = exec.alloc::<u32>(output_offset_count);
             unsafe {
@@ -112,43 +158,55 @@ impl<R: Runtime> TraversalControl<R> {
                     exec.client(),
                     crate::launch::cube_count_1d(source_count.div_ceil(BLOCK_SIZE as usize))?,
                     CubeDim::new_1d(BLOCK_SIZE),
-                    BufferArg::from_raw_parts(positions.handle.clone(), positions.len()),
-                    BufferArg::from_raw_parts(output_offsets.handle.clone(), output_offsets.len()),
+                    BufferArg::from_raw_parts(positions.handle.clone(), positions.capacity()),
+                    BufferArg::from_raw_parts(
+                        output_offsets.handle.clone(),
+                        output_offsets.capacity(),
+                    ),
                 );
             }
             output_offsets
         };
 
-        let sources = exec.alloc::<u32>(output_len as usize);
-        let output_destinations = exec.alloc::<u32>(output_len as usize);
-        let edges = exec.alloc::<u32>(output_len as usize);
-        if output_len != 0 {
+        let zero = exec.value(0u32)?;
+        let sources = exec.full(max_edges as usize, &zero)?;
+        let output_destinations = exec.full(max_edges as usize, &zero)?;
+        let edges = exec.full(max_edges as usize, &zero)?;
+        if max_edges != 0 {
+            let output_len_storage: &DeviceVec<R, u32> = output_len.scratch_storage();
             let output_control = SegmentControl::from_materialized(
                 exec,
                 output_offsets.clone(),
-                output_len as usize,
+                max_edges as usize,
             )?;
             unsafe {
                 traversal_context_kernel::launch_unchecked::<R>(
                     exec.client(),
                     crate::launch::cube_count_1d(
-                        (output_len as usize).div_ceil(BLOCK_SIZE as usize),
+                        (max_edges as usize).div_ceil(BLOCK_SIZE as usize),
                     )?,
                     CubeDim::new_1d(BLOCK_SIZE),
-                    BufferArg::from_raw_parts(input_offsets.handle.clone(), input_offsets.len()),
-                    BufferArg::from_raw_parts(destinations.handle.clone(), destinations.len()),
-                    BufferArg::from_raw_parts(vertices.handle.clone(), vertices.len()),
-                    BufferArg::from_raw_parts(output_offsets.handle.clone(), output_offsets.len()),
+                    BufferArg::from_raw_parts(
+                        input_offsets.handle.clone(),
+                        input_offsets.capacity(),
+                    ),
+                    BufferArg::from_raw_parts(destinations.handle.clone(), destinations.capacity()),
+                    BufferArg::from_raw_parts(vertices.handle.clone(), vertices.capacity()),
+                    BufferArg::from_raw_parts(
+                        output_offsets.handle.clone(),
+                        output_offsets.capacity(),
+                    ),
                     BufferArg::from_raw_parts(
                         output_control.ids.handle.clone(),
-                        output_control.ids.len(),
+                        output_control.ids.capacity(),
                     ),
-                    BufferArg::from_raw_parts(sources.handle.clone(), sources.len()),
+                    BufferArg::from_raw_parts(output_len_storage.handle.clone(), 1),
+                    BufferArg::from_raw_parts(sources.handle.clone(), sources.capacity()),
                     BufferArg::from_raw_parts(
                         output_destinations.handle.clone(),
-                        output_destinations.len(),
+                        output_destinations.capacity(),
                     ),
-                    BufferArg::from_raw_parts(edges.handle.clone(), edges.len()),
+                    BufferArg::from_raw_parts(edges.handle.clone(), edges.capacity()),
                 );
             }
         }
@@ -159,6 +217,9 @@ impl<R: Runtime> TraversalControl<R> {
             destinations: output_destinations,
             edges,
             output_len,
+            required_len,
+            fits,
+            capacity: max_edges,
             source_count: source_count_index,
             vertex_count: vertex_count_index,
         })

@@ -87,6 +87,28 @@ where
     Output: OutputExpression<Item = Input::Item> + LowerOutputExpression + StageOutput<R, Env0>,
     Output::Slots: PaddedOutputSlots<Leaves = <Input::Item as StorageLayout>::StorageLeaves>,
 {
+    materialize_prefix_fixed(exec, input, None, output)
+}
+
+/// Evaluates at most the device-resident prefix of `input`.
+///
+/// The host-known input length is the physical dispatch capacity.  `active_len`
+/// only narrows that range in the kernel and is never copied to the host.
+pub(crate) fn materialize_prefix_fixed<R, Input, Output>(
+    exec: &Executor<R>,
+    input: &Input,
+    active_len: Option<&crate::DeviceVec<R, u32>>,
+    output: &Output,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
+    Input::Item: StorageLayout,
+    <Input::Item as StorageLayout>::StorageLeaves: StorePadded12,
+    <<Input::Item as StorageLayout>::StorageLeaves as CubeType>::ExpandType: StorePadded12Expand,
+    Output: OutputExpression<Item = Input::Item> + LowerOutputExpression + StageOutput<R, Env0>,
+    Output::Slots: PaddedOutputSlots<Leaves = <Input::Item as StorageLayout>::StorageLeaves>,
+{
     let input_len = input.logical_len()?;
     let output_len = output.logical_len()?;
     if output_len < input_len {
@@ -111,7 +133,11 @@ where
     let write_offsets = exec
         .client()
         .create_from_slice(u32::as_bytes(&writes.offsets));
-    let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len]));
+    let logical_len = match active_len {
+        Some(active_len) => crate::extent::LogicalExtent::from_device(active_len, input_len),
+        None => input.logical_extent()?,
+    }
+    .materialize(exec)?;
     let cubes = crate::launch::cube_count_1d((len as usize).div_ceil(BLOCK_SIZE as usize))?;
     unsafe {
         materialize_a13::launch_unchecked::<
@@ -163,7 +189,7 @@ where
             BufferArg::from_raw_parts(reads.slots[11].0.clone(), reads.slots[11].1),
             BufferArg::from_raw_parts(reads.slots[12].0.clone(), reads.slots[12].1),
             BufferArg::from_raw_parts(read_offsets, reads.offsets.len()),
-            BufferArg::from_raw_parts(len_handle, 1),
+            BufferArg::from_raw_parts(logical_len.handle.clone(), 1),
             BufferArg::from_raw_parts(writes.slots[0].0.clone(), writes.slots[0].1),
             BufferArg::from_raw_parts(writes.slots[1].0.clone(), writes.slots[1].1),
             BufferArg::from_raw_parts(writes.slots[2].0.clone(), writes.slots[2].1),
@@ -339,6 +365,33 @@ where
     materialize_fixed(exec, &input, &output)
 }
 
+/// Applies a unary operation to a device-resident prefix through the fixed
+/// read/write ABI.  The physical input length remains the dispatch bound.
+pub(crate) fn transform_prefix_fixed<R, Input, Output, Op>(
+    exec: &Executor<R>,
+    input: Input,
+    op: Op,
+    active_len: &crate::DeviceVec<R, u32>,
+    output: Output,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Input: ReadExpression,
+    Op: UnaryOp<Input::Item>,
+    Op::Output: crate::api::iter::KernelRow,
+    Transform<Input, Op>:
+        ReadExpression<Item = Op::Output> + LowerReadExpression + StageRead<R, Env0>,
+    Output: OutputExpression<Item = <Op as UnaryOp<Input::Item>>::Output>
+        + LowerOutputExpression
+        + StageOutput<R, Env0>,
+    Output::Slots: PaddedOutputSlots<Leaves = <Output::Item as StorageLayout>::StorageLeaves>,
+    <Output::Item as StorageLayout>::StorageLeaves: StorePadded12,
+    <<Output::Item as StorageLayout>::StorageLeaves as CubeType>::ExpandType: StorePadded12Expand,
+{
+    let input = Transform::new(input, op);
+    materialize_prefix_fixed(exec, &input, Some(active_len), &output)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -411,10 +464,7 @@ mod tests {
                 ),
             ),
         );
-        let input = Permute::new(
-            seven,
-            crate::Transform::new(Counting::new(0, 3), crate::op::U32ToUsize),
-        );
+        let input = Permute::new(seven, Counting::new(0, 3));
         let output = Zip::new(
             Zip::new(
                 Zip::new(

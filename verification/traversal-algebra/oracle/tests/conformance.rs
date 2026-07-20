@@ -322,9 +322,16 @@ fn compare_core(
     let frontier = exec.to_device(&case.frontier);
     let csr = || GpuCsr::new(destinations.slice(..), offsets.slice(..));
 
-    let traversal = gpu_graph::traverse(exec, csr(), frontier.slice(..))
+    let edge_capacity = expected_edges.len() as u32;
+    let traversal = gpu_graph::traverse(exec, csr(), frontier.slice(..), edge_capacity)
         .map_err(|error| gpu_failure("traverse", error))?;
-    prop_assert_eq!(traversal.edge_count() as usize, expected_edges.len());
+    prop_assert_eq!(
+        traversal
+            .edge_count()
+            .read(exec)
+            .map_err(|error| gpu_failure("edge-count readback", error))? as usize,
+        expected_edges.len()
+    );
     let emitted = traversal
         .map(
             zip2(
@@ -335,6 +342,12 @@ fn compare_core(
         )
         .emit(exec)
         .map_err(|error| gpu_failure("context emit", error))?;
+    prop_assert_eq!(
+        emitted
+            .read_len(exec)
+            .map_err(|error| gpu_failure("emitted-length readback", error))?,
+        edge_capacity
+    );
     let (sources, emitted_destinations, edges) = MStorage::into_columns(emitted);
     let actual_edges = exec
         .to_host(&sources)
@@ -356,10 +369,13 @@ fn compare_core(
         .collect::<Vec<_>>();
     prop_assert_eq!(actual_edges, expected_edges);
 
-    let source_counts = gpu_graph::traverse(exec, csr(), frontier.slice(..))
+    let zero = exec
+        .value(0u32)
+        .map_err(|error| gpu_failure("zero upload", error))?;
+    let source_counts = gpu_graph::traverse(exec, csr(), frontier.slice(..), edge_capacity)
         .map_err(|error| gpu_failure("source traverse", error))?
         .map(gpu_graph::edge_id(), One)
-        .reduce_by_source(exec, 0, Add)
+        .reduce_by_source(exec, zero.clone(), Add)
         .map_err(|error| gpu_failure("source reduction", error))?;
     prop_assert_eq!(
         exec.to_host(&source_counts)
@@ -367,10 +383,10 @@ fn compare_core(
         expected_source_counts
     );
 
-    let destination_counts = gpu_graph::traverse(exec, csr(), frontier.slice(..))
+    let destination_counts = gpu_graph::traverse(exec, csr(), frontier.slice(..), edge_capacity)
         .map_err(|error| gpu_failure("destination traverse", error))?
         .map(gpu_graph::edge_id(), One)
-        .reduce_by_destination(exec, 0, Add)
+        .reduce_by_destination(exec, zero, Add)
         .map_err(|error| gpu_failure("destination reduction", error))?;
     prop_assert_eq!(
         exec.to_host(&destination_counts)
@@ -471,8 +487,9 @@ fn compare_fine_semantics(
     let vertex_values = exec.to_device(&case.vertex_values);
     let edge_values = exec.to_device(&case.edge_values);
     let csr = || GpuCsr::new(destinations.slice(..), offsets.slice(..));
+    let edge_capacity = expected_source.len() as u32;
     let traversal = || {
-        gpu_graph::traverse(exec, csr(), frontier.slice(..))
+        gpu_graph::traverse(exec, csr(), frontier.slice(..), edge_capacity)
             .map_err(|error| gpu_failure("semantic traversal", error))
     };
 
@@ -548,8 +565,11 @@ fn compare_fine_semantics(
         expected_mapped
     );
 
+    let zero = exec
+        .value(0u32)
+        .map_err(|error| gpu_failure("zero upload", error))?;
     let actual_source_reduced = mapped()?
-        .reduce_by_source(exec, 0, Add)
+        .reduce_by_source(exec, zero.clone(), Add)
         .map_err(|error| gpu_failure("mapped source reduction", error))?;
     prop_assert_eq!(
         exec.to_host(&actual_source_reduced)
@@ -558,7 +578,7 @@ fn compare_fine_semantics(
     );
 
     let actual_destination_reduced = mapped()?
-        .reduce_by_destination(exec, 0, Add)
+        .reduce_by_destination(exec, zero, Add)
         .map_err(|error| gpu_failure("mapped destination reduction", error))?;
     prop_assert_eq!(
         exec.to_host(&actual_destination_reduced)

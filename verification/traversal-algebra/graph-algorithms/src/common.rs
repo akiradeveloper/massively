@@ -1,6 +1,6 @@
 use cubecl::prelude::*;
 use massively::{
-    DeviceSlice, DeviceVec, Executor,
+    DeviceSlice, DeviceVec, Executor, MIndex, MStorage,
     graph::{self, Csr},
     lazy,
     op::ReductionOp,
@@ -10,16 +10,54 @@ use massively::{
 
 pub(crate) type Result<T> = std::result::Result<T, massively::Error>;
 
-pub(crate) fn counting_u32(start: usize, len: usize) -> lazy::Taken<lazy::CountingU32> {
-    lazy::counting_u32(u32::try_from(start).expect("counting value exceeds u32")).take(len)
+/// Explicit synchronization boundary used by these host-controlled reference
+/// algorithms when they need an exact-length fixed vector.
+pub(crate) fn materialize_exact<R, Storage>(
+    exec: &Executor<R>,
+    mut storage: Storage,
+) -> Result<Storage>
+where
+    R: Runtime,
+    Storage: MStorage<R>,
+{
+    let len = storage.read_len(exec)?;
+    storage.set_fixed_len(len);
+    Ok(storage)
 }
 
-pub(crate) fn indices<Input>(input: Input) -> lazy::Transform<Input, massively::op::U32ToUsize> {
-    lazy::transform(input, massively::op::U32ToUsize)
+pub(crate) fn materialize_exact_pair<R, Left, Right>(
+    exec: &Executor<R>,
+    (mut left, mut right): (Left, Right),
+) -> Result<(Left, Right)>
+where
+    R: Runtime,
+    Left: MStorage<R>,
+    Right: MStorage<R>,
+{
+    let len = left.read_len(exec)?;
+    let right_len = right.read_len(exec)?;
+    if right_len != len {
+        return Err(massively::Error::LengthMismatch {
+            left: len as usize,
+            right: right_len as usize,
+        });
+    }
+    left.set_fixed_len(len);
+    right.set_fixed_len(len);
+    Ok((left, right))
 }
 
-pub(crate) fn stencil<Input>(input: Input) -> lazy::Transform<Input, massively::op::U32ToBool> {
-    lazy::transform(input, massively::op::U32ToBool)
+pub(crate) fn counting_u32(start: usize, len: usize) -> lazy::Taken<lazy::Counting> {
+    lazy::counting(u32::try_from(start).expect("counting value exceeds u32"))
+        .take(u32::try_from(len).expect("counting length exceeds u32"))
+}
+
+pub(crate) fn indices<Input>(input: Input) -> Input {
+    input
+}
+
+pub(crate) fn stencil<Input>(input: Input) -> Input {
+    input
 }
 
 pub(crate) trait FillValue<R: Runtime>: Sized {
@@ -29,7 +67,8 @@ pub(crate) trait FillValue<R: Runtime>: Sized {
 impl<R: Runtime> FillValue<R> for u32 {
     fn filled(exec: &Executor<R>, len: usize, value: Self) -> Result<DeviceVec<R, Self>> {
         let output = exec.alloc::<u32>(len);
-        vector::fill(exec, value, output.slice_mut(..))?;
+        let value = exec.value(value)?;
+        vector::fill(exec, &value, output.slice_mut(..))?;
         Ok(output)
     }
 }
@@ -37,7 +76,8 @@ impl<R: Runtime> FillValue<R> for u32 {
 impl<R: Runtime> FillValue<R> for f32 {
     fn filled(exec: &Executor<R>, len: usize, value: Self) -> Result<DeviceVec<R, Self>> {
         let output = exec.alloc::<f32>(len);
-        vector::fill(exec, value, output.slice_mut(..))?;
+        let value = exec.value(value)?;
+        vector::fill(exec, &value, output.slice_mut(..))?;
         Ok(output)
     }
 }
@@ -113,7 +153,7 @@ impl<R: Runtime> DeviceCsr<R> {
     /// Creates a device CSR from already-resident storage without copying it.
     pub fn from_parts(destinations: DeviceVec<R, u32>, offsets: DeviceVec<R, u32>) -> Result<Self> {
         let vertex_count = offsets
-            .len()
+            .capacity()
             .checked_sub(1)
             .ok_or(massively::Error::LengthMismatch { left: 1, right: 0 })?;
         let vertex_count = u32::try_from(vertex_count)
@@ -140,7 +180,24 @@ impl<R: Runtime> DeviceCsr<R> {
 
     /// Returns the number of directed CSR entries.
     pub fn edge_count(&self) -> usize {
-        self.destinations.len()
+        self.destinations.capacity()
+    }
+
+    /// Host-known physical bound for traversing a duplicate-free frontier.
+    pub fn edge_capacity(&self) -> Result<MIndex> {
+        MIndex::try_from(self.edge_count()).map_err(|_| massively::Error::LengthTooLarge {
+            len: self.edge_count(),
+        })
+    }
+
+    /// Safe physical traversal bound when the frontier may contain duplicate
+    /// vertices and no tighter maximum-degree bound is available.
+    pub fn repeated_edge_capacity(&self, source_count: usize) -> Result<MIndex> {
+        let capacity = self
+            .edge_count()
+            .checked_mul(source_count)
+            .ok_or(massively::Error::LengthTooLarge { len: usize::MAX })?;
+        MIndex::try_from(capacity).map_err(|_| massively::Error::LengthTooLarge { len: capacity })
     }
 
     /// Returns the resident destinations.
@@ -168,10 +225,10 @@ pub struct DeviceWeightedCsr<R: Runtime, Weight = f32> {
 impl<R: Runtime, Weight> DeviceWeightedCsr<R, Weight> {
     /// Creates a resident weighted CSR from already-resident storage.
     pub fn from_parts(graph: DeviceCsr<R>, weights: DeviceVec<R, Weight>) -> Result<Self> {
-        if graph.edge_count() != weights.len() {
+        if graph.edge_count() != weights.capacity() {
             return Err(massively::Error::LengthMismatch {
                 left: graph.edge_count(),
-                right: weights.len(),
+                right: weights.capacity(),
             });
         }
         Ok(Self { graph, weights })
@@ -266,9 +323,10 @@ pub(crate) fn resident_degrees<R: Runtime>(
         exec,
         graph.csr(),
         counting_u32(0, graph.vertex_count() as usize),
+        graph.edge_capacity()?,
     )?
     .map(graph::edge_id(), One)
-    .reduce_by_source(exec, 0, SumU32)
+    .reduce_by_source(exec, exec.value(0)?, SumU32)
 }
 
 pub(crate) fn dangling_mass<R: Runtime>(
@@ -279,9 +337,10 @@ pub(crate) fn dangling_mass<R: Runtime>(
     vector::reduce(
         exec,
         lazy::transform(zip2(rank.slice(..), degree.slice(..)), DanglingRank),
-        0.0,
+        exec.value(0.0)?,
         SumF32,
-    )
+    )?
+    .read(exec)
 }
 
 pub(crate) fn accumulate_rank<R: Runtime>(
@@ -296,16 +355,17 @@ pub(crate) fn accumulate_rank<R: Runtime>(
         exec,
         graph.csr(),
         counting_u32(0, graph.vertex_count() as usize),
+        graph.edge_capacity()?,
     )?
     .map(
         zip3(
             graph::source(rank.slice(..)),
             graph::source(degree.slice(..)),
-            graph::source(lazy::constant(damping).take(graph.vertex_count() as usize)),
+            graph::source(lazy::constant(damping).take(graph.vertex_count())),
         ),
         RankContribution,
     )
-    .update_by_destination(exec, 0.0, SumF32, output.slice_mut(..))
+    .update_by_destination(exec, exec.value(0.0)?, SumF32, output.slice_mut(..))
 }
 
 #[cfg(test)]

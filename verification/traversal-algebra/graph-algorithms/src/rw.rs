@@ -140,7 +140,7 @@ pub fn solve<R: Runtime>(
         .expect("random-choice count exceeds u32");
     let choices = vector::transform(
         exec,
-        random::uniform_u32(0, u32::MAX, seed)?.take(choice_count as usize),
+        random::uniform_u32(0, u32::MAX, seed)?.take(choice_count),
         Identity,
     )?;
     solve_with_choices(exec, graph, walk_length, walks_per_vertex, &choices)
@@ -169,7 +169,7 @@ pub fn solve_with_choices<R: Runtime>(
     let choice_count = walker_count
         .checked_mul(transitions)
         .expect("random-choice count exceeds u32");
-    assert_eq!(choices.len(), choice_count as usize);
+    assert_eq!(choices.capacity(), choice_count as usize);
     let path_count = walker_count
         .checked_mul(walk_length)
         .expect("walk output exceeds u32");
@@ -178,7 +178,7 @@ pub fn solve_with_choices<R: Runtime>(
         exec,
         zip2(
             common::counting_u32(0, walker_count as usize),
-            lazy::constant(graph.vertex_count()).take(walker_count as usize),
+            lazy::constant(graph.vertex_count()).take(walker_count),
         ),
         WalkerStart,
     )?;
@@ -188,8 +188,8 @@ pub fn solve_with_choices<R: Runtime>(
         let path_indices = lazy::transform(
             zip3(
                 common::counting_u32(0, walker_count as usize),
-                lazy::constant(walk_length).take(walker_count as usize),
-                lazy::constant(step).take(walker_count as usize),
+                lazy::constant(walk_length).take(walker_count),
+                lazy::constant(step).take(walker_count),
             ),
             PathIndex,
         );
@@ -204,12 +204,15 @@ pub fn solve_with_choices<R: Runtime>(
         }
 
         let active_stencil = vector::transform(exec, current.slice(..), Valid)?;
-        let active_positions = vector::copy_where(
+        let active_positions = common::materialize_exact(
             exec,
-            common::counting_u32(0, walker_count as usize),
-            common::stencil(active_stencil.slice(..)),
+            vector::copy_where(
+                exec,
+                common::counting_u32(0, walker_count as usize),
+                common::stencil(active_stencil.slice(..)),
+            )?,
         )?;
-        if active_positions.is_empty() {
+        if active_positions.capacity() == 0 {
             break;
         }
         let active_vertices = vector::gather(
@@ -217,22 +220,30 @@ pub fn solve_with_choices<R: Runtime>(
             current.slice(..),
             common::indices(active_positions.slice(..)),
         )?;
-        let degree = graph::traverse(exec, graph.csr(), active_vertices.slice(..))?
-            .map(graph::edge_id(), One)
-            .reduce_by_source(exec, 0, SumU32)?;
+        let degree = graph::traverse(
+            exec,
+            graph.csr(),
+            active_vertices.slice(..),
+            graph.repeated_edge_capacity(active_vertices.capacity())?,
+        )?
+        .map(graph::edge_id(), One)
+        .reduce_by_source(exec, exec.value(0)?, SumU32)?;
         let live_stencil = vector::transform(exec, degree.slice(..), Positive)?;
-        let active_count = u32::try_from(active_positions.len()).map_err(|_| {
+        let active_count = u32::try_from(active_positions.capacity()).map_err(|_| {
             massively::Error::LengthTooLarge {
-                len: active_positions.len(),
+                len: active_positions.capacity(),
             }
         })?;
-        let live_indices = vector::copy_where(
+        let live_indices = common::materialize_exact(
             exec,
-            common::counting_u32(0, active_count as usize),
-            common::stencil(live_stencil.slice(..)),
+            vector::copy_where(
+                exec,
+                common::counting_u32(0, active_count as usize),
+                common::stencil(live_stencil.slice(..)),
+            )?,
         )?;
         let next = common::filled(exec, walker_count as usize, u32::MAX)?;
-        if !live_indices.is_empty() {
+        if live_indices.capacity() != 0 {
             let live_positions = vector::gather(
                 exec,
                 active_positions.slice(..),
@@ -253,17 +264,17 @@ pub fn solve_with_choices<R: Runtime>(
                 graph.offsets().slice(..),
                 common::indices(live_vertices.slice(..)),
             )?;
-            let live_count = u32::try_from(live_positions.len()).map_err(|_| {
+            let live_count = u32::try_from(live_positions.capacity()).map_err(|_| {
                 massively::Error::LengthTooLarge {
-                    len: live_positions.len(),
+                    len: live_positions.capacity(),
                 }
             })?;
             let choice_indices = vector::transform(
                 exec,
                 zip3(
                     live_positions.slice(..),
-                    lazy::constant(transitions).take(live_count as usize),
-                    lazy::constant(step).take(live_count as usize),
+                    lazy::constant(transitions).take(live_count),
+                    lazy::constant(step).take(live_count),
                 ),
                 ChoiceIndex,
             )?;

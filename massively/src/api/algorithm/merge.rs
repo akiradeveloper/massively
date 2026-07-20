@@ -104,8 +104,8 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Less {
-///     fn apply(lhs: u32, rhs: u32) -> bool {
-///         lhs < rhs
+///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+///         op::mbool(lhs < rhs)
 ///     }
 /// }
 ///
@@ -129,12 +129,19 @@ where
     Item: MAlloc<R>,
     Less: BinaryPredicateOp<Item>,
 {
-    let left_len = left.len()? as usize;
-    let right_len = right.len()? as usize;
+    let left_len = left.capacity()? as usize;
+    let right_len = right.capacity()? as usize;
     let len = left_len
         .checked_add(right_len)
         .ok_or(Error::LengthTooLarge { len: usize::MAX })?;
-    let output = exec.alloc::<Item>(len);
+    let extent = crate::extent::LogicalExtent::add(
+        exec,
+        &left.logical_extent()?,
+        &right.logical_extent()?,
+        len,
+    )?;
+    let mut output = exec.alloc::<Item>(len);
+    output.set_logical_extent(extent);
     merge_into(exec, left, right, less, output.slice_mut(..))?;
     Ok(output)
 }
@@ -178,8 +185,8 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Less {
-///     fn apply(lhs: u32, rhs: u32) -> bool {
-///         lhs < rhs
+///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+///         op::mbool(lhs < rhs)
 ///     }
 /// }
 ///
@@ -217,12 +224,19 @@ where
     LeftValues::Item: MAlloc<R>,
     Less: BinaryPredicateOp<LeftKeys::Item>,
 {
-    let left_len = left_keys.len()? as usize;
-    let right_len = right_keys.len()? as usize;
+    let left_len = left_keys.capacity()? as usize;
+    let right_len = right_keys.capacity()? as usize;
     let len = left_len
         .checked_add(right_len)
         .ok_or(Error::LengthTooLarge { len: usize::MAX })?;
-    let value_output = exec.alloc::<LeftValues::Item>(len);
+    let extent = crate::extent::LogicalExtent::add(
+        exec,
+        &left_keys.logical_extent()?,
+        &right_keys.logical_extent()?,
+        len,
+    )?;
+    let mut value_output = exec.alloc::<LeftValues::Item>(len);
+    value_output.set_logical_extent(extent);
     merge_by_key_into(
         exec,
         left_keys,

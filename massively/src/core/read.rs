@@ -1,5 +1,7 @@
 //! Read-expression trees and deterministic slot binding.
 
+#![allow(private_interfaces)]
+
 use core::marker::PhantomData;
 use cubecl::prelude::*;
 use std::ops::{Bound, RangeBounds};
@@ -14,6 +16,7 @@ use crate::{
         Slot3, Slot4, Slot5, Slot6, Slot7, Slot8, Slot9, Slot10, Slot11, Slot12, TransformExpr,
         ZipExpr,
     },
+    extent::LogicalExtent,
     op::{IndexedBinaryOp, IndexedUnaryOp, UnaryOp},
     reduce::ReductionOp,
     seg::Segment,
@@ -29,6 +32,7 @@ pub struct DeviceSlice<T> {
     pub(crate) buffer_len: usize,
     pub(crate) offset: u32,
     pub(crate) owner: Option<u64>,
+    pub(crate) extent: LogicalExtent,
     _item: PhantomData<fn() -> T>,
 }
 
@@ -40,6 +44,7 @@ impl<T> DeviceSlice<T> {
             buffer_len: 0,
             offset: 0,
             owner: None,
+            extent: LogicalExtent::fixed(0),
             _item: PhantomData,
         }
     }
@@ -51,21 +56,43 @@ impl<T> DeviceSlice<T> {
         owner: u64,
         buffer_len: usize,
     ) -> Self {
+        Self::from_handle_with_extent(
+            handle,
+            len,
+            offset,
+            owner,
+            buffer_len,
+            LogicalExtent::fixed(len),
+        )
+    }
+
+    pub(crate) fn from_handle_with_extent(
+        handle: cubecl::server::Handle,
+        len: usize,
+        offset: u32,
+        owner: u64,
+        buffer_len: usize,
+        extent: LogicalExtent,
+    ) -> Self {
         Self {
             handle: Some(handle),
             len,
             buffer_len,
             offset,
             owner: Some(owner),
+            extent,
             _item: PhantomData,
         }
     }
 
-    pub fn len(&self) -> usize {
-        self.len
+    pub(crate) fn with_logical_extent(mut self, extent: LogicalExtent) -> Self {
+        self.extent = extent;
+        self
     }
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
+
+    /// Returns the physical view bound without synchronizing.
+    pub fn capacity(&self) -> usize {
+        self.len
     }
 
     /// Returns a read-only subview without copying device data.
@@ -93,6 +120,7 @@ impl<T> DeviceSlice<T> {
             buffer_len: self.buffer_len,
             offset: self.offset + relative as u32,
             owner: self.owner,
+            extent: self.extent.slice(relative, len),
             _item: PhantomData,
         }
     }
@@ -397,12 +425,12 @@ where
 }
 
 impl ReadExpression for Counting {
-    type Item = u32;
+    type Item = crate::MIndex;
     type ReadArity = A1;
 }
 
 impl ReadExpression for ReverseCounting {
-    type Item = u32;
+    type Item = crate::MIndex;
     type ReadArity = A1;
 }
 
@@ -472,7 +500,7 @@ where
 impl<Values, Indices> ReadExpression for Permute<Values, Indices>
 where
     Values: ReadExpression,
-    Indices: ReadExpression<Item = usize>,
+    Indices: ReadExpression<Item = crate::MIndex>,
     Values::ReadArity: AddArity<Indices::ReadArity>,
 {
     type Item = Values::Item;
@@ -627,7 +655,7 @@ where
 impl<Values, Indices> SliceExpression for Permute<Values, Indices>
 where
     Values: ReadExpression + Clone,
-    Indices: SliceExpression<Item = usize>,
+    Indices: SliceExpression<Item = crate::MIndex>,
     Permute<Values, Indices>: ReadExpression,
 {
     fn slice_expression(&self, start: usize, len: usize) -> Self {
@@ -835,7 +863,7 @@ where
 impl<Values, Indices, Env> BindSlots<Env> for Permute<Values, Indices>
 where
     Values: BindSlots<Env>,
-    Indices: ReadExpression<Item = usize> + BindSlots<Values::NextEnv>,
+    Indices: ReadExpression<Item = crate::MIndex> + BindSlots<Values::NextEnv>,
 {
     type Expr = PermuteExpr<Values::Expr, Indices::Expr>;
     type NextEnv = Indices::NextEnv;
@@ -846,14 +874,7 @@ where
     Values: BindSlots<Env>,
     ReverseCounting: BindSlots<Values::NextEnv>,
 {
-    type Expr = PermuteExpr<
-        Values::Expr,
-        TransformExpr<
-            <ReverseCounting as BindSlots<Values::NextEnv>>::Expr,
-            u32,
-            crate::op::U32ToUsize,
-        >,
-    >;
+    type Expr = PermuteExpr<Values::Expr, <ReverseCounting as BindSlots<Values::NextEnv>>::Expr>;
     type NextEnv = <ReverseCounting as BindSlots<Values::NextEnv>>::NextEnv;
 }
 
@@ -1186,6 +1207,10 @@ where
         crate::reduce::StageRead::logical_len(&self.0)
     }
 
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, crate::Error> {
+        crate::reduce::StageRead::logical_extent(&self.0)
+    }
+
     fn stage_at(
         &self,
         client: &ComputeClient<R>,
@@ -1347,7 +1372,7 @@ mod tests {
     type Six = Zip<Five, Column<i16>>;
     type Seven = Zip<Six, Column<i32>>;
     type SevenItem = (u8, u16, u32, u64, i8, i16, i32);
-    type Indices = Transform<Counting, crate::op::U32ToUsize>;
+    type Indices = Counting;
     type Lazified = Transform<Permute<Seven, Indices>, Identity>;
     type Nine = Transform<Permute<Lazified, Indices>, Identity>;
     type Ten = Transform<Permute<Nine, Indices>, Identity>;
@@ -1360,11 +1385,8 @@ mod tests {
     type Device5 = ZipExpr<Device4, Slot4<i8, Direct>, (u8, u16, u32, u64), i8>;
     type Device6 = ZipExpr<Device5, Slot5<i16, Direct>, (u8, u16, u32, u64, i8), i16>;
     type SevenDevice = ZipExpr<Device6, Slot6<i32, Direct>, (u8, u16, u32, u64, i8, i16), i32>;
-    type LazifiedDevice = TransformExpr<
-        PermuteExpr<SevenDevice, TransformExpr<Slot7<u32, Count>, u32, crate::op::U32ToUsize>>,
-        SevenItem,
-        Identity,
-    >;
+    type LazifiedDevice =
+        TransformExpr<PermuteExpr<SevenDevice, Slot7<u32, Count>>, SevenItem, Identity>;
     type LazifiedSlots = Env8<u8, u16, u32, u64, i8, i16, i32, u32>;
 
     type RuntimeSevenItem = (u32, u32, u32, u32, u32, u32, u32);
@@ -1377,10 +1399,7 @@ mod tests {
     type RuntimeSevenDevice =
         ZipExpr<RuntimeDevice6, Slot6<u32, Direct>, (u32, u32, u32, u32, u32, u32), u32>;
     type RuntimeLazifiedDevice = TransformExpr<
-        PermuteExpr<
-            RuntimeSevenDevice,
-            TransformExpr<Slot7<u32, Count>, u32, crate::op::U32ToUsize>,
-        >,
+        PermuteExpr<RuntimeSevenDevice, Slot7<u32, Count>>,
         RuntimeSevenItem,
         Identity,
     >;

@@ -10,22 +10,22 @@ use massively::{
 
 const SIZES: &[usize] = &[1 << 20, 1 << 24];
 
-type Seven = (usize, usize, usize, usize, usize, usize, usize);
+type Seven = (u32, u32, u32, u32, u32, u32, u32);
 
 struct LessU32;
 struct FirstLeafLess;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<usize> for LessU32 {
-    fn apply(lhs: usize, rhs: usize) -> bool {
-        lhs < rhs
+impl BinaryPredicateOp<u32> for LessU32 {
+    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+        massively::op::mbool(lhs < rhs)
     }
 }
 
 #[cubecl::cube]
 impl BinaryPredicateOp<Seven> for FirstLeafLess {
-    fn apply(lhs: Seven, rhs: Seven) -> bool {
-        lhs.0 < rhs.0
+    fn apply(lhs: Seven, rhs: Seven) -> massively::MBool {
+        massively::op::mbool(lhs.0 < rhs.0)
     }
 }
 
@@ -35,25 +35,31 @@ fn bench_ordering_query(c: &mut Criterion) {
 
     for &len in SIZES {
         group.bench_function(BenchmarkId::new("min_element_lazy", len), |b| {
-            b.iter(|| black_box(min_element(&exec, lazy::counting(0).take(len), LessU32).unwrap()))
+            b.iter(|| {
+                black_box(min_element(&exec, lazy::counting(0).take(len as u32), LessU32).unwrap())
+            })
         });
         group.bench_function(BenchmarkId::new("max_element_lazy", len), |b| {
-            b.iter(|| black_box(max_element(&exec, lazy::counting(0).take(len), LessU32).unwrap()))
+            b.iter(|| {
+                black_box(max_element(&exec, lazy::counting(0).take(len as u32), LessU32).unwrap())
+            })
         });
         group.bench_function(BenchmarkId::new("minmax_element_lazy", len), |b| {
             b.iter(|| {
-                black_box(minmax_element(&exec, lazy::counting(0).take(len), LessU32).unwrap())
+                black_box(
+                    minmax_element(&exec, lazy::counting(0).take(len as u32), LessU32).unwrap(),
+                )
             })
         });
 
         let streams = [
-            lazy::counting(0).take(len),
-            lazy::counting(1).take(len),
-            lazy::counting(2).take(len),
-            lazy::counting(3).take(len),
-            lazy::counting(4).take(len),
-            lazy::counting(5).take(len),
-            lazy::counting(6).take(len),
+            lazy::counting(0).take(len as u32),
+            lazy::counting(1).take(len as u32),
+            lazy::counting(2).take(len as u32),
+            lazy::counting(3).take(len as u32),
+            lazy::counting(4).take(len as u32),
+            lazy::counting(5).take(len as u32),
+            lazy::counting(6).take(len as u32),
         ];
         group.bench_function(BenchmarkId::new("min_element_lazy_zip7", len), |b| {
             b.iter(|| {

@@ -196,7 +196,7 @@ impl<ValuesExpr, IndicesExpr, Item> DeviceExpr<Item> for PermuteExpr<ValuesExpr,
 where
     Item: CubeType + 'static,
     ValuesExpr: DeviceExpr<Item>,
-    IndicesExpr: DeviceExpr<usize>,
+    IndicesExpr: DeviceExpr<crate::MIndex>,
 {
 }
 
@@ -348,7 +348,7 @@ macro_rules! define_eval {
             Item: CubeType + 'static,
             $( $leaf: CubePrimitive, )+
             ValuesExpr: $trait_name<Item, $( $leaf ),+>,
-            IndicesExpr: $trait_name<usize, $( $leaf ),+>,
+            IndicesExpr: $trait_name<crate::MIndex, $( $leaf ),+>,
         {
             fn $method(
                 $( $slot: &[$leaf], )+
@@ -356,7 +356,7 @@ macro_rules! define_eval {
                 index: usize,
             ) -> Item {
                 let gathered = IndicesExpr::$method($( $slot, )+ slot_offsets, index);
-                ValuesExpr::$method($( $slot, )+ slot_offsets, gathered)
+                ValuesExpr::$method($( $slot, )+ slot_offsets, gathered as usize)
             }
         }
 

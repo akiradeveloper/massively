@@ -4,7 +4,8 @@ use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 use crate::{
-    DeviceSliceMut, DeviceVec, Dispatch, Error, Executor, ReadExpression, Transform,
+    DeviceSliceMut, DeviceVec, Dispatch, Error, Executor, MBool, MIndex, MVal, ReadExpression,
+    Transform,
     op::{IndexedBinaryOp, IndexedUnaryOp, UnaryOp},
     output::StageOutput,
     read::{AdjacentIndexedTransform, Env0, Env1, IndexedTransform, LowerReadExpression},
@@ -26,19 +27,29 @@ use crate::{
 ///
 /// #[cubecl::cube]
 /// impl op::PredicateOp<i32> for Positive {
-///     fn apply(value: i32) -> bool {
-///         value > 0
+///     fn apply(value: i32) -> massively::MBool {
+///         op::mbool(value > 0)
 ///     }
 /// }
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[-1_i32, 2, 3]);
 ///
-/// assert_eq!(count_if(&exec, input.slice(..), Positive).unwrap(), 2);
+/// let count = count_if(&exec, input.slice(..), Positive).unwrap();
+/// assert_eq!(count.read(&exec).unwrap(), 2);
 /// ```
 #[cubecl::cube]
 pub trait PredicateOp<Input: CubeType>: 'static + Send + Sync {
-    fn apply(input: Input) -> bool;
+    fn apply(input: Input) -> MBool;
+}
+
+#[cubecl::cube]
+pub(crate) fn predicate<Input, Pred>(input: Input) -> bool
+where
+    Input: CubeType + 'static,
+    Pred: PredicateOp<Input>,
+{
+    crate::op::is_true(Pred::apply(input))
 }
 
 #[doc(hidden)]
@@ -50,10 +61,10 @@ where
     Input: CubeType + 'static,
     Pred: PredicateOp<Input>,
 {
-    type Output = u32;
+    type Output = MBool;
 
-    fn apply(input: Input) -> u32 {
-        if Pred::apply(input) { 1u32 } else { 0u32 }
+    fn apply(input: Input) -> MBool {
+        crate::op::mbool(crate::op::is_true(Pred::apply(input)))
     }
 }
 
@@ -75,6 +86,61 @@ impl ReductionOp<u32> for MinU32 {
     }
 }
 
+struct CountIsAll;
+
+#[cubecl::cube]
+impl UnaryOp<(u32, u32)> for CountIsAll {
+    type Output = MBool;
+
+    fn apply(input: (u32, u32)) -> MBool {
+        crate::op::mbool(input.0 == input.1)
+    }
+}
+
+struct CountIsAny;
+
+#[cubecl::cube]
+impl UnaryOp<u32> for CountIsAny {
+    type Output = MBool;
+
+    fn apply(input: u32) -> MBool {
+        crate::op::mbool(input != 0u32)
+    }
+}
+
+struct CountIsNone;
+
+#[cubecl::cube]
+impl UnaryOp<u32> for CountIsNone {
+    type Output = MBool;
+
+    fn apply(input: u32) -> MBool {
+        crate::op::mbool(input == 0u32)
+    }
+}
+
+struct SentinelToOption;
+
+#[cubecl::cube]
+impl UnaryOp<u32> for SentinelToOption {
+    type Output = (MBool, MIndex);
+
+    fn apply(index: u32) -> Self::Output {
+        (crate::op::mbool(index != u32::MAX), index)
+    }
+}
+
+struct SentinelIsAbsent;
+
+#[cubecl::cube]
+impl UnaryOp<u32> for SentinelIsAbsent {
+    type Output = MBool;
+
+    fn apply(index: u32) -> MBool {
+        crate::op::mbool(index == u32::MAX)
+    }
+}
+
 struct FirstMatchingIndex<Pred>(PhantomData<fn() -> Pred>);
 
 #[cubecl::cube]
@@ -86,7 +152,7 @@ where
     type Output = u32;
 
     fn apply(input: Input, index: u32) -> u32 {
-        if Pred::apply(input) {
+        if crate::predicate::predicate::<Input, Pred>(input) {
             index
         } else {
             4_294_967_295u32
@@ -105,7 +171,10 @@ where
     type Output = u32;
 
     fn apply(previous: Input, current: Input, index: u32) -> u32 {
-        if index != 0u32 && !Pred::apply(previous) && Pred::apply(current) {
+        if index != 0u32
+            && !crate::predicate::predicate::<Input, Pred>(previous)
+            && crate::predicate::predicate::<Input, Pred>(current)
+        {
             index
         } else {
             4_294_967_295u32
@@ -129,10 +198,10 @@ impl UnaryOp<(u32, u32)> for PartitionViolation {
 /// Internal capability proving that the input has a supported predicate kernel.
 #[doc(hidden)]
 pub trait PredicateInput<R: Runtime, Pred>: ReadExpression + Sized {
-    fn predicate_len(&self) -> Result<usize, Error>;
-    fn predicate_count(self, exec: &Executor<R>) -> Result<u32, Error>;
-    fn predicate_first(self, exec: &Executor<R>) -> Result<Option<u32>, Error>;
-    fn predicate_is_partitioned(self, exec: &Executor<R>) -> Result<bool, Error>;
+    fn predicate_extent(&self) -> Result<crate::extent::LogicalExtent, Error>;
+    fn predicate_count(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
+    fn predicate_first(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
+    fn predicate_is_partitioned(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
     fn predicate_positions(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
     fn predicate_flags(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
 }
@@ -165,6 +234,7 @@ where
                 crate::read::KernelReadSlots<
                     <IndexedTransform<Input, FirstMatchingIndex<Pred>> as LowerReadExpression>::Slots,
                 >,
+                Storage = DeviceVec<R, u32>,
             >,
     AdjacentIndexedTransform<Input, FirstPartitionViolation<Pred>>:
         ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
@@ -176,6 +246,7 @@ where
             crate::read::KernelReadSlots<
                 <AdjacentIndexedTransform<Input, FirstPartitionViolation<Pred>> as LowerReadExpression>::Slots,
             >,
+            Storage = DeviceVec<R, u32>,
         >,
     Dispatch<crate::A13, crate::S12>:
         ReduceDispatch<
@@ -186,6 +257,7 @@ where
                 crate::read::KernelReadSlots<
                     <Transform<Input, PredicateMap<Pred>> as LowerReadExpression>::Slots,
                 >,
+                Storage = DeviceVec<R, u32>,
             >,
     Dispatch<crate::A13, crate::S12>:
         InclusiveScanDispatch<
@@ -201,45 +273,45 @@ where
         >,
     DeviceSliceMut<u32>: StageOutput<R, Env0>,
 {
-    fn predicate_len(&self) -> Result<usize, Error> {
-        self.logical_len()
+    fn predicate_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.logical_extent()
     }
 
-    fn predicate_count(self, exec: &Executor<R>) -> Result<u32, Error> {
+    fn predicate_count(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
         reduce(
             exec,
             Transform::new(self, PredicateMap::<Pred>(PhantomData)),
-            0u32,
+            exec.value(0u32)?.into_scratch_storage(),
             SumU32,
         )
     }
 
-    fn predicate_first(self, exec: &Executor<R>) -> Result<Option<u32>, Error> {
-        let index = reduce(
+    fn predicate_first(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
+        reduce(
             exec,
             IndexedTransform::new(self, FirstMatchingIndex::<Pred>(PhantomData)),
-            u32::MAX,
+            exec.value(u32::MAX)?.into_scratch_storage(),
             MinU32,
-        )?;
-        Ok((index != u32::MAX).then_some(index))
+        )
     }
 
-    fn predicate_is_partitioned(self, exec: &Executor<R>) -> Result<bool, Error> {
-        let index = reduce(
+    fn predicate_is_partitioned(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
+        reduce(
             exec,
             AdjacentIndexedTransform::new(
                 self,
                 FirstPartitionViolation::<Pred>(PhantomData),
             ),
-            u32::MAX,
+            exec.value(u32::MAX)?.into_scratch_storage(),
             MinU32,
-        )?;
-        Ok(index == u32::MAX)
+        )
     }
 
     fn predicate_positions(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
         let len = self.logical_len()?;
-        let positions = exec.alloc_row::<u32>(len);
+        let extent = self.logical_extent()?;
+        let mut positions = exec.alloc_row::<u32>(len);
+        positions.set_logical_extent(extent);
         inclusive_scan(
             exec,
             Transform::new(self, PredicateMap::<Pred>(PhantomData)),
@@ -251,7 +323,9 @@ where
 
     fn predicate_flags(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
         let len = self.logical_len()?;
-        let flags = exec.alloc_row::<u32>(len);
+        let extent = self.logical_extent()?;
+        let mut flags = exec.alloc_row::<u32>(len);
+        flags.set_logical_extent(extent);
         transform(
             exec,
             self,
@@ -267,12 +341,12 @@ pub(crate) fn count_if<R, Input, Pred>(
     exec: &Executor<R>,
     input: Input,
     _pred: Pred,
-) -> Result<u32, Error>
+) -> Result<MVal<R, MIndex>, Error>
 where
     R: Runtime,
     Input: PredicateInput<R, Pred>,
 {
-    input.predicate_count(exec)
+    MVal::from_storage(input.predicate_count(exec)?)
 }
 
 /// Returns whether every element satisfies `pred`.
@@ -280,13 +354,19 @@ pub(crate) fn all_of<R, Input, Pred>(
     exec: &Executor<R>,
     input: Input,
     pred: Pred,
-) -> Result<bool, Error>
+) -> Result<MVal<R, MBool>, Error>
 where
     R: Runtime,
     Input: PredicateInput<R, Pred>,
 {
-    let len = input.predicate_len()?;
-    Ok(count_if(exec, input, pred)? as usize == len)
+    let end = input.predicate_extent()?.materialize(exec)?;
+    let count = count_if(exec, input, pred)?;
+    let output = crate::vector::transform(
+        exec,
+        crate::zip2(count.as_iter(), end.slice(..)),
+        CountIsAll,
+    )?;
+    MVal::from_storage(output)
 }
 
 /// Returns whether at least one element satisfies `pred`.
@@ -294,25 +374,33 @@ pub(crate) fn any_of<R, Input, Pred>(
     exec: &Executor<R>,
     input: Input,
     _pred: Pred,
-) -> Result<bool, Error>
+) -> Result<MVal<R, MBool>, Error>
 where
     R: Runtime,
     Input: PredicateInput<R, Pred>,
 {
-    Ok(input.predicate_count(exec)? != 0)
+    MVal::from_storage(crate::vector::transform(
+        exec,
+        input.predicate_count(exec)?.slice(..),
+        CountIsAny,
+    )?)
 }
 
 /// Returns whether no element satisfies `pred`.
 pub(crate) fn none_of<R, Input, Pred>(
     exec: &Executor<R>,
     input: Input,
-    pred: Pred,
-) -> Result<bool, Error>
+    _pred: Pred,
+) -> Result<MVal<R, MBool>, Error>
 where
     R: Runtime,
     Input: PredicateInput<R, Pred>,
 {
-    Ok(!any_of(exec, input, pred)?)
+    MVal::from_storage(crate::vector::transform(
+        exec,
+        input.predicate_count(exec)?.slice(..),
+        CountIsNone,
+    )?)
 }
 
 /// Returns the first index satisfying `pred`.
@@ -320,12 +408,16 @@ pub(crate) fn find_if<R, Input, Pred>(
     exec: &Executor<R>,
     input: Input,
     _pred: Pred,
-) -> Result<Option<u32>, Error>
+) -> Result<MVal<R, (MBool, MIndex)>, Error>
 where
     R: Runtime,
     Input: PredicateInput<R, Pred>,
 {
-    input.predicate_first(exec)
+    MVal::from_storage(crate::vector::transform(
+        exec,
+        input.predicate_first(exec)?.slice(..),
+        SentinelToOption,
+    )?)
 }
 
 /// Returns whether all passing elements precede all failing elements.
@@ -333,12 +425,16 @@ pub(crate) fn is_partitioned<R, Input, Pred>(
     exec: &Executor<R>,
     input: Input,
     _pred: Pred,
-) -> Result<bool, Error>
+) -> Result<MVal<R, MBool>, Error>
 where
     R: Runtime,
     Input: PredicateInput<R, Pred>,
 {
-    input.predicate_is_partitioned(exec)
+    MVal::from_storage(crate::vector::transform(
+        exec,
+        input.predicate_is_partitioned(exec)?.slice(..),
+        SentinelIsAbsent,
+    )?)
 }
 
 #[cfg(test)]
@@ -351,8 +447,8 @@ mod tests {
 
     #[cubecl::cube]
     impl PredicateOp<(u32, u32, u32)> for MatchTriple {
-        fn apply(input: (u32, u32, u32)) -> bool {
-            input.0 + input.1 == input.2
+        fn apply(input: (u32, u32, u32)) -> crate::MBool {
+            crate::op::mbool(input.0 + input.1 == input.2)
         }
     }
 
@@ -364,12 +460,48 @@ mod tests {
         let c = exec.to_device(&[11_u32, 0, 33, 0]);
 
         let input = || Zip::new(a.column(), Zip::new(b.column(), c.column()));
-        assert_eq!(count_if(&exec, input(), MatchTriple).unwrap(), 2);
-        assert!(!all_of(&exec, input(), MatchTriple).unwrap());
-        assert!(any_of(&exec, input(), MatchTriple).unwrap());
-        assert!(!none_of(&exec, input(), MatchTriple).unwrap());
-        assert_eq!(find_if(&exec, input(), MatchTriple).unwrap(), Some(0));
-        assert!(!is_partitioned(&exec, input(), MatchTriple).unwrap());
+        assert_eq!(
+            count_if(&exec, input(), MatchTriple)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            all_of(&exec, input(), MatchTriple)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            any_of(&exec, input(), MatchTriple)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            none_of(&exec, input(), MatchTriple)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            find_if(&exec, input(), MatchTriple)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
+            (1, 0)
+        );
+        assert_eq!(
+            is_partitioned(&exec, input(), MatchTriple)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
+            0
+        );
     }
 
     struct LastLeafIsThree;
@@ -378,8 +510,8 @@ mod tests {
 
     #[cubecl::cube]
     impl PredicateOp<u32> for IsEven {
-        fn apply(input: u32) -> bool {
-            input % 2u32 == 0u32
+        fn apply(input: u32) -> crate::MBool {
+            crate::op::mbool(input % 2u32 == 0u32)
         }
     }
 
@@ -400,29 +532,34 @@ mod tests {
         )
         .unwrap();
         assert_eq!(exec.to_host(&violations).unwrap(), vec![0]);
-        assert_eq!(reduce(&exec, violations.column(), 0, SumU32).unwrap(), 0);
+        let reduced = reduce(&exec, violations.column(), exec.to_device(&[0_u32]), SumU32).unwrap();
+        assert_eq!(exec.to_host(&reduced).unwrap(), vec![0]);
+        let reduced = reduce(
+            &exec,
+            Transform::new(
+                Zip::new(flags.slice(..1), flags.slice(1..)),
+                PartitionViolation,
+            ),
+            exec.to_device(&[0_u32]),
+            SumU32,
+        )
+        .unwrap();
+        assert_eq!(exec.to_host(&reduced).unwrap(), vec![0],);
         assert_eq!(
-            reduce(
-                &exec,
-                Transform::new(
-                    Zip::new(flags.slice(..1), flags.slice(1..)),
-                    PartitionViolation,
-                ),
-                0,
-                SumU32,
-            )
-            .unwrap(),
-            0,
+            is_partitioned(&exec, input.column(), IsEven)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
+            1
         );
-        assert!(is_partitioned(&exec, input.column(), IsEven).unwrap());
     }
 
     type Seven = (u32, u32, u32, u32, u32, u32, u32);
 
     #[cubecl::cube]
     impl PredicateOp<Seven> for LastLeafIsThree {
-        fn apply(input: Seven) -> bool {
-            input.6 == 3
+        fn apply(input: Seven) -> crate::MBool {
+            crate::op::mbool(input.6 == 3)
         }
     }
 
@@ -448,19 +585,22 @@ mod tests {
                 ),
             ),
         );
-        let input = Permute::new(
-            seven,
-            crate::Transform::new(Counting::new(0, 4), crate::op::U32ToUsize),
+        let input = Permute::new(seven, Counting::new(0, 4));
+        assert_eq!(
+            count_if(&exec, input, LastLeafIsThree)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
+            1
         );
-        assert_eq!(count_if(&exec, input, LastLeafIsThree).unwrap(), 1);
     }
 
     struct Never;
 
     #[cubecl::cube]
     impl PredicateOp<u32> for Never {
-        fn apply(_input: u32) -> bool {
-            false
+        fn apply(_input: u32) -> crate::MBool {
+            0u32
         }
     }
 
@@ -468,6 +608,12 @@ mod tests {
     fn find_if_returns_none_without_a_numeric_sentinel() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let input = exec.to_device(&[1_u32, 2, 3, 4]);
-        assert_eq!(find_if(&exec, input.column(), Never).unwrap(), None);
+        assert_eq!(
+            find_if(&exec, input.column(), Never)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
+            (0, u32::MAX)
+        );
     }
 }

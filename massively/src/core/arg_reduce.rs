@@ -1,11 +1,9 @@
 //! Index-sideband reductions over arbitrary read expressions.
 
-use core::mem::size_of;
-
 use cubecl::prelude::*;
 
 use crate::{
-    A13, Dispatch, Error, Executor, MStorageElement, ReadExpression,
+    A13, DeviceVec, Dispatch, Error, Executor, MStorageElement, ReadExpression,
     eval::Eval13,
     launch::cube_count_1d,
     read::{Env0, Env13, KernelReadSlots, LowerReadExpression, PaddedReadSlots},
@@ -47,6 +45,8 @@ macro_rules! define_arg_reduce_kernel {
             let first_index = tile_start + unit;
             let safe_index = if first_index < logical_len {
                 first_index
+            } else if logical_len == 0usize {
+                0usize
             } else {
                 logical_len - 1usize
             };
@@ -185,7 +185,11 @@ macro_rules! define_arg_reduce_kernel {
                     plane_offset.store(plane_offset.read() / 2u32);
                 }
                 if UNIT_POS_PLANE == 0u32 {
-                    partials[CUBE_POS as usize] = accumulator.read();
+                    partials[CUBE_POS as usize] = if valid.read() != 0u32 {
+                        accumulator.read()
+                    } else {
+                        u32::MAX
+                    };
                 }
             }
         }
@@ -214,6 +218,8 @@ macro_rules! define_arg_partial_kernel {
             let first_position = tile_start + unit;
             let safe_position = if first_position < logical_len {
                 first_position
+            } else if logical_len == 0usize {
+                0usize
             } else {
                 logical_len - 1usize
             };
@@ -342,7 +348,11 @@ macro_rules! define_arg_partial_kernel {
                     plane_offset.store(plane_offset.read() / 2u32);
                 }
                 if UNIT_POS_PLANE == 0u32 {
-                    partials[CUBE_POS as usize] = accumulator.read();
+                    partials[CUBE_POS as usize] = if valid.read() != 0u32 {
+                        accumulator.read()
+                    } else {
+                        u32::MAX
+                    };
                 }
             }
         }
@@ -356,7 +366,7 @@ define_arg_partial_kernel!(arg_partial_a13,Eval13,eval13; [L0:slot0,L1:slot1,L2:
 /// Arity dispatch for an index-sideband reduction.
 #[doc(hidden)]
 pub trait ArgReduceDispatch<R: Runtime, Input, Op, Slots> {
-    fn execute(exec: &Executor<R>, input: &Input) -> Result<Option<u32>, Error>;
+    fn execute(exec: &Executor<R>, input: &Input) -> Result<DeviceVec<R, u32>, Error>;
 }
 
 fn block_count(len: usize) -> usize {
@@ -379,20 +389,22 @@ macro_rules! impl_arg_reduce_dispatch {
             >,
             Input::DeviceExpr: $eval<Item, $( $leaf ),+>,
         {
-            fn execute(exec: &Executor<R>, input: &Input) -> Result<Option<u32>, Error> {
-                let len = input.logical_len()?;
-                if len == 0 {
-                    return Ok(None);
+            fn execute(exec: &Executor<R>, input: &Input) -> Result<DeviceVec<R, u32>, Error> {
+                let capacity = input.logical_len()?;
+                if capacity == 0 {
+                    return Ok(exec.to_device(&[u32::MAX]));
                 }
+                let extent = input.logical_extent()?;
                 let client = exec.client();
                 let mut bindings = StagedBindings::new();
                 input.stage_at(client, exec.id(), &mut bindings)?;
                 bindings.pad_to_thirteen(client);
                 let offsets = client.create_from_slice(u32::as_bytes(&bindings.offsets));
-                let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-                let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
-                let blocks = block_count(len);
-                let mut current = client.empty(blocks * size_of::<u32>());
+                let len_handle = extent.materialize(exec)?;
+                let blocks = block_count(capacity);
+                let mut current_extent = extent.ceil_div(exec, TILE_SIZE, blocks)?;
+                let mut current = exec.alloc_row::<u32>(blocks);
+                current.set_logical_extent(current_extent.clone());
                 unsafe {
                     $first::launch_unchecked::<Item, $( $leaf, )+ Input::DeviceExpr, Op, R>(
                         client,
@@ -400,19 +412,18 @@ macro_rules! impl_arg_reduce_dispatch {
                         CubeDim::new_1d(BLOCK_SIZE),
                         $( BufferArg::from_raw_parts(bindings.slots[$index].0.clone(), bindings.slots[$index].1), )+
                         BufferArg::from_raw_parts(offsets.clone(), bindings.offsets.len()),
-                        BufferArg::from_raw_parts(len_handle, 1),
-                        BufferArg::from_raw_parts(current.clone(), blocks),
+                        BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
+                        BufferArg::from_raw_parts(current.handle.clone(), blocks),
                     );
                 }
 
                 let mut current_len = blocks;
                 while current_len > 1 {
                     let next_len = block_count(current_len);
-                    let next = client.empty(next_len * size_of::<u32>());
-                    let current_len_u32 = u32::try_from(current_len)
-                        .map_err(|_| Error::LengthTooLarge { len: current_len })?;
-                    let current_len_handle =
-                        client.create_from_slice(u32::as_bytes(&[current_len_u32]));
+                    let next_extent = current_extent.ceil_div(exec, TILE_SIZE, next_len)?;
+                    let mut next = exec.alloc_row::<u32>(next_len);
+                    next.set_logical_extent(next_extent.clone());
+                    let current_len_handle = current_extent.materialize(exec)?;
                     unsafe {
                         $partial::launch_unchecked::<Item, $( $leaf, )+ Input::DeviceExpr, Op, R>(
                             client,
@@ -420,19 +431,17 @@ macro_rules! impl_arg_reduce_dispatch {
                             CubeDim::new_1d(BLOCK_SIZE),
                             $( BufferArg::from_raw_parts(bindings.slots[$index].0.clone(), bindings.slots[$index].1), )+
                             BufferArg::from_raw_parts(offsets.clone(), bindings.offsets.len()),
-                            BufferArg::from_raw_parts(current, current_len),
-                            BufferArg::from_raw_parts(current_len_handle, 1),
-                            BufferArg::from_raw_parts(next.clone(), next_len),
+                            BufferArg::from_raw_parts(current.handle.clone(), current_len),
+                            BufferArg::from_raw_parts(current_len_handle.handle.clone(), 1),
+                            BufferArg::from_raw_parts(next.handle.clone(), next_len),
                         );
                     }
                     current = next;
                     current_len = next_len;
+                    current_extent = next_extent;
                 }
 
-                let bytes = client.read_one(current).map_err(|err| Error::Launch {
-                    message: format!("{err:?}"),
-                })?;
-                Ok(Some(u32::from_bytes(&bytes)[0]))
+                Ok(exec.column_from_handle(current.handle.clone(), 1))
             }
         }
     };
@@ -440,12 +449,12 @@ macro_rules! impl_arg_reduce_dispatch {
 
 impl_arg_reduce_dispatch!(A13,Eval13,arg_reduce_a13,arg_partial_a13,Env13<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10,L11:11,L12:12]);
 
-/// Returns the selected input index, or `None` for an empty input.
+/// Returns the selected input index, or `u32::MAX` for an empty input.
 pub(crate) fn arg_reduce<R, Input, Op>(
     exec: &Executor<R>,
     input: Input,
     _op: Op,
-) -> Result<Option<u32>, Error>
+) -> Result<DeviceVec<R, u32>, Error>
 where
     R: Runtime,
     Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,

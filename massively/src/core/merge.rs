@@ -6,7 +6,7 @@ use cubecl::prelude::*;
 
 use crate::{
     A13, Column, DeviceVec, Error, Executor, MStorageElement, ReadExpression, RowAlloc, RowStorage,
-    StorageLayout, Transform,
+    StorageLayout,
     allocation::{CopyStorage, NormalizeInput},
     eval::Eval13,
     indexed::GatherInput,
@@ -32,13 +32,16 @@ macro_rules! define_merge_control_kernel {
             left_offsets: &[u32],
             $( $right_slot: &[$right_leaf], )+
             right_offsets: &[u32],
-            lengths: &[u32],
+            left_length: &[u32],
+            right_length: &[u32],
+            parameters: &[u32],
             permutation: &mut [u32],
         ) {
             let out = RuntimeCell::<usize>::new(ABSOLUTE_POS as usize);
             let stride = (CUBE_COUNT as usize) * (CUBE_DIM as usize);
-            let left_len = lengths[0] as usize;
-            let right_len = lengths[1] as usize;
+            let left_len = left_length[0] as usize;
+            let right_len = right_length[0] as usize;
+            let right_base = parameters[0];
             let total = left_len + right_len;
             while out.read() < total {
                 let rank = out.read();
@@ -51,7 +54,7 @@ macro_rules! define_merge_control_kernel {
                     let right_rank = rank - left_rank;
                     if left_rank < left_len
                         && right_rank > 0usize
-                        && !Less::apply(
+                        && !crate::ordering::binary_predicate::<Item, Less>(
                             Right::$method($( $right_slot, )+ right_offsets, right_rank - 1usize),
                             Left::$method($( $left_slot, )+ left_offsets, left_rank),
                         )
@@ -65,17 +68,17 @@ macro_rules! define_merge_control_kernel {
                 let right_rank = rank - left_rank;
                 if left_rank < left_len {
                     if right_rank >= right_len
-                        || !Less::apply(
+                        || !crate::ordering::binary_predicate::<Item, Less>(
                             Right::$method($( $right_slot, )+ right_offsets, right_rank),
                             Left::$method($( $left_slot, )+ left_offsets, left_rank),
                         )
                     {
                         permutation[rank] = left_rank as u32;
                     } else {
-                        permutation[rank] = (left_len + right_rank) as u32;
+                        permutation[rank] = right_base + right_rank as u32;
                     }
                 } else {
-                    permutation[rank] = (left_len + right_rank) as u32;
+                    permutation[rank] = right_base + right_rank as u32;
                 }
                 out.store(rank + stride);
             }
@@ -123,12 +126,27 @@ macro_rules! impl_merge_control_dispatch {
             Right::DeviceExpr: $eval<Item, $( $right_leaf ),+>,
         {
             fn run(exec: &Executor<R>, left: &Left, right: &Right) -> Result<MergeControl<R>, Error> {
-                let left_len = left.logical_len()?;
-                let right_len = right.logical_len()?;
-                let total = left_len.checked_add(right_len).ok_or(Error::LengthTooLarge { len: usize::MAX })?;
-                let permutation = exec.alloc_row::<u32>(total);
-                if total == 0 {
-                    return Ok(MergeControl { permutation, left_len, right_len });
+                let left_capacity = left.logical_len()?;
+                let right_capacity = right.logical_len()?;
+                let total_capacity = left_capacity.checked_add(right_capacity).ok_or(Error::LengthTooLarge { len: usize::MAX })?;
+                let left_extent = left.logical_extent()?;
+                let right_extent = right.logical_extent()?;
+                let total_extent = crate::extent::LogicalExtent::add(
+                    exec,
+                    &left_extent,
+                    &right_extent,
+                    total_capacity,
+                )?;
+                let mut permutation = exec.alloc_row::<u32>(total_capacity);
+                permutation.set_logical_extent(total_extent);
+                if total_capacity == 0 {
+                    return Ok(MergeControl {
+                        permutation,
+                        left_capacity,
+                        right_capacity,
+                        left_extent,
+                        right_extent,
+                    });
                 }
                 let mut left_bindings = StagedBindings::new();
                 let mut right_bindings = StagedBindings::new();
@@ -136,23 +154,36 @@ macro_rules! impl_merge_control_dispatch {
                 right.stage_at(exec.client(), exec.id(), &mut right_bindings)?;
                 let left_offsets = exec.client().create_from_slice(u32::as_bytes(&left_bindings.offsets));
                 let right_offsets = exec.client().create_from_slice(u32::as_bytes(&right_bindings.offsets));
-                let left_u32 = u32::try_from(left_len).map_err(|_| Error::LengthTooLarge { len: left_len })?;
-                let right_u32 = u32::try_from(right_len).map_err(|_| Error::LengthTooLarge { len: right_len })?;
-                let lengths = exec.client().create_from_slice(u32::as_bytes(&[left_u32, right_u32]));
+                let left_length = left_extent.materialize(exec)?;
+                let right_length = right_extent.materialize(exec)?;
+                let right_base = u32::try_from(left_capacity)
+                    .map_err(|_| Error::LengthTooLarge { len: left_capacity })?;
+                let parameters = exec.client().create_from_slice(u32::as_bytes(&[right_base]));
                 unsafe {
                     $kernel::launch_unchecked::<Item, $( $left_leaf, )+ $( $right_leaf, )+ Left::DeviceExpr, Right::DeviceExpr, Less, R>(
                         exec.client(),
-                        crate::launch::cube_count_1d(total.div_ceil(BLOCK_SIZE as usize).min(256))?,
+                        crate::launch::cube_count_1d(total_capacity.div_ceil(BLOCK_SIZE as usize).min(256))?,
                         CubeDim::new_1d(BLOCK_SIZE),
                         $( BufferArg::from_raw_parts(left_bindings.slots[$left_index].0.clone(), left_bindings.slots[$left_index].1), )+
                         BufferArg::from_raw_parts(left_offsets, left_bindings.offsets.len()),
                         $( BufferArg::from_raw_parts(right_bindings.slots[$right_index].0.clone(), right_bindings.slots[$right_index].1), )+
                         BufferArg::from_raw_parts(right_offsets, right_bindings.offsets.len()),
-                        BufferArg::from_raw_parts(lengths, 2),
-                        BufferArg::from_raw_parts(permutation.handle.clone(), permutation.len()),
+                        BufferArg::from_raw_parts(left_length.handle.clone(), 1),
+                        BufferArg::from_raw_parts(right_length.handle.clone(), 1),
+                        BufferArg::from_raw_parts(parameters, 1),
+                        BufferArg::from_raw_parts(
+                            permutation.handle.clone(),
+                            permutation.capacity(),
+                        ),
                     );
                 }
-                Ok(MergeControl { permutation, left_len, right_len })
+                Ok(MergeControl {
+                    permutation,
+                    left_capacity,
+                    right_capacity,
+                    left_extent,
+                    right_extent,
+                })
             }
         }
     };
@@ -164,8 +195,10 @@ impl_merge_control_dispatch!(crate::S12,A13,Eval13,merge_control_a13; [LL0:0:RL0
 #[doc(hidden)]
 pub struct MergeControl<R: Runtime> {
     pub(crate) permutation: DeviceVec<R, u32>,
-    pub(crate) left_len: usize,
-    pub(crate) right_len: usize,
+    pub(crate) left_capacity: usize,
+    pub(crate) right_capacity: usize,
+    pub(crate) left_extent: crate::extent::LogicalExtent,
+    pub(crate) right_extent: crate::extent::LogicalExtent,
 }
 
 /// Internal public-API capability for merge control construction.
@@ -266,27 +299,29 @@ where
     <Item as crate::allocation::ScratchStorage<R>>::Storage: RowStorage<R>,
     Output: crate::core::facade::KernelOutput<R> + crate::output::OutputExpression<Item = Item>,
 {
-    let left_len = left.len()?;
-    let right_len = right.len()?;
-    if left_len != control.left_len || right_len != control.right_len {
+    let left_capacity = left.len()?;
+    let right_capacity = right.len()?;
+    if left_capacity != control.left_capacity || right_capacity != control.right_capacity {
         return Err(Error::LengthMismatch {
-            left: left_len + right_len,
-            right: control.left_len + control.right_len,
+            left: left_capacity + right_capacity,
+            right: control.left_capacity + control.right_capacity,
         });
     }
+    left.logical_extent().zipped(&control.left_extent)?;
+    right.logical_extent().zipped(&control.right_extent)?;
 
-    let total = left_len
-        .checked_add(right_len)
+    let total = left_capacity
+        .checked_add(right_capacity)
         .ok_or(Error::LengthTooLarge { len: usize::MAX })?;
     let combined = Item::alloc_scratch(exec, total);
 
     let left_read = crate::read::FixedRead::new(left.read());
-    crate::transform::materialize_fixed(exec, &left_read, &combined.slice_mut(..left_len))?;
+    crate::transform::materialize_fixed(exec, &left_read, &combined.slice_mut(..left_capacity))?;
 
     let right_read = crate::read::FixedRead::new(right.read());
-    crate::transform::materialize_fixed(exec, &right_read, &combined.slice_mut(left_len..))?;
+    crate::transform::materialize_fixed(exec, &right_read, &combined.slice_mut(left_capacity..))?;
 
-    crate::indexed::gather_u32(
+    crate::indexed::gather_direct(
         exec,
         crate::read::FixedRead::new(combined.read()),
         control.permutation.column(),
@@ -313,8 +348,7 @@ where
     Left::Item: RowAlloc<R, RowStorage = Left::Storage>,
     Left::Storage: CopyStorage<R>,
     Right: NormalizeInput<R, Storage = Left::Storage> + ReadExpression<Item = Left::Item>,
-    <Left::Storage as RowStorage<R>>::Read:
-        GatherInput<R, Transform<Column<u32>, crate::op::U32ToUsize>, Output>,
+    <Left::Storage as RowStorage<R>>::Read: GatherInput<R, Column<crate::MIndex>, Output>,
 {
     fn concat_apply(
         self,
@@ -325,18 +359,20 @@ where
     ) -> Result<(), Error> {
         let left = self.normalize(exec)?;
         let right = right.normalize(exec)?;
-        let left_len = left.len()?;
-        let right_len = right.len()?;
-        if left_len != control.left_len || right_len != control.right_len {
+        let left_capacity = left.len()?;
+        let right_capacity = right.len()?;
+        if left_capacity != control.left_capacity || right_capacity != control.right_capacity {
             return Err(Error::LengthMismatch {
-                left: left_len + right_len,
-                right: control.left_len + control.right_len,
+                left: left_capacity + right_capacity,
+                right: control.left_capacity + control.right_capacity,
             });
         }
-        let combined = exec.alloc_row::<Left::Item>(left_len + right_len);
-        left.copy_storage(exec, combined.slice_mut(..left_len))?;
-        right.copy_storage(exec, combined.slice_mut(left_len..))?;
-        crate::indexed::gather_u32(exec, combined.read(), control.permutation.column(), output)
+        left.logical_extent().zipped(&control.left_extent)?;
+        right.logical_extent().zipped(&control.right_extent)?;
+        let combined = exec.alloc_row::<Left::Item>(left_capacity + right_capacity);
+        left.copy_storage(exec, combined.slice_mut(..left_capacity))?;
+        right.copy_storage(exec, combined.slice_mut(left_capacity..))?;
+        crate::indexed::gather_direct(exec, combined.read(), control.permutation.column(), output)
     }
 }
 
@@ -399,8 +435,8 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<u32> for LessU32 {
-        fn apply(lhs: u32, rhs: u32) -> bool {
-            lhs < rhs
+        fn apply(lhs: u32, rhs: u32) -> crate::MBool {
+            crate::op::mbool(lhs < rhs)
         }
     }
 
@@ -451,8 +487,8 @@ mod tests {
         struct LessPair;
         #[cubecl::cube]
         impl BinaryPredicateOp<(u32, u32)> for LessPair {
-            fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> bool {
-                lhs.0 < rhs.0
+            fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> crate::MBool {
+                crate::op::mbool(lhs.0 < rhs.0)
             }
         }
         merge(&exec, pair_left, pair_right, LessPair, pair_out).unwrap();

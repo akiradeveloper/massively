@@ -2,7 +2,9 @@
 
 use cubecl::prelude::{CubeType, Runtime};
 
-use crate::{Error, Executor, MAlloc, MIter, MIterMut, MStorage, MVec, op::BinaryPredicateOp};
+use crate::{
+    Error, Executor, MAlloc, MIndex, MIter, MIterMut, MStorage, MVal, MVec, op::BinaryPredicateOp,
+};
 
 struct SetOperation<'a, R: Runtime, Left, Right, Less, const MODE: u8> {
     exec: &'a Executor<R>,
@@ -20,7 +22,7 @@ where
     Right: MIter<R, Item = Item>,
     Less: BinaryPredicateOp<Item>,
 {
-    type Result = Result<u32, Error>;
+    type Result = Result<crate::DeviceVec<R, u32>, Error>;
 
     fn run<Output>(self, output: Output) -> Self::Result
     where
@@ -55,12 +57,12 @@ macro_rules! set_api {
             Item: MAlloc<R>,
             Less: BinaryPredicateOp<Item>,
         {
-            let left_len = left.len()? as usize;
-            let right_len = right.len()? as usize;
+            let left_len = left.capacity()? as usize;
+            let right_len = right.capacity()? as usize;
             let capacity = ($capacity)(left_len, right_len)?;
             let mut output = exec.alloc::<Item>(capacity);
             let len = $into_name(exec, left, right, less, output.slice_mut(..))?;
-            output.truncate(len as usize);
+            output.set_logical_extent(len.logical_extent(capacity));
             Ok(output)
         }
 
@@ -72,7 +74,7 @@ macro_rules! set_api {
             right: Right,
             less: Less,
             output: Output,
-        ) -> Result<u32, Error>
+        ) -> Result<MVal<R, MIndex>, Error>
         where
             R: Runtime,
             Left: MIter<R, Item = Output::Item>,
@@ -80,12 +82,14 @@ macro_rules! set_api {
             Less: BinaryPredicateOp<Left::Item>,
             Output: MIterMut<R>,
         {
-            output.run_output_operation(SetOperation::<_, _, _, _, $mode> {
-                exec,
-                left,
-                right,
-                less,
-            })
+            MVal::from_storage(
+                output.run_output_operation(SetOperation::<_, _, _, _, $mode> {
+                    exec,
+                    left,
+                    right,
+                    less,
+                })?,
+            )
         }
     };
 }
@@ -110,8 +114,8 @@ struct Less;
 
 #[cubecl::cube]
 impl op::BinaryPredicateOp<u32> for Less {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs < rhs
+    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+        op::mbool(lhs < rhs)
     }
 }
 
@@ -120,10 +124,7 @@ let left = exec.to_device(&[1_u32, 2, 2, 4]);
 let right = exec.to_device(&[2_u32, 3, 4]);
 let output = set_union(&exec, left.slice(..), right.slice(..), Less).unwrap();
 
-assert_eq!(
-    exec.to_host(&output).unwrap(),
-    vec![1, 2, 2, 3, 4],
-);
+assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 2, 3, 4]);
 ```
 "#
 );
@@ -131,7 +132,7 @@ set_api!(
     set_intersection,
     set_intersection_into,
     1,
-    |left: usize, right: usize| Ok(left.min(right)),
+    |left: usize, _right: usize| Ok(left),
     r#"Computes the multiset intersection of two sorted ranges.
 
 # Examples
@@ -145,8 +146,8 @@ struct Less;
 
 #[cubecl::cube]
 impl op::BinaryPredicateOp<u32> for Less {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs < rhs
+    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+        op::mbool(lhs < rhs)
     }
 }
 
@@ -177,8 +178,8 @@ struct Less;
 
 #[cubecl::cube]
 impl op::BinaryPredicateOp<u32> for Less {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs < rhs
+    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+        op::mbool(lhs < rhs)
     }
 }
 

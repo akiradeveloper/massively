@@ -5,7 +5,7 @@
 use cubecl::prelude::Runtime;
 
 use crate::api::iter::Zipped;
-use crate::{DeviceVec, Error, Executor, MAlloc, MIter, MStorage, Zip};
+use crate::{DeviceVec, Error, Executor, MAlloc, MIndex, MIter, MStorage, Zip};
 
 use super::control::TraversalControl;
 
@@ -96,7 +96,7 @@ where
     R: Runtime,
     Values: MIter<R>,
     Values::Item: MAlloc<R>,
-    <Values::Item as MAlloc<R>>::Storage: MStorage<R, Item = Values::Item>,
+    <Values::Item as MAlloc<R>>::Owned: MStorage<R, Item = Values::Item>,
 {
     type Item = Values::Item;
 }
@@ -106,7 +106,7 @@ where
     R: Runtime,
     Values: MIter<R>,
     Values::Item: MAlloc<R>,
-    <Values::Item as MAlloc<R>>::Storage: MStorage<R, Item = Values::Item>,
+    <Values::Item as MAlloc<R>>::Owned: MStorage<R, Item = Values::Item>,
 {
     type Item = Values::Item;
 }
@@ -116,21 +116,21 @@ where
     R: Runtime,
     Values: MIter<R>,
     Values::Item: MAlloc<R>,
-    <Values::Item as MAlloc<R>>::Storage: MStorage<R, Item = Values::Item>,
+    <Values::Item as MAlloc<R>>::Owned: MStorage<R, Item = Values::Item>,
 {
     type Item = Values::Item;
 }
 
 impl<R: Runtime> EdgeExpr<R> for SourceId {
-    type Item = u32;
+    type Item = MIndex;
 }
 
 impl<R: Runtime> EdgeExpr<R> for DestinationId {
-    type Item = u32;
+    type Item = MIndex;
 }
 
 impl<R: Runtime> EdgeExpr<R> for EdgeId {
-    type Item = u32;
+    type Item = MIndex;
 }
 
 impl<R, Values> private::EdgeExprImpl<R> for Source<Values>
@@ -138,17 +138,17 @@ where
     R: Runtime,
     Values: MIter<R>,
     Values::Item: MAlloc<R>,
-    <Values::Item as MAlloc<R>>::Storage: MStorage<R, Item = Values::Item>,
+    <Values::Item as MAlloc<R>>::Owned: MStorage<R, Item = Values::Item>,
 {
-    type Storage = <Values::Item as MAlloc<R>>::Storage;
+    type Storage = <Values::Item as MAlloc<R>>::Owned;
 
     fn materialize(
         self,
         exec: &Executor<R>,
         control: &TraversalControl<R>,
     ) -> Result<Self::Storage, Error> {
-        let output = <Self::Storage as MStorage<R>>::allocate(exec, control.output_len as usize);
-        crate::vector::gather_raw_into(
+        let output = <Self::Storage as MStorage<R>>::allocate(exec, control.capacity as usize);
+        crate::vector::gather_into(
             exec,
             self.0,
             control.sources.slice(..),
@@ -163,17 +163,17 @@ where
     R: Runtime,
     Values: MIter<R>,
     Values::Item: MAlloc<R>,
-    <Values::Item as MAlloc<R>>::Storage: MStorage<R, Item = Values::Item>,
+    <Values::Item as MAlloc<R>>::Owned: MStorage<R, Item = Values::Item>,
 {
-    type Storage = <Values::Item as MAlloc<R>>::Storage;
+    type Storage = <Values::Item as MAlloc<R>>::Owned;
 
     fn materialize(
         self,
         exec: &Executor<R>,
         control: &TraversalControl<R>,
     ) -> Result<Self::Storage, Error> {
-        let output = <Self::Storage as MStorage<R>>::allocate(exec, control.output_len as usize);
-        crate::vector::gather_raw_into(
+        let output = <Self::Storage as MStorage<R>>::allocate(exec, control.capacity as usize);
+        crate::vector::gather_into(
             exec,
             self.0,
             control.destinations.slice(..),
@@ -188,22 +188,17 @@ where
     R: Runtime,
     Values: MIter<R>,
     Values::Item: MAlloc<R>,
-    <Values::Item as MAlloc<R>>::Storage: MStorage<R, Item = Values::Item>,
+    <Values::Item as MAlloc<R>>::Owned: MStorage<R, Item = Values::Item>,
 {
-    type Storage = <Values::Item as MAlloc<R>>::Storage;
+    type Storage = <Values::Item as MAlloc<R>>::Owned;
 
     fn materialize(
         self,
         exec: &Executor<R>,
         control: &TraversalControl<R>,
     ) -> Result<Self::Storage, Error> {
-        let output = <Self::Storage as MStorage<R>>::allocate(exec, control.output_len as usize);
-        crate::vector::gather_raw_into(
-            exec,
-            self.0,
-            control.edges.slice(..),
-            output.slice_mut(..),
-        )?;
+        let output = <Self::Storage as MStorage<R>>::allocate(exec, control.capacity as usize);
+        crate::vector::gather_into(exec, self.0, control.edges.slice(..), output.slice_mut(..))?;
         Ok(output)
     }
 }

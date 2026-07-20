@@ -13,8 +13,8 @@ struct GreaterU32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for GreaterU32 {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs > rhs
+    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+        massively::op::mbool(lhs > rhs)
     }
 }
 
@@ -22,8 +22,8 @@ struct EqualPair;
 
 #[cubecl::cube]
 impl PredicateOp<(u32, u32)> for EqualPair {
-    fn apply(input: (u32, u32)) -> bool {
-        input.0 == input.1
+    fn apply(input: (u32, u32)) -> massively::MBool {
+        massively::op::mbool(input.0 == input.1)
     }
 }
 
@@ -63,11 +63,11 @@ pub fn solve<R: Runtime>(
                 exec,
                 zip2(
                     lazy::permute(colors.slice(..), common::indices(neighbors.clone())),
-                    lazy::constant(color).take(neighbor_count as usize),
+                    lazy::constant(color).take(neighbor_count),
                 ),
                 EqualPair,
             )?;
-            if used == 0 {
+            if used.read(exec)? == 0 {
                 break;
             }
             color += 1;

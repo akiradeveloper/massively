@@ -6,6 +6,7 @@ struct TransformOperation<'a, R: Runtime, Input, Op> {
     exec: &'a Executor<R>,
     input: Input,
     op: Op,
+    active_len: Option<&'a crate::DeviceVec<R, u32>>,
 }
 
 impl<R, Item, Input, Op> crate::api::iter::OutputOperation<R, Item>
@@ -23,12 +24,13 @@ where
         Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
         Output: crate::api::iter::ConcreteOutput<R, Item>,
     {
-        crate::transform::transform_fixed(
-            self.exec,
-            crate::api::iter::lower_fixed::<R, _>(self.input),
-            self.op,
-            output,
-        )
+        let input = crate::api::iter::lower_fixed::<R, _>(self.input);
+        match self.active_len {
+            Some(active_len) => crate::transform::transform_prefix_fixed(
+                self.exec, input, self.op, active_len, output,
+            ),
+            None => crate::transform::transform_fixed(self.exec, input, self.op, output),
+        }
     }
 }
 
@@ -94,9 +96,11 @@ where
     Op: UnaryOp<Input::Item>,
     Op::Output: MAlloc<R>,
 {
-    let len = input.len()? as usize;
-    let output = exec.alloc::<Op::Output>(len);
+    let len = input.capacity()? as usize;
+    let extent = input.logical_extent()?;
+    let mut output = exec.alloc::<Op::Output>(len);
     transform_into(exec, input, op, output.slice_mut(..))?;
+    output.set_logical_extent(extent);
     Ok(output)
 }
 
@@ -114,5 +118,33 @@ where
     Output: MIterMut<R>,
     Op: UnaryOp<Input::Item, Output = Output::Item>,
 {
-    output.run_output_operation(TransformOperation { exec, input, op })
+    output.run_output_operation(TransformOperation {
+        exec,
+        input,
+        op,
+        active_len: None,
+    })
+}
+
+/// Applies a unary operation to the prefix selected by a device-resident
+/// length.  This is the internal bridge used by bounded algorithm results.
+pub(crate) fn transform_prefix_into<R, Input, Output, Op>(
+    exec: &Executor<R>,
+    input: Input,
+    op: Op,
+    active_len: &crate::DeviceVec<R, u32>,
+    output: Output,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    Output: MIterMut<R>,
+    Op: UnaryOp<Input::Item, Output = Output::Item>,
+{
+    output.run_output_operation(TransformOperation {
+        exec,
+        input,
+        op,
+        active_len: Some(active_len),
+    })
 }

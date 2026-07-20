@@ -44,15 +44,21 @@ pub fn solve<R: Runtime>(
     iterations: usize,
 ) -> common::Result<MVec<R, (f32, f32)>> {
     let n = graph.vertex_count();
-    assert_eq!(initial.len()?, n as usize);
-    assert_eq!(known.len(), n as usize);
+    assert_eq!(initial.capacity()?, n);
+    assert_eq!(known.capacity(), n as usize);
     let degree = common::resident_degrees(exec, graph)?;
     let mut coordinates = initial.clone();
+    let zero = exec.value((0.0, 0.0))?;
 
     for _ in 0..iterations {
-        let sums = graph::traverse(exec, graph.csr(), common::counting_u32(0, n as usize))?
-            .map(graph::destination(coordinates.slice(..)), Identity)
-            .reduce_by_source(exec, (0.0, 0.0), SumCoordinates)?;
+        let sums = graph::traverse(
+            exec,
+            graph.csr(),
+            common::counting_u32(0, n as usize),
+            graph.edge_capacity()?,
+        )?
+        .map(graph::destination(coordinates.slice(..)), Identity)
+        .reduce_by_source(exec, zero.clone(), SumCoordinates)?;
 
         coordinates = vector::transform(
             exec,

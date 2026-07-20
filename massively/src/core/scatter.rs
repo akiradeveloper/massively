@@ -29,7 +29,7 @@ pub(crate) fn scatter_where<R, Values, Indices, Stencil, Output>(
 where
     R: Runtime,
     Values: IndexedCopyInput<R, Indices, Output> + crate::reduce::StageRead<R, Env0>,
-    Indices: ReadExpression<Item = usize> + crate::reduce::StageRead<R, Env0>,
+    Indices: ReadExpression<Item = crate::MIndex> + crate::reduce::StageRead<R, Env0>,
     Stencil: crate::selection::FlagInput<R>,
     Output: crate::output::OutputExpression,
 {
@@ -48,16 +48,19 @@ where
             right: stencil_len,
         });
     }
-    let output_len = output.logical_len()?;
-    if output_len < values_len {
-        return Err(Error::OutputTooShort {
-            input: values_len,
-            output: output_len,
-        });
-    }
-
+    values
+        .logical_extent()?
+        .zipped(&indices.logical_extent()?)?
+        .zipped(&stencil.flag_extent()?)?;
     let control = stencil.selected_control(exec)?;
-    values.indexed_copy_selected(exec, indices, Some(control.indices()), false, output)
+    values.indexed_copy_selected(
+        exec,
+        indices,
+        Some(control.indices()),
+        Some(control.count()),
+        false,
+        output,
+    )
 }
 
 #[cfg(test)]
@@ -72,7 +75,7 @@ mod tests {
         let left = exec.to_device(&[1_u32, 2, 3]);
         let right = exec.to_device(&[10_u32, 20, 30]);
         let encoded = exec.to_device(&[2_u32, 0, 3]);
-        let indices = Transform::new(encoded.column(), crate::op::U32ToUsize);
+        let indices = encoded.column();
         let out_left = exec.to_device(&[0_u32; 4]);
         let out_right = exec.to_device(&[0_u32; 4]);
 
@@ -97,17 +100,8 @@ mod tests {
 
         scatter(
             &exec,
-            Permute::new(
-                values.column(),
-                Transform::new(Counting::new(0, 3), crate::op::U32ToUsize),
-            ),
-            Transform::new(
-                Permute::new(
-                    indices.column(),
-                    Transform::new(Counting::new(0, 3), crate::op::U32ToUsize),
-                ),
-                crate::op::U32ToUsize,
-            ),
+            Permute::new(values.column(), Counting::new(0, 3)),
+            Permute::new(indices.column(), Counting::new(0, 3)),
             output.slice_mut(..),
         )
         .unwrap();
@@ -126,8 +120,8 @@ mod tests {
         scatter_where(
             &exec,
             values.column(),
-            Transform::new(encoded_indices.column(), crate::op::U32ToUsize),
-            Transform::new(encoded_stencil.column(), crate::op::U32ToBool),
+            encoded_indices.column(),
+            encoded_stencil.column(),
             output.slice_mut(..),
         )
         .unwrap();

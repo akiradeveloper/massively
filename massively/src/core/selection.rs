@@ -3,8 +3,8 @@
 use cubecl::prelude::*;
 
 use crate::{
-    A1, Column, Constant, DeviceSliceMut, DeviceVec, Dispatch, Error, Executor, ReadExpression,
-    RowStorage, S1, StorageLayout, Transform, Zip,
+    A1, Column, Constant, DeviceSliceMut, DeviceVec, Dispatch, Error, Executor, MBool, MVal,
+    ReadExpression, RowStorage, S1, StorageLayout, Transform, Zip,
     indexed::GatherInput,
     op::UnaryOp,
     output::{LowerOutputExpression, OutputExpression, SliceOutput, StageOutput},
@@ -39,23 +39,46 @@ fn selected_indices_kernel(positions: &[u32], len: &[u32], invert: &[u32], indic
     }
 }
 
+#[cubecl::cube(launch_unchecked)]
+fn partition_permutation_kernel(
+    positions: &[u32],
+    selected_count: &[u32],
+    len: &[u32],
+    permutation: &mut [u32],
+) {
+    let index = ABSOLUTE_POS as usize;
+    if index < len[0] as usize {
+        let previous = if index == 0usize {
+            0u32
+        } else {
+            positions[index - 1usize]
+        };
+        let destination = if positions[index] != previous {
+            positions[index] - 1u32
+        } else {
+            selected_count[0] + index as u32 - positions[index]
+        };
+        permutation[destination as usize] = index as u32;
+    }
+}
+
 struct IsTrue;
 
 #[cubecl::cube]
-impl UnaryOp<bool> for IsTrue {
+impl UnaryOp<MBool> for IsTrue {
     type Output = u32;
-    fn apply(input: bool) -> u32 {
-        if input { 1u32 } else { 0u32 }
+    fn apply(input: MBool) -> u32 {
+        if input != 0u32 { 1u32 } else { 0u32 }
     }
 }
 
 struct IsFalse;
 
 #[cubecl::cube]
-impl UnaryOp<bool> for IsFalse {
+impl UnaryOp<MBool> for IsFalse {
     type Output = u32;
-    fn apply(input: bool) -> u32 {
-        if input { 0u32 } else { 1u32 }
+    fn apply(input: MBool) -> u32 {
+        if input != 0u32 { 0u32 } else { 1u32 }
     }
 }
 
@@ -65,6 +88,17 @@ struct SumU32;
 impl ReductionOp<u32> for SumU32 {
     fn apply(lhs: u32, rhs: u32) -> u32 {
         lhs + rhs
+    }
+}
+
+struct InvertCount;
+
+#[cubecl::cube]
+impl UnaryOp<(u32, u32)> for InvertCount {
+    type Output = u32;
+
+    fn apply(input: (u32, u32)) -> u32 {
+        input.1 - input.0
     }
 }
 
@@ -93,7 +127,7 @@ where
         + StageOutput<R, Env0>,
 {
     fn fill_output(self, exec: &Executor<R>, value: T) -> Result<(), Error> {
-        let len = self.len();
+        let len = self.capacity();
         materialize(exec, Constant::new(value, len), self)
     }
 }
@@ -139,8 +173,9 @@ where
 
 /// Internal capability to consume a logical stencil expression.
 #[doc(hidden)]
-pub trait FlagInput<R: Runtime>: ReadExpression<Item = bool> + Sized {
+pub trait FlagInput<R: Runtime>: ReadExpression<Item = MBool> + Sized {
     fn flag_len(&self) -> Result<usize, Error>;
+    fn flag_extent(&self) -> Result<crate::extent::LogicalExtent, Error>;
     fn selected_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error>;
     fn rejected_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error>;
 }
@@ -148,7 +183,7 @@ pub trait FlagInput<R: Runtime>: ReadExpression<Item = bool> + Sized {
 impl<R, Stencil> FlagInput<R> for Stencil
 where
     R: Runtime,
-    Stencil: ReadExpression<Item = bool> + LowerReadExpression + StageRead<R, Env0>,
+    Stencil: ReadExpression<Item = MBool> + LowerReadExpression + StageRead<R, Env0>,
     Transform<Stencil, IsTrue>:
         ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
     Transform<Stencil, IsFalse>:
@@ -181,27 +216,35 @@ where
         self.logical_len()
     }
 
+    fn flag_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.logical_extent()
+    }
+
     fn selected_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error> {
         let len = self.logical_len()?;
-        let positions = exec.alloc_row::<u32>(len);
+        let extent = self.logical_extent()?;
+        let mut positions = exec.alloc_row::<u32>(len);
         inclusive_scan(
             exec,
             Transform::new(self, IsTrue),
             SumU32,
             positions.slice_mut(..),
         )?;
+        positions.set_logical_extent(extent);
         SelectionControl::from_positions(exec, positions, false)
     }
 
     fn rejected_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error> {
         let len = self.logical_len()?;
-        let positions = exec.alloc_row::<u32>(len);
+        let extent = self.logical_extent()?;
+        let mut positions = exec.alloc_row::<u32>(len);
         inclusive_scan(
             exec,
             Transform::new(self, IsFalse),
             SumU32,
             positions.slice_mut(..),
         )?;
+        positions.set_logical_extent(extent);
         SelectionControl::from_positions(exec, positions, false)
     }
 }
@@ -212,14 +255,21 @@ where
 #[doc(hidden)]
 pub struct SelectionControl<R: Runtime> {
     len: usize,
+    source_extent: crate::extent::LogicalExtent,
     indices: DeviceVec<R, u32>,
-    count: u32,
+    count: DeviceVec<R, u32>,
 }
 
 impl<R: Runtime> SelectionControl<R> {
-    pub(crate) fn from_indices(len: usize, indices: DeviceVec<R, u32>, count: u32) -> Self {
+    pub(crate) fn from_indices(
+        len: usize,
+        source_extent: crate::extent::LogicalExtent,
+        indices: DeviceVec<R, u32>,
+        count: DeviceVec<R, u32>,
+    ) -> Self {
         Self {
             len,
+            source_extent,
             indices,
             count,
         }
@@ -235,11 +285,15 @@ impl<R: Runtime> SelectionControl<R> {
         positions: DeviceVec<R, u32>,
     ) -> Result<(Self, Self), Error> {
         let selected = last_u32(exec, &positions)?;
-        let len = u32::try_from(positions.len()).map_err(|_| Error::LengthTooLarge {
-            len: positions.len(),
-        })?;
+        let total: MVal<R, u32> =
+            MVal::from_storage(positions.logical_extent().materialize(exec)?)?;
+        let rejected = crate::vector::transform(
+            exec,
+            crate::zip2(selected.slice(..), total.as_iter()),
+            InvertCount,
+        )?;
         let passing = Self::from_positions_with_count(exec, &positions, selected, false)?;
-        let failing = Self::from_positions_with_count(exec, &positions, len - selected, true)?;
+        let failing = Self::from_positions_with_count(exec, &positions, rejected, true)?;
         Ok((passing, failing))
     }
 
@@ -250,9 +304,13 @@ impl<R: Runtime> SelectionControl<R> {
     ) -> Result<Self, Error> {
         let selected = last_u32(exec, &positions)?;
         let count = if invert {
-            u32::try_from(positions.len()).map_err(|_| Error::LengthTooLarge {
-                len: positions.len(),
-            })? - selected
+            let total: MVal<R, u32> =
+                MVal::from_storage(positions.logical_extent().materialize(exec)?)?;
+            crate::vector::transform(
+                exec,
+                crate::zip2(selected.slice(..), total.as_iter()),
+                InvertCount,
+            )?
         } else {
             selected
         };
@@ -262,32 +320,37 @@ impl<R: Runtime> SelectionControl<R> {
     pub(crate) fn from_positions_with_count(
         exec: &Executor<R>,
         positions: &DeviceVec<R, u32>,
-        count: u32,
+        count: DeviceVec<R, u32>,
         invert: bool,
     ) -> Result<Self, Error> {
-        let indices = exec.alloc_row::<u32>(count as usize);
-        if count != 0 {
-            let len = u32::try_from(positions.len()).map_err(|_| Error::LengthTooLarge {
-                len: positions.len(),
-            })?;
-            let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len]));
+        let source_extent = positions.logical_extent();
+        let mut indices = exec.alloc_row::<u32>(positions.capacity());
+        if positions.capacity() != 0 {
+            let len_handle = positions.logical_extent().materialize(exec)?;
             let invert_handle = exec
                 .client()
                 .create_from_slice(u32::as_bytes(&[u32::from(invert)]));
             unsafe {
                 selected_indices_kernel::launch_unchecked::<R>(
                     exec.client(),
-                    crate::launch::cube_count_1d(positions.len().div_ceil(BLOCK_SIZE as usize))?,
+                    crate::launch::cube_count_1d(
+                        positions.capacity().div_ceil(BLOCK_SIZE as usize),
+                    )?,
                     CubeDim::new_1d(BLOCK_SIZE),
-                    BufferArg::from_raw_parts(positions.handle.clone(), positions.len()),
-                    BufferArg::from_raw_parts(len_handle, 1),
+                    BufferArg::from_raw_parts(positions.handle.clone(), positions.capacity()),
+                    BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
                     BufferArg::from_raw_parts(invert_handle, 1),
-                    BufferArg::from_raw_parts(indices.handle.clone(), indices.len()),
+                    BufferArg::from_raw_parts(indices.handle.clone(), indices.capacity()),
                 );
             }
         }
+        indices.set_logical_extent(crate::extent::LogicalExtent::from_device(
+            &count,
+            positions.capacity(),
+        ));
         Ok(Self {
-            len: positions.len(),
+            len: positions.capacity(),
+            source_extent,
             indices,
             count,
         })
@@ -297,12 +360,16 @@ impl<R: Runtime> SelectionControl<R> {
         self.len
     }
 
-    pub(crate) fn count(&self) -> u32 {
-        self.count
+    pub(crate) fn count(&self) -> &DeviceVec<R, u32> {
+        &self.count
     }
 
     pub(crate) fn indices(&self) -> &DeviceVec<R, u32> {
         &self.indices
+    }
+
+    pub(crate) fn source_extent(&self) -> crate::extent::LogicalExtent {
+        self.source_extent.clone()
     }
 }
 
@@ -310,23 +377,27 @@ impl<R: Runtime> SelectionControl<R> {
 #[doc(hidden)]
 pub trait CopySelected<R: Runtime, Output>: ReadExpression + Sized {
     fn source_len(&self) -> Result<usize, Error>;
+    fn source_extent(&self) -> Result<crate::extent::LogicalExtent, Error>;
     fn copy_selected(
         self,
         exec: &Executor<R>,
         control: &SelectionControl<R>,
         output: Output,
-    ) -> Result<u32, Error>;
+    ) -> Result<DeviceVec<R, u32>, Error>;
 }
 
 impl<R, Input, Output> CopySelected<R, Output> for Input
 where
     R: Runtime,
-    Input:
-        GatherInput<R, Transform<Column<u32>, crate::op::U32ToUsize>, Output> + StageRead<R, Env0>,
+    Input: crate::indexed::IndexedCopyInput<R, Column<crate::MIndex>, Output> + StageRead<R, Env0>,
     Output: OutputExpression,
 {
     fn source_len(&self) -> Result<usize, Error> {
         self.logical_len()
+    }
+
+    fn source_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.logical_extent()
     }
 
     fn copy_selected(
@@ -334,7 +405,7 @@ where
         exec: &Executor<R>,
         control: &SelectionControl<R>,
         output: Output,
-    ) -> Result<u32, Error> {
+    ) -> Result<DeviceVec<R, u32>, Error> {
         let source_len = self.logical_len()?;
         if source_len != control.len() {
             return Err(Error::LengthMismatch {
@@ -342,23 +413,23 @@ where
                 right: control.len(),
             });
         }
-        let count = control.count();
+        self.logical_extent()?.zipped(&control.source_extent())?;
         let output_len = output.logical_len()?;
-        if output_len < count as usize {
+        if output_len < control.len() {
             return Err(Error::OutputTooShort {
-                input: count as usize,
+                input: control.len(),
                 output: output_len,
             });
         }
-        if count == 0 {
-            return Ok(0);
-        }
-        self.gather(
+        self.indexed_copy_selected(
             exec,
-            Transform::new(control.indices.column(), crate::op::U32ToUsize),
+            control.indices.column(),
+            None,
+            Some(control.count()),
+            true,
             output,
         )?;
-        Ok(count)
+        Ok(control.count().clone())
     }
 }
 
@@ -368,7 +439,7 @@ pub(crate) fn copy_where<R, Input, Stencil, Output>(
     input: Input,
     stencil: Stencil,
     output: Output,
-) -> Result<u32, Error>
+) -> Result<DeviceVec<R, u32>, Error>
 where
     R: Runtime,
     Input: CopySelected<R, Output>,
@@ -382,6 +453,7 @@ where
             right: stencil_len,
         });
     }
+    input.source_extent()?.zipped(&stencil.flag_extent()?)?;
     let control = stencil.selected_control(exec)?;
     input.copy_selected(exec, &control, output)
 }
@@ -392,7 +464,7 @@ pub(crate) fn remove_where<R, Input, Stencil, Output>(
     input: Input,
     stencil: Stencil,
     output: Output,
-) -> Result<u32, Error>
+) -> Result<DeviceVec<R, u32>, Error>
 where
     R: Runtime,
     Input: CopySelected<R, Output>,
@@ -406,6 +478,7 @@ where
             right: stencil_len,
         });
     }
+    input.source_extent()?.zipped(&stencil.flag_extent()?)?;
     let control = stencil.rejected_control(exec)?;
     input.copy_selected(exec, &control, output)
 }
@@ -416,10 +489,13 @@ pub(crate) fn partition<R, Input, Pred, Output>(
     input: Input,
     _pred: Pred,
     output: Output,
-) -> Result<u32, Error>
+) -> Result<DeviceVec<R, u32>, Error>
 where
     R: Runtime,
-    Input: Clone + crate::predicate::PredicateInput<R, Pred> + CopySelected<R, Output>,
+    Input: Clone
+        + crate::predicate::PredicateInput<R, Pred>
+        + CopySelected<R, Output>
+        + GatherInput<R, Column<crate::MIndex>, Output>,
     Output: SliceOutput,
 {
     let len = input.source_len()?;
@@ -431,19 +507,25 @@ where
         });
     }
     let positions = input.clone().predicate_positions(exec)?;
-    let (passing_control, failing_control) =
-        SelectionControl::split_from_positions(exec, positions)?;
-    let passing = passing_control.count();
-    input.clone().copy_selected(
-        exec,
-        &passing_control,
-        output.slice_output(..passing as usize),
-    )?;
-    input.copy_selected(
-        exec,
-        &failing_control,
-        output.slice_output(passing as usize..len),
-    )?;
+    let passing = last_u32(exec, &positions)?;
+    let extent = input.source_extent()?;
+    let mut permutation = exec.alloc_row::<u32>(len);
+    permutation.set_logical_extent(extent.clone());
+    if len != 0 {
+        let len_handle = extent.materialize(exec)?;
+        unsafe {
+            partition_permutation_kernel::launch_unchecked::<R>(
+                exec.client(),
+                crate::launch::cube_count_1d(len.div_ceil(BLOCK_SIZE as usize))?,
+                CubeDim::new_1d(BLOCK_SIZE),
+                BufferArg::from_raw_parts(positions.handle.clone(), positions.capacity()),
+                BufferArg::from_raw_parts(passing.handle.clone(), 1),
+                BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
+                BufferArg::from_raw_parts(permutation.handle.clone(), permutation.capacity()),
+            );
+        }
+        input.gather(exec, permutation.column(), output)?;
+    }
     Ok(passing)
 }
 
@@ -476,7 +558,7 @@ where
     <<Output::Item as crate::allocation::ScratchStorage<R>>::Storage as RowStorage<R>>::Write:
         FillOutput<R>,
     <<Output::Item as crate::allocation::ScratchStorage<R>>::Storage as RowStorage<R>>::Read:
-        crate::indexed::IndexedCopyInput<R, Transform<Column<u32>, crate::op::U32ToUsize>, Output>,
+        crate::indexed::IndexedCopyInput<R, Column<crate::MIndex>, Output>,
 {
     let stencil_len = stencil.flag_len()?;
     let output_len = output.logical_len()?;
@@ -487,18 +569,16 @@ where
         });
     }
     let control = stencil.selected_control(exec)?;
-    if control.count() == 0 {
-        return Ok(());
-    }
-    let replacements = <Output::Item as crate::allocation::ScratchStorage<R>>::alloc_scratch(
-        exec,
-        control.count() as usize,
-    );
+    let replacements =
+        <Output::Item as crate::allocation::ScratchStorage<R>>::alloc_scratch(exec, control.len());
     replacements.write().fill_output(exec, value)?;
-    crate::core::scatter::scatter(
-        exec,
+    crate::indexed::IndexedCopyInput::indexed_copy_selected(
         replacements.read(),
-        Transform::new(control.indices().column(), crate::op::U32ToUsize),
+        exec,
+        control.indices().column(),
+        None,
+        Some(control.count()),
+        false,
         output,
     )
 }
@@ -521,11 +601,7 @@ where
     Input: ReadExpression + StageRead<R, Env0>,
     Op: UnaryOp<Input::Item>,
     Transform<Input, Op>: ReadExpression<Item = Op::Output>,
-    Transform<Input, Op>: crate::indexed::IndexedCopyInput<
-            R,
-            Transform<crate::Counting, crate::op::U32ToUsize>,
-            Output,
-        >,
+    Transform<Input, Op>: crate::indexed::IndexedCopyInput<R, crate::Counting, Output>,
     Stencil: FlagInput<R>,
     Output: OutputExpression,
 {
@@ -551,15 +627,14 @@ where
                 right: output_len,
             });
         }
+        self.logical_extent()?.zipped(&stencil.flag_extent()?)?;
         let control = stencil.selected_control(exec)?;
-        if control.count() == 0 {
-            return Ok(());
-        }
         crate::indexed::IndexedCopyInput::indexed_copy_selected(
             Transform::new(self, op),
             exec,
-            Transform::new(crate::Counting::new(0, input_len), crate::op::U32ToUsize),
+            crate::Counting::new(0, input_len),
             Some(control.indices()),
+            Some(control.count()),
             false,
             output,
         )
@@ -603,26 +678,15 @@ mod tests {
             out_c.slice_mut(..),
         );
 
-        let count = copy_where(
-            &exec,
-            input,
-            Transform::new(flags.column(), crate::op::U32ToBool),
-            output,
-        )
-        .unwrap();
+        let count = copy_where(&exec, input, flags.column(), output).unwrap();
+        let count = exec.to_host(&count).unwrap()[0] as usize;
         assert_eq!(count, 2);
+        assert_eq!(exec.to_host(&out_a.slice(..count)).unwrap(), vec![2, 3]);
         assert_eq!(
-            exec.to_host(&out_a.slice(..count as usize)).unwrap(),
-            vec![2, 3]
-        );
-        assert_eq!(
-            exec.to_host(&out_b.slice(..count as usize)).unwrap(),
+            exec.to_host(&out_b.slice(..count)).unwrap(),
             vec![20.0, 30.0]
         );
-        assert_eq!(
-            exec.to_host(&out_c.slice(..count as usize)).unwrap(),
-            vec![200, 300]
-        );
+        assert_eq!(exec.to_host(&out_c.slice(..count)).unwrap(), vec![200, 300]);
     }
 
     #[test]
@@ -632,7 +696,7 @@ mod tests {
         let positions = exec.alloc_row::<u32>(4);
         inclusive_scan(
             &exec,
-            Transform::new(Transform::new(flags.column(), crate::op::U32ToBool), IsTrue),
+            Transform::new(flags.column(), IsTrue),
             SumU32,
             positions.slice_mut(..),
         )
@@ -681,16 +745,8 @@ mod tests {
             outputs[6].slice_mut(..),
         );
 
-        assert_eq!(
-            copy_where(
-                &exec,
-                input,
-                Transform::new(flags.column(), crate::op::U32ToBool),
-                output,
-            )
-            .unwrap(),
-            2
-        );
+        let count = copy_where(&exec, input, flags.column(), output).unwrap();
+        assert_eq!(exec.to_host(&count).unwrap(), vec![2]);
         for (column, output) in outputs.iter().enumerate() {
             assert_eq!(
                 exec.to_host(&output.slice(..2)).unwrap(),
@@ -705,13 +761,9 @@ mod tests {
         let input = exec.to_device(&[10_u32, 20, 30, 40]);
         let flags = exec.to_device(&[0_u32, 1, 0, 1]);
         let output = exec.to_device(&[0_u32; 4]);
-        let count = remove_where(
-            &exec,
-            input.column(),
-            Transform::new(flags.column(), crate::op::U32ToBool),
-            output.slice_mut(..),
-        )
-        .unwrap();
+        let count =
+            remove_where(&exec, input.column(), flags.column(), output.slice_mut(..)).unwrap();
+        let count = exec.to_host(&count).unwrap()[0];
         assert_eq!(count, 2);
         assert_eq!(exec.to_host(&output.slice(..2)).unwrap(), vec![10, 30]);
     }
@@ -720,8 +772,8 @@ mod tests {
 
     #[cubecl::cube]
     impl crate::op::PredicateOp<u32> for IsEven {
-        fn apply(input: u32) -> bool {
-            input % 2u32 == 0u32
+        fn apply(input: u32) -> crate::MBool {
+            crate::op::mbool(input % 2u32 == 0u32)
         }
     }
 
@@ -731,6 +783,7 @@ mod tests {
         let input = exec.to_device(&[3_u32, 2, 4, 1, 6, 5]);
         let output = exec.to_device(&[0_u32; 6]);
         let split = partition(&exec, input.column(), IsEven, output.slice_mut(..)).unwrap();
+        let split = exec.to_host(&split).unwrap()[0];
         assert_eq!(split, 3);
         assert_eq!(exec.to_host(&output).unwrap(), vec![2, 4, 6, 3, 1, 5]);
     }
@@ -744,13 +797,7 @@ mod tests {
         let output = || Zip::new(Zip::new(a.slice_mut(..), b.slice_mut(..)), c.slice_mut(..));
         fill(&exec, (7_u32, 2.5_f32, -3_i32), output()).unwrap();
         let flags = exec.to_device(&[0_u32, 1, 0, 1]);
-        replace_where(
-            &exec,
-            (9_u32, 4.5_f32, -8_i32),
-            Transform::new(flags.column(), crate::op::U32ToBool),
-            output(),
-        )
-        .unwrap();
+        replace_where(&exec, (9_u32, 4.5_f32, -8_i32), flags.column(), output()).unwrap();
         assert_eq!(exec.to_host(&a).unwrap(), vec![7, 9, 7, 9]);
         assert_eq!(exec.to_host(&b).unwrap(), vec![2.5, 4.5, 2.5, 4.5]);
         assert_eq!(exec.to_host(&c).unwrap(), vec![-3, -8, -3, -8]);
@@ -800,10 +847,7 @@ mod tests {
                 ),
             ),
         );
-        let input = Permute::new(
-            seven,
-            Transform::new(Counting::new(0, 3), crate::op::U32ToUsize),
-        );
+        let input = Permute::new(seven, Counting::new(0, 3));
         let output = Zip::new(
             Zip::new(
                 Zip::new(
@@ -821,14 +865,7 @@ mod tests {
             outputs[6].slice_mut(..),
         );
 
-        transform_where(
-            &exec,
-            input,
-            IncrementSeven,
-            Transform::new(stencil.column(), crate::op::U32ToBool),
-            output,
-        )
-        .unwrap();
+        transform_where(&exec, input, IncrementSeven, stencil.column(), output).unwrap();
         for (column, output) in outputs.iter().enumerate() {
             assert_eq!(
                 exec.to_host(output).unwrap(),

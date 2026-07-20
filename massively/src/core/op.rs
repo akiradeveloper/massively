@@ -2,32 +2,18 @@
 
 use cubecl::prelude::*;
 
-/// Converts a physical `u32` value into a logical boolean.
-#[doc(hidden)]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct U32ToBool;
+use crate::MBool;
 
+/// Converts a shader-local Rust boolean into a Massively boolean.
 #[cubecl::cube]
-impl UnaryOp<u32> for U32ToBool {
-    type Output = bool;
-
-    fn apply(input: u32) -> bool {
-        input != 0
-    }
+pub fn mbool(value: bool) -> MBool {
+    if value { 1u32 } else { 0u32 }
 }
 
-/// Converts a physical `u32` value into the logical index type.
-#[doc(hidden)]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct U32ToUsize;
-
+/// Converts a Massively boolean into a shader-local Rust boolean.
 #[cubecl::cube]
-impl UnaryOp<u32> for U32ToUsize {
-    type Output = usize;
-
-    fn apply(input: u32) -> usize {
-        input as usize
-    }
+pub fn is_true(value: MBool) -> bool {
+    value != 0
 }
 
 /// Compile-time unary operation used by [`crate::lazy::Transform`].

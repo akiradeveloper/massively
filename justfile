@@ -11,6 +11,10 @@ doc:
 bench:
     cargo bench -p massively
 
+performance:
+    cargo bench -p massively --bench performance
+    python3 scripts/render-performance.py
+
 test-api:
     cargo doc -p massively --no-deps
     bash scripts/check-public-api.sh

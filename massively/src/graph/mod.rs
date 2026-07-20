@@ -108,6 +108,7 @@ mod tests {
             &exec,
             Csr::new(destinations.slice(..), offsets.slice(..)),
             frontier.slice(..),
+            4,
         )
         .unwrap()
         .map(destination_id(), Identity)
@@ -120,10 +121,11 @@ mod tests {
             &exec,
             Csr::new(destinations.slice(..), offsets.slice(..)),
             frontier.slice(..),
+            4,
         )
         .unwrap()
         .map(edge(edge_values.slice(..)), Identity)
-        .reduce_by_source(&exec, 0, Add)
+        .reduce_by_source(&exec, exec.value(0).unwrap(), Add)
         .unwrap();
         assert_eq!(exec.to_host(&source_reduced).unwrap(), vec![90, 30]);
 
@@ -132,13 +134,14 @@ mod tests {
             &exec,
             Csr::new(destinations.slice(..), offsets.slice(..)),
             frontier.slice(..),
+            4,
         )
         .unwrap()
         .map(
             zip2(source(vertex_values.slice(..)), edge_id()),
             SourcePlusEdge,
         )
-        .reduce_by_destination(&exec, 0, Add)
+        .reduce_by_destination(&exec, exec.value(0).unwrap(), Add)
         .unwrap();
         assert_eq!(
             exec.to_host(&destination_reduced).unwrap(),
@@ -151,6 +154,7 @@ mod tests {
             &exec,
             Csr::new(destinations.slice(..), offsets.slice(..)),
             frontier.slice(..),
+            4,
         )
         .unwrap()
         .map(
@@ -159,7 +163,7 @@ mod tests {
         )
         .update_by_destination(
             &exec,
-            (0, 0),
+            exec.value((0, 0)).unwrap(),
             PairAdd,
             zip2(state_left.slice_mut(..), state_right.slice_mut(..)),
         )
@@ -173,10 +177,16 @@ mod tests {
             &exec,
             Csr::new(destinations.slice(..), offsets.slice(..)),
             single_source.slice(..),
+            2,
         )
         .unwrap()
         .map(source(distance.slice(..)), AddOne)
-        .relax_min_by_destination(&exec, u32::MAX, distance.slice(..), distance.slice_mut(..))
+        .relax_min_by_destination(
+            &exec,
+            exec.value(u32::MAX).unwrap(),
+            distance.slice(..),
+            distance.slice_mut(..),
+        )
         .unwrap();
         assert_eq!(exec.to_host(&distance).unwrap(), vec![0, 1, 1]);
         assert_eq!(exec.to_host(&next).unwrap(), vec![1, 2]);
@@ -198,5 +208,29 @@ mod tests {
         .unwrap();
 
         assert_eq!(exec.to_host(&counts).unwrap(), vec![1, 0]);
+    }
+
+    #[test]
+    fn traversal_reports_and_safely_clamps_an_undersized_capacity() {
+        let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+        let offsets = exec.to_device(&[0_u32, 2, 3, 5]);
+        let destinations = exec.to_device(&[1_u32, 2, 2, 0, 1]);
+        let frontier = exec.to_device(&[2_u32, 0]);
+
+        let traversal = traverse(
+            &exec,
+            Csr::new(destinations.slice(..), offsets.slice(..)),
+            frontier.slice(..),
+            2,
+        )
+        .unwrap();
+        assert_eq!(traversal.edge_count().read(&exec).unwrap(), 4);
+        assert_eq!(traversal.fits().read(&exec).unwrap(), 0);
+
+        let emitted = traversal
+            .map(destination_id(), Identity)
+            .emit(&exec)
+            .unwrap();
+        assert_eq!(exec.to_host(&emitted).unwrap(), vec![0, 1]);
     }
 }

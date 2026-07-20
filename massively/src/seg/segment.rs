@@ -5,6 +5,8 @@ use std::rc::Rc;
 
 use cubecl::prelude::*;
 
+use crate::MIndex;
+
 /// A read-only, dynamically bounded view into another logical iterator.
 ///
 /// `Segment<T>` is a semantic GPU value, not materialized storage.  Its
@@ -29,7 +31,7 @@ impl<T: CubeType> core::fmt::Debug for Segment<T> {
     }
 }
 
-type RuntimeIndex = <u32 as CubeType>::ExpandType;
+type RuntimeIndex = <MIndex as CubeType>::ExpandType;
 type Expanded<T> = <T as CubeType>::ExpandType;
 
 /// Type-erased IR builder for the shared backing expression.
@@ -129,7 +131,7 @@ impl<T: CubeType> AsMutExpand for SegmentExpand<T> {
 
 impl<T: CubeType> Segment<T> {
     /// Returns the number of items in this segment.
-    pub fn len(&self) -> u32 {
+    pub fn len(&self) -> MIndex {
         unreachable!("Segment::len is available only inside a CubeCL function")
     }
 
@@ -141,7 +143,7 @@ impl<T: CubeType> Segment<T> {
     /// Reads one item without performing a bounds check.
     ///
     /// Callers must ensure that `index < self.len()`.
-    pub fn at(&self, _index: u32) -> T {
+    pub fn at(&self, _index: MIndex) -> T {
         unreachable!("Segment::at is available only inside a CubeCL function")
     }
 }

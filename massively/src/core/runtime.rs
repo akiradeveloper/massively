@@ -1,11 +1,13 @@
 //! Runtime executor and contiguous device storage.
 
+#![allow(private_interfaces)]
+
 use core::marker::PhantomData;
 use core::sync::atomic::{AtomicU64, Ordering};
 use cubecl::prelude::*;
 use std::ops::RangeBounds;
 
-use crate::{Column, Error, MStorageElement};
+use crate::{Column, Error, MStorageElement, extent::LogicalExtent};
 
 pub use crate::read::DeviceSlice;
 
@@ -19,6 +21,13 @@ pub struct Executor<R: Runtime> {
 }
 
 impl<R: Runtime> Executor<R> {
+    pub(crate) fn from_client(client: &ComputeClient<R>, id: u64) -> Self {
+        Self {
+            client: client.clone(),
+            id,
+        }
+    }
+
     /// Creates an executor for one CubeCL device.
     ///
     /// # Examples
@@ -60,7 +69,7 @@ impl<R: Runtime> Executor<R> {
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     /// let values = exec.to_device(&[10_u32, 20, 30]);
     ///
-    /// assert_eq!(values.len(), 3);
+    /// assert_eq!(values.capacity(), 3);
     /// assert_eq!(exec.to_host(&values).unwrap(), vec![10, 20, 30]);
     /// ```
     pub fn to_device<T>(&self, input: &[T]) -> DeviceVec<R, T>
@@ -76,6 +85,7 @@ impl<R: Runtime> Executor<R> {
             handle,
             len: input.len(),
             owner: self.id,
+            extent: LogicalExtent::fixed(input.len()),
             _runtime: PhantomData,
         }
     }
@@ -89,6 +99,24 @@ impl<R: Runtime> Executor<R> {
             handle: self.client.empty(len.max(1) * size_of::<T>()),
             len,
             owner: self.id,
+            extent: LogicalExtent::fixed(len),
+            _runtime: PhantomData,
+        }
+    }
+
+    pub(crate) fn column_from_handle<T>(
+        &self,
+        handle: cubecl::server::Handle,
+        len: usize,
+    ) -> DeviceVec<R, T>
+    where
+        T: MStorageElement,
+    {
+        DeviceVec {
+            handle,
+            len,
+            owner: self.id,
+            extent: LogicalExtent::fixed(len),
             _runtime: PhantomData,
         }
     }
@@ -115,8 +143,15 @@ impl<R: Runtime> Executor<R> {
         if input.owner() != self.id {
             return Err(Error::ForeignExecutor);
         }
-        if input.len() == 0 {
+        let logical_len = input.extent().read(self)?;
+        if logical_len == 0 {
             return Ok(Vec::new());
+        }
+        if logical_len > input.capacity() {
+            return Err(Error::LengthMismatch {
+                left: logical_len,
+                right: input.capacity(),
+            });
         }
         let bytes = self
             .client
@@ -126,7 +161,7 @@ impl<R: Runtime> Executor<R> {
             })?;
         let values = Input::Element::from_bytes(&bytes);
         let start = input.offset();
-        let end = start + input.len();
+        let end = start + logical_len;
         Ok(values[start..end].to_vec())
     }
 
@@ -140,7 +175,8 @@ impl<R: Runtime> Executor<R> {
     ///
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     /// let output = exec.alloc::<u32>(4);
-    /// fill(&exec, 7_u32, output.slice_mut(..)).unwrap();
+    /// let value = exec.value(7_u32).unwrap();
+    /// fill(&exec, &value, output.slice_mut(..)).unwrap();
     /// exec.sync().unwrap();
     /// ```
     pub fn sync(&self) -> Result<(), Error> {
@@ -154,7 +190,8 @@ impl<R: Runtime> Executor<R> {
 pub struct DeviceVec<R: Runtime, T> {
     pub(crate) handle: cubecl::server::Handle,
     len: usize,
-    owner: u64,
+    pub(crate) owner: u64,
+    pub(crate) extent: LogicalExtent,
     _runtime: PhantomData<fn() -> (R, T)>,
 }
 
@@ -164,18 +201,34 @@ impl<R: Runtime, T> Clone for DeviceVec<R, T> {
             handle: self.handle.clone(),
             len: self.len,
             owner: self.owner,
+            extent: self.extent.clone(),
             _runtime: PhantomData,
         }
     }
 }
 
 impl<R: Runtime, T> DeviceVec<R, T> {
-    pub fn len(&self) -> usize {
+    /// Returns the physical allocation bound without synchronizing.
+    pub fn capacity(&self) -> usize {
         self.len
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
+    /// Explicitly reads the logical item count.
+    ///
+    /// Fixed-size vectors return immediately. A length produced by GPU work is
+    /// copied to the host and synchronizes the producing queue.
+    pub fn read_len(&self, exec: &Executor<R>) -> Result<crate::MIndex, Error> {
+        let len = self.extent.read(exec)?;
+        crate::MIndex::try_from(len).map_err(|_| Error::LengthTooLarge { len })
+    }
+
+    pub(crate) fn logical_extent(&self) -> LogicalExtent {
+        self.extent.clone()
+    }
+
+    pub(crate) fn set_logical_extent(&mut self, extent: LogicalExtent) {
+        debug_assert!(extent.upper_bound() <= self.len);
+        self.extent = extent;
     }
 
     /// Shrinks the logical length without copying or reallocating device memory.
@@ -188,12 +241,20 @@ impl<R: Runtime, T> DeviceVec<R, T> {
             "cannot truncate a DeviceVec of length {} to {len}",
             self.len,
         );
+        self.extent = self.extent.slice(0, len);
         self.len = len;
     }
 
     /// Creates an internal read-expression leaf over the whole allocation.
     pub(crate) fn column(&self) -> Column<T> {
-        Column::from_handle(self.handle.clone(), self.len, 0, self.owner, self.len)
+        Column::from_handle_with_extent(
+            self.handle.clone(),
+            self.len,
+            0,
+            self.owner,
+            self.len,
+            self.extent.clone(),
+        )
     }
 
     /// Returns a read-only view into this allocation.
@@ -227,7 +288,8 @@ impl<R: Runtime, T> DeviceVec<R, T> {
     ///
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     /// let values = exec.to_device(&[1_u32, 2, 3, 4]);
-    /// replace_where(&exec, 9, lazy::constant(true).take(2), values.slice_mut(1..3)).unwrap();
+    /// let value = exec.value(9_u32).unwrap();
+    /// replace_where(&exec, &value, lazy::constant(1_u32).take(2), values.slice_mut(1..3)).unwrap();
     ///
     /// assert_eq!(exec.to_host(&values).unwrap(), vec![1, 9, 9, 4]);
     /// ```
@@ -242,6 +304,7 @@ impl<R: Runtime, T> DeviceVec<R, T> {
             offset: offset as u32,
             owner: self.owner,
             buffer_len: self.len,
+            extent: self.extent.slice(offset, len),
             _item: PhantomData,
         }
     }
@@ -251,9 +314,11 @@ impl<R: Runtime, T> DeviceVec<R, T> {
 pub trait DeviceRange {
     type Element: MStorageElement;
     fn handle(&self) -> cubecl::server::Handle;
-    fn len(&self) -> usize;
+    fn capacity(&self) -> usize;
     fn offset(&self) -> usize;
     fn owner(&self) -> u64;
+    #[doc(hidden)]
+    fn extent(&self) -> LogicalExtent;
 }
 
 impl<R: Runtime, T: MStorageElement> DeviceRange for DeviceVec<R, T> {
@@ -261,7 +326,7 @@ impl<R: Runtime, T: MStorageElement> DeviceRange for DeviceVec<R, T> {
     fn handle(&self) -> cubecl::server::Handle {
         self.handle.clone()
     }
-    fn len(&self) -> usize {
+    fn capacity(&self) -> usize {
         self.len
     }
     fn offset(&self) -> usize {
@@ -270,6 +335,9 @@ impl<R: Runtime, T: MStorageElement> DeviceRange for DeviceVec<R, T> {
     fn owner(&self) -> u64 {
         self.owner
     }
+    fn extent(&self) -> LogicalExtent {
+        self.extent.clone()
+    }
 }
 
 impl<T: MStorageElement> DeviceRange for DeviceSlice<T> {
@@ -277,7 +345,7 @@ impl<T: MStorageElement> DeviceRange for DeviceSlice<T> {
     fn handle(&self) -> cubecl::server::Handle {
         self.handle.clone().expect("bound device slice")
     }
-    fn len(&self) -> usize {
+    fn capacity(&self) -> usize {
         self.len
     }
     fn offset(&self) -> usize {
@@ -285,6 +353,9 @@ impl<T: MStorageElement> DeviceRange for DeviceSlice<T> {
     }
     fn owner(&self) -> u64 {
         self.owner.expect("bound device slice")
+    }
+    fn extent(&self) -> LogicalExtent {
+        self.extent.clone()
     }
 }
 
@@ -296,15 +367,14 @@ pub struct DeviceSliceMut<T> {
     pub(crate) offset: u32,
     pub(crate) owner: u64,
     pub(crate) buffer_len: usize,
+    pub(crate) extent: LogicalExtent,
     pub(crate) _item: PhantomData<fn() -> T>,
 }
 
 impl<T> DeviceSliceMut<T> {
-    pub fn len(&self) -> usize {
+    /// Returns the physical view bound without synchronizing.
+    pub fn capacity(&self) -> usize {
         self.len
-    }
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
     }
 
     /// Returns a read-only subview of this mutable view.
@@ -334,6 +404,7 @@ impl<T> DeviceSliceMut<T> {
             self.owner,
             self.buffer_len,
         )
+        .with_logical_extent(self.extent.slice(offset, len))
     }
 
     /// Returns a mutable subview of this mutable view.
@@ -347,7 +418,8 @@ impl<T> DeviceSliceMut<T> {
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     /// let values = exec.to_device(&[1_u32, 2, 3, 4, 5]);
     /// let writable = values.slice_mut(1..5);
-    /// replace_where(&exec, 9, lazy::constant(true).take(2), writable.slice_mut(1..3)).unwrap();
+    /// let value = exec.value(9_u32).unwrap();
+    /// replace_where(&exec, &value, lazy::constant(1_u32).take(2), writable.slice_mut(1..3)).unwrap();
     ///
     /// assert_eq!(exec.to_host(&values).unwrap(), vec![1, 2, 9, 9, 5]);
     /// ```
@@ -362,6 +434,7 @@ impl<T> DeviceSliceMut<T> {
             offset: self.offset + offset as u32,
             owner: self.owner,
             buffer_len: self.buffer_len,
+            extent: self.extent.slice(offset, len),
             _item: PhantomData,
         }
     }
@@ -372,7 +445,7 @@ impl<T: MStorageElement> DeviceRange for DeviceSliceMut<T> {
     fn handle(&self) -> cubecl::server::Handle {
         self.handle.clone()
     }
-    fn len(&self) -> usize {
+    fn capacity(&self) -> usize {
         self.len
     }
     fn offset(&self) -> usize {
@@ -380,5 +453,8 @@ impl<T: MStorageElement> DeviceRange for DeviceSliceMut<T> {
     }
     fn owner(&self) -> u64 {
         self.owner
+    }
+    fn extent(&self) -> LogicalExtent {
+        self.extent.clone()
     }
 }

@@ -626,7 +626,7 @@ proptest! {
                     device[5].slice(..),
                     device[6].slice(..),
                 ),
-                lazy::counting(0).take(seed.len()),
+                lazy::counting(0).take(seed.len() as massively::MIndex),
             ))
         };
 
@@ -639,7 +639,10 @@ proptest! {
 
         let zero: Seven = (0, 0, 0, 0, 0, 0, 0);
         prop_assert_eq!(
-            massively::vector::reduce(&exec, input(), zero, MaxSeven).unwrap(),
+            massively::vector::reduce(&exec, input(), exec.value(zero).unwrap(), MaxSeven)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
             reference::reduce(&seven_aos(&columns), zero, MaxSeven),
         );
     }

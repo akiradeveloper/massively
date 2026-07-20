@@ -2,7 +2,7 @@
 
 use cubecl::prelude::*;
 
-use crate::{Error, Zip, lazy};
+use crate::{Error, MIndex, Zip, lazy};
 
 type RandomInput<T> = Zip<
     Zip<Zip<crate::read::Counting, crate::read::Constant<T>>, crate::read::Constant<T>>,
@@ -59,8 +59,8 @@ macro_rules! uniform_stream {
 
         impl $stream {
             /// Limits this generator to `len` logical items.
-            pub fn take(self, len: usize) -> lazy::Taken<Self> {
-                lazy::Taken::new(self, len)
+            pub fn take(self, len: MIndex) -> lazy::Taken<Self> {
+                lazy::Taken::new(self, len as usize)
             }
         }
 
@@ -190,8 +190,8 @@ macro_rules! normal_stream {
 
         impl $stream {
             /// Limits this generator to `len` logical items.
-            pub fn take(self, len: usize) -> lazy::Taken<Self> {
-                lazy::Taken::new(self, len)
+            pub fn take(self, len: MIndex) -> lazy::Taken<Self> {
+                lazy::Taken::new(self, len as usize)
             }
         }
 

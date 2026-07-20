@@ -2,7 +2,10 @@
 
 use cubecl::prelude::{CubeType, Runtime};
 
-use crate::{Error, Executor, MAlloc, MIter, MIterMut, MStorage, MVec, op::BinaryPredicateOp};
+use crate::{
+    Error, Executor, MAlloc, MBool, MIndex, MIter, MIterMut, MStorage, MVal, MVec,
+    op::BinaryPredicateOp,
+};
 
 struct UniqueOperation<'a, R: Runtime, Input, Equal> {
     exec: &'a Executor<R>,
@@ -18,7 +21,7 @@ where
     Input: MIter<R, Item = Item>,
     Equal: BinaryPredicateOp<Item>,
 {
-    type Result = Result<u32, Error>;
+    type Result = Result<crate::DeviceVec<R, u32>, Error>;
 
     fn run<Output>(self, output: Output) -> Self::Result
     where
@@ -47,8 +50,8 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Less {
-///     fn apply(lhs: u32, rhs: u32) -> bool {
-///         lhs < rhs
+///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+///         op::mbool(lhs < rhs)
 ///     }
 /// }
 ///
@@ -69,8 +72,10 @@ where
     Item: MAlloc<R>,
     Less: BinaryPredicateOp<Item>,
 {
-    let len = input.len()? as usize;
-    let output = exec.alloc::<Item>(len);
+    let capacity = input.capacity()? as usize;
+    let extent = input.logical_extent()?;
+    let mut output = exec.alloc::<Item>(capacity);
+    output.set_logical_extent(extent);
     sort_into(exec, input, less, output.slice_mut(..))?;
     Ok(output)
 }
@@ -108,28 +113,27 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Equal {
-///     fn apply(lhs: u32, rhs: u32) -> bool {
-///         lhs == rhs
+///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+///         op::mbool(lhs == rhs)
 ///     }
 /// }
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 2, 3]);
 ///
-/// assert_eq!(adjacent_find(&exec, input.slice(..), Equal).unwrap(), Some(1));
+/// assert_eq!(adjacent_find(&exec, input.slice(..), Equal).unwrap().read(&exec).unwrap(), (1, 1));
 /// ```
 pub fn adjacent_find<R, Input, Equal>(
     exec: &Executor<R>,
     input: Input,
     equal: Equal,
-) -> Result<Option<usize>, Error>
+) -> Result<MVal<R, (MBool, MIndex)>, Error>
 where
     R: Runtime,
     Input: MIter<R>,
     Equal: BinaryPredicateOp<Input::Item>,
 {
     crate::ordering::adjacent_find(exec, crate::api::iter::lower_fixed::<R, _>(input), equal)
-        .map(|index| index.map(|index| index as usize))
 }
 
 /// Removes consecutive duplicates.
@@ -145,8 +149,8 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Equal {
-///     fn apply(lhs: u32, rhs: u32) -> bool {
-///         lhs == rhs
+///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+///         op::mbool(lhs == rhs)
 ///     }
 /// }
 ///
@@ -154,7 +158,7 @@ where
 /// let input = exec.to_device(&[1_u32, 1, 2, 2, 3]);
 /// let output = unique(&exec, input.slice(..), Equal).unwrap();
 ///
-/// assert_eq!(output.len(), 3);
+/// assert_eq!(output.read_len(&exec).unwrap(), 3);
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 3]);
 /// ```
 pub fn unique<R, Input, Item, Equal>(
@@ -168,10 +172,10 @@ where
     Item: MAlloc<R>,
     Equal: BinaryPredicateOp<Item>,
 {
-    let capacity = input.len()? as usize;
+    let capacity = input.capacity()? as usize;
     let mut output = exec.alloc::<Item>(capacity);
     let len = unique_into(exec, input, equal, output.slice_mut(..))?;
-    output.truncate(len as usize);
+    output.set_logical_extent(len.logical_extent(capacity));
     Ok(output)
 }
 
@@ -184,14 +188,14 @@ pub(crate) fn unique_into<R, Input, Output, Equal>(
     input: Input,
     equal: Equal,
     output: Output,
-) -> Result<u32, Error>
+) -> Result<MVal<R, MIndex>, Error>
 where
     R: Runtime,
     Input: MIter<R, Item = Output::Item>,
     Output: MIterMut<R>,
     Equal: BinaryPredicateOp<Input::Item>,
 {
-    output.run_output_operation(UniqueOperation { exec, input, equal })
+    MVal::from_storage(output.run_output_operation(UniqueOperation { exec, input, equal })?)
 }
 
 /// Returns the first index at which the input ceases to be sorted.
@@ -207,28 +211,27 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Less {
-///     fn apply(lhs: u32, rhs: u32) -> bool {
-///         lhs < rhs
+///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+///         op::mbool(lhs < rhs)
 ///     }
 /// }
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 4, 3, 5]);
 ///
-/// assert_eq!(is_sorted_until(&exec, input.slice(..), Less).unwrap(), 3);
+/// assert_eq!(is_sorted_until(&exec, input.slice(..), Less).unwrap().read(&exec).unwrap(), 3);
 /// ```
 pub fn is_sorted_until<R, Input, Less>(
     exec: &Executor<R>,
     input: Input,
     less: Less,
-) -> Result<usize, Error>
+) -> Result<MVal<R, MIndex>, Error>
 where
     R: Runtime,
     Input: MIter<R>,
     Less: BinaryPredicateOp<Input::Item>,
 {
     crate::ordering::is_sorted_until(exec, crate::api::iter::lower_fixed::<R, _>(input), less)
-        .map(|index| index as usize)
 }
 
 /// Returns whether the input is sorted.
@@ -244,21 +247,21 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Less {
-///     fn apply(lhs: u32, rhs: u32) -> bool {
-///         lhs < rhs
+///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+///         op::mbool(lhs < rhs)
 ///     }
 /// }
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3, 4]);
 ///
-/// assert!(is_sorted(&exec, input.slice(..), Less).unwrap());
+/// assert_eq!(is_sorted(&exec, input.slice(..), Less).unwrap().read(&exec).unwrap(), 1);
 /// ```
 pub fn is_sorted<R, Input, Less>(
     exec: &Executor<R>,
     input: Input,
     less: Less,
-) -> Result<bool, Error>
+) -> Result<MVal<R, MBool>, Error>
 where
     R: Runtime,
     Input: MIter<R>,
@@ -268,28 +271,26 @@ where
 }
 
 macro_rules! extremum_api {
-    ($name:ident, $output:ty, $map:expr, $doc:literal) => {
+    ($name:ident, $output:ty, $doc:literal) => {
         #[doc = $doc]
         pub fn $name<R, Input, Less>(
             exec: &Executor<R>,
             input: Input,
             less: Less,
-        ) -> Result<$output, Error>
+        ) -> Result<MVal<R, $output>, Error>
         where
             R: Runtime,
             Input: MIter<R>,
             Less: BinaryPredicateOp<Input::Item>,
         {
             crate::ordering::$name(exec, crate::api::iter::lower_fixed::<R, _>(input), less)
-                .map($map)
         }
     };
 }
 
 extremum_api!(
     min_element,
-    Option<usize>,
-    |index: Option<u32>| index.map(|index| index as usize),
+    (MBool, MIndex),
     r#"Returns the first minimum element index.
 
 # Examples
@@ -303,22 +304,21 @@ struct Less;
 
 #[cubecl::cube]
 impl op::BinaryPredicateOp<u32> for Less {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs < rhs
+    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+        op::mbool(lhs < rhs)
     }
 }
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let input = exec.to_device(&[3_u32, 1, 2, 1]);
 
-assert_eq!(min_element(&exec, input.slice(..), Less).unwrap(), Some(1));
+assert_eq!(min_element(&exec, input.slice(..), Less).unwrap().read(&exec).unwrap(), (1, 1));
 ```
 "#
 );
 extremum_api!(
     max_element,
-    Option<usize>,
-    |index: Option<u32>| index.map(|index| index as usize),
+    (MBool, MIndex),
     r#"Returns the first maximum element index.
 
 # Examples
@@ -332,22 +332,21 @@ struct Less;
 
 #[cubecl::cube]
 impl op::BinaryPredicateOp<u32> for Less {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs < rhs
+    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+        op::mbool(lhs < rhs)
     }
 }
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let input = exec.to_device(&[3_u32, 1, 3, 2]);
 
-assert_eq!(max_element(&exec, input.slice(..), Less).unwrap(), Some(0));
+assert_eq!(max_element(&exec, input.slice(..), Less).unwrap().read(&exec).unwrap(), (1, 0));
 ```
 "#
 );
 extremum_api!(
     minmax_element,
-    Option<(usize, usize)>,
-    |indices: Option<(u32, u32)>| indices.map(|(min, max)| (min as usize, max as usize)),
+    (MBool, MIndex, MIndex),
     r#"Returns the minimum and maximum element indices.
 
 # Examples
@@ -361,15 +360,15 @@ struct Less;
 
 #[cubecl::cube]
 impl op::BinaryPredicateOp<u32> for Less {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs < rhs
+    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+        op::mbool(lhs < rhs)
     }
 }
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let input = exec.to_device(&[3_u32, 1, 4, 2]);
 
-assert_eq!(minmax_element(&exec, input.slice(..), Less).unwrap(), Some((1, 2)));
+assert_eq!(minmax_element(&exec, input.slice(..), Less).unwrap().read(&exec).unwrap(), (1, 1, 2));
 ```
 "#
 );

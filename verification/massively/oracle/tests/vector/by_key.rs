@@ -49,7 +49,7 @@ by_key_case!(
             lazify(key_gpu.slice(..)),
             lazify(value_gpu.slice(..)),
             Equal,
-            7,
+            exec.value(7).unwrap(),
             Sum,
         )
         .unwrap();
@@ -61,28 +61,34 @@ by_key_case!(
 );
 
 by_key_case!(reduce_by_key, |exec, keys, values, key_gpu, value_gpu| {
-    let (out_keys, out_values) = massively::vector::reduce_by_key(
+    let (out_keys, out_values) = exact_pair(
         &exec,
-        lazify(key_gpu.slice(..)),
-        lazify(value_gpu.slice(..)),
-        Equal,
-        7,
-        Sum,
-    )
-    .unwrap();
+        massively::vector::reduce_by_key(
+            &exec,
+            lazify(key_gpu.slice(..)),
+            lazify(value_gpu.slice(..)),
+            Equal,
+            exec.value(7).unwrap(),
+            Sum,
+        )
+        .unwrap(),
+    );
     let (expected_keys, expected_values) = reference::reduce_by_key(keys, values, Equal, 7, Sum);
     prop_assert_eq!(exec.to_host(&out_keys).unwrap(), expected_keys);
     prop_assert_eq!(exec.to_host(&out_values).unwrap(), expected_values);
 });
 
 by_key_case!(unique_by_key, |exec, keys, values, key_gpu, value_gpu| {
-    let output = massively::vector::unique_by_key(
+    let output = exact(
         &exec,
-        lazify(key_gpu.slice(..)),
-        lazify(value_gpu.slice(..)),
-        Equal,
-    )
-    .unwrap();
+        massively::vector::unique_by_key(
+            &exec,
+            lazify(key_gpu.slice(..)),
+            lazify(value_gpu.slice(..)),
+            Equal,
+        )
+        .unwrap(),
+    );
     let (_, expected_values) = reference::unique_by_key(keys, values, Equal);
     prop_assert_eq!(exec.to_host(&output).unwrap(), expected_values);
 });

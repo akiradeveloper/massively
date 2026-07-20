@@ -38,12 +38,12 @@ pub fn flags(len: usize, selected_per_100: usize) -> Vec<u32> {
         .collect()
 }
 
-pub fn as_indices<Input>(input: Input) -> lazy::Transform<Input, massively::op::U32ToUsize> {
-    lazy::transform(input, massively::op::U32ToUsize)
+pub fn as_indices<Input>(input: Input) -> Input {
+    input
 }
 
-pub fn as_stencil<Input>(input: Input) -> lazy::Transform<Input, massively::op::U32ToBool> {
-    lazy::transform(input, massively::op::U32ToBool)
+pub fn as_stencil<Input>(input: Input) -> Input {
+    input
 }
 
 pub fn run_keys(len: usize, run_len: usize) -> Vec<u32> {

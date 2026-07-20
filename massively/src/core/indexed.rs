@@ -73,7 +73,7 @@ fn indexed_copy_a13<
             O11 = O11,
         >,
     SourceExpr: Eval13<Item, L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12>,
-    IndexExpr: Eval13<usize, I0, I1, I2, I3, I4, I5, I6, I7, I8, I9, I10, I11, I12>,
+    IndexExpr: Eval13<crate::MIndex, I0, I1, I2, I3, I4, I5, I6, I7, I8, I9, I10, I11, I12>,
     Layout: Decompose<Item, Leaves = Leaves>,
 >(
     slot0: &[L0],
@@ -108,6 +108,7 @@ fn indexed_copy_a13<
     use_selection: &[u32],
     gather: &[u32],
     len: &[u32],
+    active_len: &[u32],
     out0: &mut [O0],
     out1: &mut [O1],
     out2: &mut [O2],
@@ -123,7 +124,7 @@ fn indexed_copy_a13<
     write_offsets: &[u32],
 ) {
     let compact_position = ABSOLUTE_POS as usize;
-    if compact_position < len[0] as usize {
+    if compact_position < len[0] as usize && compact_position < active_len[0] as usize {
         let index_position = if use_selection[0] != 0u32 {
             selection[compact_position] as usize
         } else {
@@ -147,7 +148,7 @@ fn indexed_copy_a13<
             index_position,
         );
         let source_position = if gather[0] != 0u32 {
-            indexed
+            indexed as usize
         } else if use_selection[0] != 0u32 {
             selection[compact_position] as usize
         } else {
@@ -156,7 +157,7 @@ fn indexed_copy_a13<
         let output_position = if gather[0] != 0u32 {
             compact_position
         } else {
-            indexed
+            indexed as usize
         };
         let source = SourceExpr::eval13(
             slot0,
@@ -204,7 +205,7 @@ pub trait IndexedCopyInput<R: Runtime, Indices, Output>: ReadExpression + Sized 
         gather: bool,
         output: Output,
     ) -> Result<(), Error> {
-        self.indexed_copy_selected(exec, indices, None, gather, output)
+        self.indexed_copy_selected(exec, indices, None, None, gather, output)
     }
 
     fn indexed_copy_selected(
@@ -212,6 +213,7 @@ pub trait IndexedCopyInput<R: Runtime, Indices, Output>: ReadExpression + Sized 
         exec: &Executor<R>,
         indices: Indices,
         selection: Option<&crate::DeviceVec<R, u32>>,
+        active_len: Option<&crate::DeviceVec<R, u32>>,
         gather: bool,
         output: Output,
     ) -> Result<(), Error>;
@@ -221,7 +223,7 @@ impl<R, Values, Indices, Output> IndexedCopyInput<R, Indices, Output> for Values
 where
     R: Runtime,
     Values: ReadExpression<Item = Output::Item> + LowerReadExpression + StageRead<R, Env0>,
-    Indices: ReadExpression<Item = usize> + LowerReadExpression + StageRead<R, Env0>,
+    Indices: ReadExpression<Item = crate::MIndex> + LowerReadExpression + StageRead<R, Env0>,
     <Output::Item as StorageLayout>::StorageLeaves: StorePadded12,
     <<Output::Item as StorageLayout>::StorageLeaves as CubeType>::ExpandType: StorePadded12Expand,
     Output: crate::output::OutputExpression
@@ -235,11 +237,17 @@ where
         exec: &Executor<R>,
         indices: Indices,
         selection: Option<&crate::DeviceVec<R, u32>>,
+        active_len: Option<&crate::DeviceVec<R, u32>>,
         gather: bool,
         output: Output,
     ) -> Result<(), Error> {
         let values_len = self.logical_len()?;
         let indices_len = indices.logical_len()?;
+        let inferred_extent = if gather {
+            indices.logical_extent()?
+        } else {
+            self.logical_extent()?.zipped(&indices.logical_extent()?)?
+        };
         let unselected_len = if gather { indices_len } else { values_len };
         if !gather && values_len != indices_len {
             return Err(Error::LengthMismatch {
@@ -247,14 +255,32 @@ where
                 right: indices_len,
             });
         }
-        let operation_len = selection.map_or(unselected_len, crate::DeviceVec::len);
+        let operation_capacity = selection.map_or(unselected_len, crate::DeviceVec::capacity);
         let output_len = output.logical_len()?;
-        if output_len < operation_len {
+        let active_extent = active_len
+            .map(|active_len| {
+                crate::extent::LogicalExtent::from_device(active_len, operation_capacity)
+            })
+            .unwrap_or(inferred_extent);
+        if gather && active_len.is_none() && output_len < active_extent.upper_bound() {
             return Err(Error::OutputTooShort {
-                input: operation_len,
+                input: active_extent.upper_bound(),
                 output: output_len,
             });
         }
+        // A device-resident active length cannot be used for a host-side exact
+        // capacity check.  For gathers, the compact position is also the
+        // output position, so limiting the over-dispatch to the output
+        // capacity is sufficient to keep every write in bounds.  The kernel
+        // additionally guards it with `active_len`.
+        //
+        // Scatter writes use the evaluated index as the output position; the
+        // number of proposals is therefore unrelated to the output length.
+        let operation_len = if gather && active_len.is_some() {
+            operation_capacity.min(output_len)
+        } else {
+            operation_capacity
+        };
         if operation_len == 0 {
             return Ok(());
         }
@@ -290,6 +316,7 @@ where
             .map(|selection| selection.handle.clone())
             .unwrap_or_else(|| exec.client().create_from_slice(u32::as_bytes(&[0u32])));
         let len = exec.client().create_from_slice(u32::as_bytes(&[len]));
+        let active_len = active_extent.materialize(exec)?;
 
         unsafe {
             indexed_copy_a13::launch_unchecked::<
@@ -373,6 +400,7 @@ where
                 BufferArg::from_raw_parts(use_selection, 1),
                 BufferArg::from_raw_parts(gather, 1),
                 BufferArg::from_raw_parts(len, 1),
+                BufferArg::from_raw_parts(active_len.handle.clone(), 1),
                 BufferArg::from_raw_parts(writes.slots[0].0.clone(), writes.slots[0].1),
                 BufferArg::from_raw_parts(writes.slots[1].0.clone(), writes.slots[1].1),
                 BufferArg::from_raw_parts(writes.slots[2].0.clone(), writes.slots[2].1),
@@ -421,28 +449,6 @@ where
     values.gather(exec, indices, output)
 }
 
-/// Gathers through a physically stored `u32` index expression.
-///
-/// The conversion is part of the read expression, so the indexed kernel still
-/// receives logical `usize` values.
-pub(crate) fn gather_u32<R, Values, Indices, Output>(
-    exec: &Executor<R>,
-    values: Values,
-    indices: Indices,
-    output: Output,
-) -> Result<(), Error>
-where
-    R: Runtime,
-    Values: GatherInput<R, crate::Transform<Indices, crate::op::U32ToUsize>, Output>,
-{
-    gather_direct(
-        exec,
-        values,
-        crate::Transform::new(indices, crate::op::U32ToUsize),
-        output,
-    )
-}
-
 pub(crate) fn apply_permutation<R, Input, Output>(
     exec: &Executor<R>,
     input: Input,
@@ -451,9 +457,9 @@ pub(crate) fn apply_permutation<R, Input, Output>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Input: GatherInput<R, crate::Transform<crate::Column<u32>, crate::op::U32ToUsize>, Output>,
+    Input: GatherInput<R, crate::Column<crate::MIndex>, Output>,
 {
-    gather_u32(exec, input, indices, output)
+    gather_direct(exec, input, indices, output)
 }
 
 #[cfg(test)]
@@ -503,7 +509,7 @@ mod tests {
             outputs[6].slice_mut(..),
         );
 
-        gather_u32(&exec, FixedRead::new(values), indices.column(), output).unwrap();
+        gather_direct(&exec, FixedRead::new(values), indices.column(), output).unwrap();
         for (column, output) in outputs.iter().enumerate() {
             assert_eq!(
                 exec.to_host(output).unwrap(),
@@ -517,7 +523,7 @@ mod tests {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let values = exec.to_device(&[10_u32, 20, 30]);
         let encoded = exec.to_device(&[2_u32, 0]);
-        let indices = crate::Transform::new(encoded.column(), crate::op::U32ToUsize);
+        let indices = encoded.column();
         let output = exec.alloc::<u32>(2);
 
         gather_direct(&exec, values.column(), indices, output.slice_mut(..)).unwrap();
@@ -548,18 +554,9 @@ mod tests {
                 ),
             ),
         );
-        let values = Permute::new(
-            seven,
-            Transform::new(Counting::new(0, 3), crate::op::U32ToUsize),
-        );
+        let values = Permute::new(seven, Counting::new(0, 3));
         let raw_indices = exec.to_device(&[2_u32, 0]);
-        let indices = Transform::new(
-            Permute::new(
-                raw_indices.column(),
-                Transform::new(Counting::new(0, 2), crate::op::U32ToUsize),
-            ),
-            crate::op::U32ToUsize,
-        );
+        let indices = Permute::new(raw_indices.column(), Counting::new(0, 2));
         let output = exec.alloc_row::<Seven>(2);
 
         gather_direct(&exec, FixedRead::new(values), indices, output.write()).unwrap();
@@ -574,7 +571,7 @@ mod tests {
         let values = exec.to_device(&[10_u32, 20, 30]);
         let output = exec.alloc::<u32>(3);
 
-        gather_u32(
+        gather_direct(
             &exec,
             values.column(),
             ReverseCounting::new(3),

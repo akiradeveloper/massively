@@ -1,3 +1,5 @@
+#![allow(private_interfaces)]
+
 use cubecl::prelude::Runtime;
 
 use crate::{Error, Zip};
@@ -117,6 +119,10 @@ where
 
 pub trait IterLength {
     fn logical_len(&self) -> Result<usize, Error>;
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        Ok(crate::extent::LogicalExtent::fixed(self.logical_len()?))
+    }
 }
 
 impl<T> IterLength for crate::read::Column<T>
@@ -124,7 +130,11 @@ where
     T: crate::MStorageElement,
 {
     fn logical_len(&self) -> Result<usize, Error> {
-        Ok(self.len())
+        Ok(self.capacity())
+    }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        Ok(self.extent.clone())
     }
 }
 
@@ -166,6 +176,10 @@ where
             Err(Error::LengthMismatch { left, right })
         }
     }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.0.logical_extent()?.zipped(&self.1.logical_extent()?)
+    }
 }
 
 impl<Values, Offsets> IterLength for crate::seg::SegmentRead<Values, Offsets>
@@ -174,6 +188,13 @@ where
 {
     fn logical_len(&self) -> Result<usize, Error> {
         Ok(self.offsets().logical_len()?.saturating_sub(1))
+    }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        Ok(self
+            .offsets()
+            .logical_extent()?
+            .slice(1, self.logical_len()?))
     }
 }
 
@@ -184,6 +205,10 @@ where
     fn logical_len(&self) -> Result<usize, Error> {
         self.input.logical_len()
     }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.input.logical_extent()
+    }
 }
 
 impl<Input, Op> IterLength for crate::read::Adjacent<Input, Op>
@@ -193,6 +218,10 @@ where
     fn logical_len(&self) -> Result<usize, Error> {
         self.input.logical_len()
     }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.input.logical_extent()
+    }
 }
 
 impl<Values, Indices> IterLength for crate::read::Permute<Values, Indices>
@@ -201,6 +230,10 @@ where
 {
     fn logical_len(&self) -> Result<usize, Error> {
         self.indices.logical_len()
+    }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.indices.logical_extent()
     }
 }
 
@@ -214,6 +247,11 @@ where
             None => self.values.logical_len(),
         }
     }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        let capacity = self.logical_len()?;
+        Ok(self.values.logical_extent()?.slice(self.offset, capacity))
+    }
 }
 
 impl<Runtime, Input> IterLength for crate::read::Slice<Runtime, Input>
@@ -222,5 +260,9 @@ where
 {
     fn logical_len(&self) -> Result<usize, Error> {
         self.input.logical_len()
+    }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.input.logical_extent()
     }
 }

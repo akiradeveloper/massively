@@ -7,14 +7,14 @@ use massively::{
     Executor, lazy, op::ReductionOp, op::UnaryOp, vector::reduce, zip2, zip3, zip4, zip5,
 };
 
-const LEN: usize = 4_000_000_000;
+const LEN: massively::MIndex = 4_000_000_000;
 const X_KEY: u32 = seed_key(0);
 const Y_KEY: u32 = seed_key(1);
 
-type FourArgs = (usize, u32, u32, u32);
-type RandomArgs = (usize, f32, f32, u32);
-type RuntimeKeyArgs = (usize, u32, u32);
-type RuntimeRangeArgs = (usize, u32, u32, f32, f32);
+type FourArgs = (u32, u32, u32, u32);
+type RandomArgs = (u32, f32, f32, u32);
+type RuntimeKeyArgs = (u32, u32, u32);
+type RuntimeRangeArgs = (u32, u32, u32, f32, f32);
 
 struct Sum;
 struct DetectHit;
@@ -103,21 +103,19 @@ impl UnaryOp<(u32, u32)> for PairXor {
 }
 
 #[cubecl::cube]
-impl UnaryOp<usize> for PcgPairHash {
+impl UnaryOp<u32> for PcgPairHash {
     type Output = u32;
 
-    fn apply(index: usize) -> u32 {
-        let index = index as u32;
+    fn apply(index: u32) -> u32 {
         random_u32_at(X_KEY, index) ^ random_u32_at(Y_KEY, index)
     }
 }
 
 #[cubecl::cube]
-impl UnaryOp<usize> for PcgPairUnitCompare {
+impl UnaryOp<u32> for PcgPairUnitCompare {
     type Output = u32;
 
-    fn apply(index: usize) -> u32 {
-        let index = index as u32;
+    fn apply(index: u32) -> u32 {
         let x = unit_f32(X_KEY, index);
         let y = unit_f32(Y_KEY, index);
         if x <= y { 1u32 } else { 0u32 }
@@ -125,11 +123,10 @@ impl UnaryOp<usize> for PcgPairUnitCompare {
 }
 
 #[cubecl::cube]
-impl UnaryOp<usize> for PcgPairCircle {
+impl UnaryOp<u32> for PcgPairCircle {
     type Output = u32;
 
-    fn apply(index: usize) -> u32 {
-        let index = index as u32;
+    fn apply(index: u32) -> u32 {
         circle_hit(unit_f32(X_KEY, index), unit_f32(Y_KEY, index))
     }
 }
@@ -177,6 +174,7 @@ fn assert_pi(count: u32) {
 
 fn bench_reduce_4g(c: &mut Criterion) {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let init = exec.value(0_u32).unwrap();
 
     let mut group = c.benchmark_group("reduce_4g");
     group.sample_size(10);
@@ -186,7 +184,10 @@ fn bench_reduce_4g(c: &mut Criterion) {
     group.bench_function("constant_u32", |b| {
         b.iter(|| {
             let input = lazy::constant(black_box(1_u32)).take(LEN);
-            let result = reduce(&exec, input, 0_u32, Sum).unwrap();
+            let result = reduce(&exec, input, init.clone(), Sum)
+                .unwrap()
+                .read(&exec)
+                .unwrap();
             assert_eq!(black_box(result), LEN as u32);
         })
     });
@@ -209,9 +210,11 @@ fn bench_reduce_4g(c: &mut Criterion) {
             let result = reduce(
                 &exec,
                 lazy::transform(zip2(left, right), PairXor),
-                0u32,
+                init.clone(),
                 Sum,
             )
+            .unwrap()
+            .read(&exec)
             .unwrap();
             black_box(result);
         })
@@ -219,21 +222,34 @@ fn bench_reduce_4g(c: &mut Criterion) {
     group.bench_function("diag_a1_pcg2_hash", |b| {
         b.iter(|| {
             let values = lazy::transform(lazy::counting(black_box(0)).take(LEN), PcgPairHash);
-            black_box(reduce(&exec, values, 0u32, Sum).unwrap());
+            black_box(
+                reduce(&exec, values, init.clone(), Sum)
+                    .unwrap()
+                    .read(&exec)
+                    .unwrap(),
+            );
         })
     });
     group.bench_function("diag_a1_pcg2_unit_compare", |b| {
         b.iter(|| {
             let values =
                 lazy::transform(lazy::counting(black_box(0)).take(LEN), PcgPairUnitCompare);
-            let count = reduce(&exec, values, 0u32, Sum).unwrap();
+            let count = reduce(&exec, values, init.clone(), Sum)
+                .unwrap()
+                .read(&exec)
+                .unwrap();
             assert!((1_900_000_000..2_100_000_000).contains(&black_box(count)));
         })
     });
     group.bench_function("diag_a1_pcg2_circle", |b| {
         b.iter(|| {
             let values = lazy::transform(lazy::counting(black_box(0)).take(LEN), PcgPairCircle);
-            assert_pi(reduce(&exec, values, 0u32, Sum).unwrap());
+            assert_pi(
+                reduce(&exec, values, init.clone(), Sum)
+                    .unwrap()
+                    .read(&exec)
+                    .unwrap(),
+            );
         })
     });
     group.bench_function("diag_a3_pcg2_circle_runtime_keys", |b| {
@@ -244,7 +260,12 @@ fn bench_reduce_4g(c: &mut Criterion) {
                 lazy::constant(black_box(Y_KEY)).take(LEN),
             );
             let values = lazy::transform(input, PcgPairCircleRuntime);
-            assert_pi(reduce(&exec, values, 0u32, Sum).unwrap());
+            assert_pi(
+                reduce(&exec, values, init.clone(), Sum)
+                    .unwrap()
+                    .read(&exec)
+                    .unwrap(),
+            );
         })
     });
     group.bench_function("diag_a5_pcg2_circle_runtime_range", |b| {
@@ -257,7 +278,12 @@ fn bench_reduce_4g(c: &mut Criterion) {
                 lazy::constant(black_box(1.0f32)).take(LEN),
             );
             let values = lazy::transform(input, PcgPairCircleRuntimeRange);
-            assert_pi(reduce(&exec, values, 0u32, Sum).unwrap());
+            assert_pi(
+                reduce(&exec, values, init.clone(), Sum)
+                    .unwrap()
+                    .read(&exec)
+                    .unwrap(),
+            );
         })
     });
     group.bench_function("diag_a8_pcg2_circle_direct", |b| {
@@ -277,7 +303,12 @@ fn bench_reduce_4g(c: &mut Criterion) {
             let x = lazy::transform(x, UniformFromArgs);
             let y = lazy::transform(y, UniformFromArgs);
             let values = lazy::transform(zip2(x, y), DetectHit);
-            assert_pi(reduce(&exec, values, 0u32, Sum).unwrap());
+            assert_pi(
+                reduce(&exec, values, init.clone(), Sum)
+                    .unwrap()
+                    .read(&exec)
+                    .unwrap(),
+            );
         })
     });
     group.bench_function("monte_carlo_pi", |b| {
@@ -289,7 +320,10 @@ fn bench_reduce_4g(c: &mut Criterion) {
                 .unwrap()
                 .take(LEN);
             let hits = lazy::transform(zip2(x, y), DetectHit);
-            let count = reduce(&exec, hits, 0_u32, Sum).unwrap();
+            let count = reduce(&exec, hits, init.clone(), Sum)
+                .unwrap()
+                .read(&exec)
+                .unwrap();
             assert_pi(count);
         })
     });

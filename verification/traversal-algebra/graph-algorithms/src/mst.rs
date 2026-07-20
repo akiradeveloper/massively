@@ -13,8 +13,8 @@ struct LessF32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<f32> for LessF32 {
-    fn apply(lhs: f32, rhs: f32) -> bool {
-        lhs < rhs
+    fn apply(lhs: f32, rhs: f32) -> massively::MBool {
+        massively::op::mbool(lhs < rhs)
     }
 }
 
@@ -47,9 +47,11 @@ pub fn solve<R: Runtime>(
         exec,
         topology.csr(),
         common::counting_u32(0, topology.vertex_count() as usize),
+        topology.edge_capacity()?,
     )?
     .map(graph::source_id(), Identity)
     .emit(exec)?;
+    let sources = common::materialize_exact(exec, sources)?;
     let edge_order = vector::sort_by_key(
         exec,
         graph.weights().slice(..),
@@ -77,13 +79,14 @@ pub fn solve<R: Runtime>(
             exec,
             zip2(
                 components.slice(..),
-                lazy::constant(destination_component).take(topology.vertex_count() as usize),
+                lazy::constant(destination_component).take(topology.vertex_count()),
             ),
             EqualPair,
         )?;
+        let source_component_value = exec.value(source_component)?;
         vector::replace_where(
             exec,
-            source_component,
+            &source_component_value,
             common::stencil(stencil.slice(..)),
             components.slice_mut(..),
         )?;
@@ -95,14 +98,17 @@ pub fn solve<R: Runtime>(
         )?;
     }
 
-    vector::copy_where(
+    common::materialize_exact(
         exec,
-        zip3(
-            sources.slice(..),
-            topology.destinations().slice(..),
-            graph.weights().slice(..),
-        ),
-        common::stencil(selected.slice(..)),
+        vector::copy_where(
+            exec,
+            zip3(
+                sources.slice(..),
+                topology.destinations().slice(..),
+                graph.weights().slice(..),
+            ),
+            common::stencil(selected.slice(..)),
+        )?,
     )
 }
 
@@ -120,7 +126,7 @@ mod tests {
         let graph = DeviceWeightedCsr::from_host(&exec, &graph).unwrap();
         let tree = solve(&exec, &graph).unwrap();
         let (sources, _, weights) = MStorage::into_columns(tree);
-        assert_eq!(sources.len(), 3);
+        assert_eq!(sources.read_len(&exec).unwrap(), 3);
         assert_eq!(exec.to_host(&weights).unwrap().iter().sum::<f32>(), 6.0);
     }
 }

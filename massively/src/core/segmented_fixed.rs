@@ -665,14 +665,6 @@ fn apply_init_padded12<
     }
 }
 
-fn checked_len_handle<R: Runtime>(
-    exec: &Executor<R>,
-    len: usize,
-) -> Result<cubecl::server::Handle, Error> {
-    let len = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-    Ok(exec.client().create_from_slice(u32::as_bytes(&[len])))
-}
-
 fn stage_read<R, Read>(exec: &Executor<R>, read: &Read) -> Result<StagedBindings, Error>
 where
     R: Runtime,
@@ -708,20 +700,28 @@ where
 {
     let len = input.len()?;
     let output_len = output.len()?;
-    if flags.len() != len || output_len != len {
+    if flags.capacity() != len || output_len != len {
         return Err(Error::LengthMismatch {
             left: len,
-            right: flags.len().min(output_len),
+            right: flags.capacity().min(output_len),
         });
     }
     if len == 0 {
         return Ok(());
     }
+    let extent = input
+        .logical_extent()
+        .zipped(&flags.logical_extent())?
+        .zipped(&output.logical_extent())?;
 
     let blocks = len.div_ceil(BLOCK_SIZE as usize);
-    let local_flags = exec.alloc_column::<u32>(len);
-    let block_sums = Item::alloc_scratch(exec, blocks);
-    let block_flags = exec.alloc_column::<u32>(blocks);
+    let block_extent = extent.ceil_div(exec, BLOCK_SIZE as usize, blocks)?;
+    let mut local_flags = exec.alloc_column::<u32>(len);
+    local_flags.set_logical_extent(extent.clone());
+    let mut block_sums = Item::alloc_scratch(exec, blocks);
+    block_sums.set_logical_extent(block_extent.clone());
+    let mut block_flags = exec.alloc_column::<u32>(blocks);
+    block_flags.set_logical_extent(block_extent);
     let input_read = input.read();
     let output_write = output.write();
     let sum_write = block_sums.write();
@@ -737,7 +737,7 @@ where
     let sum_offsets = exec
         .client()
         .create_from_slice(u32::as_bytes(&sum_bindings.offsets));
-    let len_handle = checked_len_handle(exec, len)?;
+    let len_handle = extent.materialize(exec)?;
 
     unsafe {
         segmented_scan_padded12::launch_unchecked::<
@@ -781,7 +781,7 @@ where
                 input_bindings.slots[11].1,
             ),
             BufferArg::from_raw_parts(flags.handle.clone(), len),
-            BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
             BufferArg::from_raw_parts(input_offsets, input_bindings.offsets.len()),
             BufferArg::from_raw_parts(output_offsets.clone(), output_bindings.offsets.len()),
             BufferArg::from_raw_parts(sum_offsets, sum_bindings.offsets.len()),
@@ -851,7 +851,8 @@ where
     }
 
     if blocks > 1 {
-        let prefixes = Item::alloc_scratch(exec, blocks);
+        let mut prefixes = Item::alloc_scratch(exec, blocks);
+        prefixes.set_logical_extent(block_sums.logical_extent());
         segmented_inclusive_fixed::<R, Item, Op>(exec, &block_sums, &block_flags, &prefixes)?;
         let prefix_read = prefixes.read();
         let prefix_bindings = stage_read(exec, &prefix_read)?;
@@ -930,7 +931,7 @@ where
                     prefix_bindings.slots[11].1,
                 ),
                 BufferArg::from_raw_parts(local_flags.handle.clone(), len),
-                BufferArg::from_raw_parts(len_handle, 1),
+                BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
                 BufferArg::from_raw_parts(prefix_offsets, prefix_bindings.offsets.len()),
                 BufferArg::from_raw_parts(output_offsets, output_bindings.offsets.len()),
                 BufferArg::from_raw_parts(
@@ -1000,6 +1001,11 @@ where
     Op: ReductionOp<Item>,
 {
     let len = inclusive.len()?;
+    let extent = inclusive
+        .logical_extent()
+        .zipped(&flags.logical_extent())?
+        .zipped(&output.logical_extent())?;
+    let len_handle = extent.materialize(exec)?;
     let inclusive_read = inclusive.read();
     let init_read = init.read();
     let output_write = output.write();
@@ -1099,7 +1105,7 @@ where
             BufferArg::from_raw_parts(init_bindings.slots[9].0.clone(), init_bindings.slots[9].1),
             BufferArg::from_raw_parts(init_bindings.slots[10].0.clone(), init_bindings.slots[10].1),
             BufferArg::from_raw_parts(init_bindings.slots[11].0.clone(), init_bindings.slots[11].1),
-            BufferArg::from_raw_parts(checked_len_handle(exec, len)?, 1),
+            BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
             BufferArg::from_raw_parts(inclusive_offsets, inclusive_bindings.offsets.len()),
             BufferArg::from_raw_parts(init_offsets, init_bindings.offsets.len()),
             BufferArg::from_raw_parts(output_offsets, output_bindings.offsets.len()),
@@ -1168,6 +1174,10 @@ where
     Op: ReductionOp<Item>,
 {
     let len = inclusive.len()?;
+    let extent = inclusive
+        .logical_extent()
+        .zipped(&output.logical_extent())?;
+    let len_handle = extent.materialize(exec)?;
     let inclusive_read = inclusive.read();
     let init_read = init.read();
     let output_write = output.write();
@@ -1266,7 +1276,7 @@ where
             BufferArg::from_raw_parts(init_bindings.slots[9].0.clone(), init_bindings.slots[9].1),
             BufferArg::from_raw_parts(init_bindings.slots[10].0.clone(), init_bindings.slots[10].1),
             BufferArg::from_raw_parts(init_bindings.slots[11].0.clone(), init_bindings.slots[11].1),
-            BufferArg::from_raw_parts(checked_len_handle(exec, len)?, 1),
+            BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
             BufferArg::from_raw_parts(inclusive_offsets, inclusive_bindings.offsets.len()),
             BufferArg::from_raw_parts(init_offsets, init_bindings.offsets.len()),
             BufferArg::from_raw_parts(output_offsets, output_bindings.offsets.len()),
@@ -1327,7 +1337,7 @@ pub(crate) fn segmented_fixed<R, Item, Op>(
     exec: &Executor<R>,
     input: &FixedStorage<R, Item>,
     heads: &DeviceVec<R, u32>,
-    init: Option<Item>,
+    init: Option<FixedStorage<R, Item>>,
     _op: Op,
     mode: u8,
 ) -> Result<FixedStorage<R, Item>, Error>
@@ -1337,37 +1347,47 @@ where
     Op: ReductionOp<Item>,
 {
     let len = input.len()?;
-    if heads.len() != len {
+    if heads.capacity() != len {
         return Err(Error::LengthMismatch {
             left: len,
-            right: heads.len(),
+            right: heads.capacity(),
         });
     }
-    let output = Item::alloc_scratch(exec, len);
+    let extent = input.logical_extent().zipped(&heads.logical_extent())?;
+    let mut output = Item::alloc_scratch(exec, len);
+    output.set_logical_extent(extent.clone());
     match mode {
         0 => segmented_inclusive_fixed::<R, Item, Op>(exec, input, heads, &output)?,
         1 => {
             if len == 0 {
                 return Ok(output);
             }
-            let inclusive = Item::alloc_scratch(exec, len);
+            let mut inclusive = Item::alloc_scratch(exec, len);
+            inclusive.set_logical_extent(extent.clone());
             segmented_inclusive_fixed::<R, Item, Op>(exec, input, heads, &inclusive)?;
-            let initial = crate::allocation::scratch_singleton(
-                exec,
-                init.expect("exclusive segmented scan requires init"),
-            )?;
+            let initial = init.expect("exclusive segmented scan requires init");
+            if initial.len()? != 1 {
+                return Err(Error::LengthMismatch {
+                    left: initial.len()?,
+                    right: 1,
+                });
+            }
             launch_exclusive::<R, Item, Op>(exec, &inclusive, heads, &initial, &output)?;
         }
         2 => {
             if len == 0 {
                 return Ok(output);
             }
-            let inclusive = Item::alloc_scratch(exec, len);
+            let mut inclusive = Item::alloc_scratch(exec, len);
+            inclusive.set_logical_extent(extent);
             segmented_inclusive_fixed::<R, Item, Op>(exec, input, heads, &inclusive)?;
-            let initial = crate::allocation::scratch_singleton(
-                exec,
-                init.expect("segmented reduction requires init"),
-            )?;
+            let initial = init.expect("segmented reduction requires init");
+            if initial.len()? != 1 {
+                return Err(Error::LengthMismatch {
+                    left: initial.len()?,
+                    right: 1,
+                });
+            }
             launch_apply_init::<R, Item, Op>(exec, &inclusive, &initial, &output)?;
         }
         _ => unreachable!("invalid segmented operation"),

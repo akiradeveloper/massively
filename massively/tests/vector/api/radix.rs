@@ -249,7 +249,7 @@ fn radix_sort_by_key_handles_empty_and_rejects_length_mismatch() {
     let empty_values = exec.to_device(&Vec::<u32>::new());
     let output =
         vector::radix_sort_by_key(&exec, empty_keys.slice(..), empty_values.slice(..)).unwrap();
-    assert_eq!(MStorage::len(&output).unwrap(), 0);
+    assert_eq!(MStorage::capacity(&output).unwrap(), 0);
 
     let keys = exec.to_device(&[1_u32, 2]);
     let values = exec.to_device(&[10_u32]);

@@ -298,7 +298,7 @@ fn zip12_segmented_scans_cross_block_boundaries() {
         device_keys.slice(..),
         lazify(zip12_columns!(device)),
         Equal,
-        zero,
+        exec.value(zero).unwrap(),
         MaxTwelve,
     )
     .unwrap();
@@ -339,7 +339,7 @@ proptest! {
         // maximum of thirteen physical read slots.
         let permuted = lazy::identity(lazy::permute(
             zip12_columns!(device),
-            lazy::counting(0).take(seed.len()),
+            lazy::counting(0).take(seed.len() as massively::MIndex),
         ));
         let copied = massively::vector::transform(&exec, permuted, Identity).unwrap();
         assert_twelve!(exec, copied, expected_columns);
@@ -349,9 +349,12 @@ proptest! {
             massively::vector::reduce(
                 &exec,
                 lazify(zip12_columns!(device)),
-                zero,
+                exec.value(zero).unwrap(),
                 MaxTwelve,
-            ).unwrap(),
+            )
+            .unwrap()
+            .read(&exec)
+            .unwrap(),
             reference::reduce(&input_rows, zero, MaxTwelve),
         );
 
@@ -366,7 +369,7 @@ proptest! {
         let scanned = massively::vector::exclusive_scan(
             &exec,
             lazify(zip12_columns!(device)),
-            zero,
+            exec.value(zero).unwrap(),
             MaxTwelve,
         ).unwrap();
         let expected_rows = reference::exclusive_scan(&input_rows, zero, MaxTwelve);

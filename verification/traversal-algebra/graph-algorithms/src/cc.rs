@@ -16,11 +16,25 @@ pub fn solve<R: Runtime>(
     let n = graph.vertex_count();
     let labels = vector::transform(exec, common::counting_u32(0, n as usize), Identity)?;
     let mut frontier = vector::transform(exec, common::counting_u32(0, n as usize), Identity)?;
+    let infinity = exec.value(u32::MAX)?;
 
-    while !frontier.is_empty() {
-        frontier = graph::traverse(exec, graph.csr(), frontier.slice(..))?
+    while frontier.capacity() != 0 {
+        frontier = common::materialize_exact(
+            exec,
+            graph::traverse(
+                exec,
+                graph.csr(),
+                frontier.slice(..),
+                graph.edge_capacity()?,
+            )?
             .map(graph::source(labels.slice(..)), Identity)
-            .relax_min_by_destination(exec, u32::MAX, labels.slice(..), labels.slice_mut(..))?;
+            .relax_min_by_destination(
+                exec,
+                infinity.clone(),
+                labels.slice(..),
+                labels.slice_mut(..),
+            )?,
+        )?;
     }
 
     Ok(labels)

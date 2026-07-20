@@ -1,6 +1,6 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MIter, MIterMut, MVec, op::BinaryPredicateOp};
+use crate::{Error, Executor, MBool, MIndex, MIter, MIterMut, MVal, MVec, op::BinaryPredicateOp};
 
 /// Finds the first source item equal to any needle.
 ///
@@ -15,8 +15,8 @@ use crate::{Error, Executor, MIter, MIterMut, MVec, op::BinaryPredicateOp};
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Equal {
-///     fn apply(lhs: u32, rhs: u32) -> bool {
-///         lhs == rhs
+///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+///         op::mbool(lhs == rhs)
 ///     }
 /// }
 ///
@@ -26,14 +26,14 @@ use crate::{Error, Executor, MIter, MIterMut, MVec, op::BinaryPredicateOp};
 ///
 /// let index = find_first_of(&exec, source.slice(..), needles.slice(..), Equal).unwrap();
 ///
-/// assert_eq!(index, Some(2));
+/// assert_eq!(index.read(&exec).unwrap(), (1, 2));
 /// ```
 pub fn find_first_of<R, Source, Needles, Equal>(
     exec: &Executor<R>,
     source: Source,
     needles: Needles,
     equal: Equal,
-) -> Result<Option<usize>, Error>
+) -> Result<MVal<R, (MBool, MIndex)>, Error>
 where
     R: Runtime,
     Source: MIter<R>,
@@ -46,7 +46,6 @@ where
         crate::api::iter::lower_fixed::<R, _>(needles),
         equal,
     )
-    .map(|index| index.map(|index| index as usize))
 }
 
 /// Finds the lower bound of each value.
@@ -64,8 +63,8 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Less {
-///     fn apply(lhs: u32, rhs: u32) -> bool {
-///         lhs < rhs
+///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+///         op::mbool(lhs < rhs)
 ///     }
 /// }
 ///
@@ -81,15 +80,17 @@ pub fn lower_bound<R, Source, Values, Less>(
     source: Source,
     values: Values,
     less: Less,
-) -> Result<MVec<R, u32>, Error>
+) -> Result<MVec<R, MIndex>, Error>
 where
     R: Runtime,
     Source: MIter<R>,
     Values: MIter<R, Item = Source::Item>,
     Less: BinaryPredicateOp<Source::Item>,
 {
-    let len = values.len()? as usize;
-    let output = exec.alloc::<u32>(len);
+    let len = values.capacity()? as usize;
+    let extent = values.logical_extent()?;
+    let mut output = exec.alloc::<MIndex>(len);
+    output.set_logical_extent(extent);
     lower_bound_into(exec, source, values, less, output.slice_mut(..))?;
     Ok(output)
 }
@@ -107,7 +108,7 @@ where
     R: Runtime,
     Source: MIter<R>,
     Values: MIter<R, Item = Source::Item>,
-    Output: MIterMut<R, Item = u32>,
+    Output: MIterMut<R, Item = MIndex>,
     Less: BinaryPredicateOp<Source::Item>,
 {
     let bounds = crate::search::lower_bounds_storage(
@@ -139,8 +140,8 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Less {
-///     fn apply(lhs: u32, rhs: u32) -> bool {
-///         lhs < rhs
+///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+///         op::mbool(lhs < rhs)
 ///     }
 /// }
 ///
@@ -156,15 +157,17 @@ pub fn upper_bound<R, Source, Values, Less>(
     source: Source,
     values: Values,
     less: Less,
-) -> Result<MVec<R, u32>, Error>
+) -> Result<MVec<R, MIndex>, Error>
 where
     R: Runtime,
     Source: MIter<R>,
     Values: MIter<R, Item = Source::Item>,
     Less: BinaryPredicateOp<Source::Item>,
 {
-    let len = values.len()? as usize;
-    let output = exec.alloc::<u32>(len);
+    let len = values.capacity()? as usize;
+    let extent = values.logical_extent()?;
+    let mut output = exec.alloc::<MIndex>(len);
+    output.set_logical_extent(extent);
     upper_bound_into(exec, source, values, less, output.slice_mut(..))?;
     Ok(output)
 }
@@ -182,7 +185,7 @@ where
     R: Runtime,
     Source: MIter<R>,
     Values: MIter<R, Item = Source::Item>,
-    Output: MIterMut<R, Item = u32>,
+    Output: MIterMut<R, Item = MIndex>,
     Less: BinaryPredicateOp<Source::Item>,
 {
     let bounds = crate::search::upper_bounds_storage(
@@ -212,8 +215,8 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Equal {
-///     fn apply(lhs: u32, rhs: u32) -> bool {
-///         lhs == rhs
+///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+///         op::mbool(lhs == rhs)
 ///     }
 /// }
 ///
@@ -221,14 +224,14 @@ where
 /// let left = exec.to_device(&[1_u32, 2, 3]);
 /// let right = exec.to_device(&[1_u32, 2, 3]);
 ///
-/// assert!(equal(&exec, left.slice(..), right.slice(..), Equal).unwrap());
+/// assert_eq!(equal(&exec, left.slice(..), right.slice(..), Equal).unwrap().read(&exec).unwrap(), 1);
 /// ```
 pub fn equal<R, Left, Right, Equal>(
     exec: &Executor<R>,
     left: Left,
     right: Right,
     equal: Equal,
-) -> Result<bool, Error>
+) -> Result<MVal<R, MBool>, Error>
 where
     R: Runtime,
     Left: MIter<R>,
@@ -256,8 +259,8 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Equal {
-///     fn apply(lhs: u32, rhs: u32) -> bool {
-///         lhs == rhs
+///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+///         op::mbool(lhs == rhs)
 ///     }
 /// }
 ///
@@ -265,14 +268,14 @@ where
 /// let left = exec.to_device(&[1_u32, 2, 3]);
 /// let right = exec.to_device(&[1_u32, 4, 3]);
 ///
-/// assert_eq!(mismatch(&exec, left.slice(..), right.slice(..), Equal).unwrap(), Some(1));
+/// assert_eq!(mismatch(&exec, left.slice(..), right.slice(..), Equal).unwrap().read(&exec).unwrap(), (1, 1));
 /// ```
 pub fn mismatch<R, Left, Right, Equal>(
     exec: &Executor<R>,
     left: Left,
     right: Right,
     equal: Equal,
-) -> Result<Option<usize>, Error>
+) -> Result<MVal<R, (MBool, MIndex)>, Error>
 where
     R: Runtime,
     Left: MIter<R>,
@@ -285,7 +288,6 @@ where
         crate::api::iter::lower_fixed::<R, _>(right),
         equal,
     )
-    .map(|index| index.map(|index| index as usize))
 }
 
 /// Lexicographically compares two ranges.
@@ -301,8 +303,8 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Less {
-///     fn apply(lhs: u32, rhs: u32) -> bool {
-///         lhs < rhs
+///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+///         op::mbool(lhs < rhs)
 ///     }
 /// }
 ///
@@ -310,8 +312,9 @@ where
 /// let left = exec.to_device(&[1_u32, 2, 3]);
 /// let right = exec.to_device(&[1_u32, 3, 0]);
 ///
-/// assert!(
-///     lexicographical_compare(&exec, left.slice(..), right.slice(..), Less).unwrap()
+/// assert_eq!(
+///     lexicographical_compare(&exec, left.slice(..), right.slice(..), Less).unwrap().read(&exec).unwrap(),
+///     1,
 /// );
 /// ```
 pub fn lexicographical_compare<R, Left, Right, Less>(
@@ -319,7 +322,7 @@ pub fn lexicographical_compare<R, Left, Right, Less>(
     left: Left,
     right: Right,
     less: Less,
-) -> Result<bool, Error>
+) -> Result<MVal<R, MBool>, Error>
 where
     R: Runtime,
     Left: MIter<R>,

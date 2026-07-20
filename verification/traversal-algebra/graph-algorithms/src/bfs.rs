@@ -31,11 +31,25 @@ pub fn solve<R: Runtime>(
         common::indices(frontier.slice(..)),
         distance.slice_mut(..),
     )?;
+    let infinity = exec.value(u32::MAX)?;
 
-    while !frontier.is_empty() {
-        frontier = graph::traverse(exec, graph.csr(), frontier.slice(..))?
+    while frontier.capacity() != 0 {
+        frontier = common::materialize_exact(
+            exec,
+            graph::traverse(
+                exec,
+                graph.csr(),
+                frontier.slice(..),
+                graph.edge_capacity()?,
+            )?
             .map(graph::source(distance.slice(..)), AddOne)
-            .relax_min_by_destination(exec, u32::MAX, distance.slice(..), distance.slice_mut(..))?;
+            .relax_min_by_destination(
+                exec,
+                infinity.clone(),
+                distance.slice(..),
+                distance.slice_mut(..),
+            )?,
+        )?;
     }
 
     Ok(distance)

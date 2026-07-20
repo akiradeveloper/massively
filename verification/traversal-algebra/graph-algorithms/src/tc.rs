@@ -22,16 +22,18 @@ pub fn solve<R: Runtime>(exec: &Executor<R>, graph: &DeviceCsr<R>) -> common::Re
         exec,
         graph.csr(),
         common::counting_u32(0, graph.vertex_count() as usize),
+        graph.edge_capacity()?,
     )?
     .map(graph::source_id(), Identity)
     .emit(exec)?;
+    let sources = common::materialize_exact(exec, sources)?;
     let counts = graph::intersect_count(
         exec,
         graph.csr(),
         sources.slice(..),
         graph.destinations().slice(..),
     )?;
-    Ok(massively::vector::reduce(exec, counts.slice(..), 0, SumU32)? / 6)
+    Ok(massively::vector::reduce(exec, counts.slice(..), exec.value(0)?, SumU32)?.read(exec)? / 6)
 }
 
 #[cfg(test)]

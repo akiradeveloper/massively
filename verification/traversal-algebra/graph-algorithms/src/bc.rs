@@ -83,18 +83,21 @@ fn vertices_at_depth<R: Runtime>(
     distance: &DeviceVec<R, u32>,
     depth: u32,
 ) -> common::Result<DeviceVec<R, u32>> {
-    let n = u32::try_from(distance.len()).map_err(|_| massively::Error::LengthTooLarge {
-        len: distance.len(),
+    let n = u32::try_from(distance.capacity()).map_err(|_| massively::Error::LengthTooLarge {
+        len: distance.capacity(),
     })?;
     let stencil = vector::transform(
         exec,
-        zip2(distance.slice(..), lazy::constant(depth).take(n as usize)),
+        zip2(distance.slice(..), lazy::constant(depth).take(n)),
         IsDepth,
     )?;
-    vector::copy_where(
+    common::materialize_exact(
         exec,
-        common::counting_u32(0, n as usize),
-        common::stencil(stencil.slice(..)),
+        vector::copy_where(
+            exec,
+            common::counting_u32(0, n as usize),
+            common::stencil(stencil.slice(..)),
+        )?,
     )
 }
 
@@ -116,39 +119,50 @@ pub fn solve<R: Runtime>(
         )?;
 
         let mut max_depth = 0u32;
+        let zero = exec.value(0.0f32)?;
         for depth in 0..n {
             let frontier = vertices_at_depth(exec, &distance, depth)?;
-            if frontier.is_empty() {
+            if frontier.capacity() == 0 {
                 break;
             }
             max_depth = depth;
-            graph::traverse(exec, graph.csr(), frontier.slice(..))?
-                .map(
-                    zip3(
-                        graph::destination(distance.slice(..)),
-                        graph::source(paths.slice(..)),
-                        graph::source(lazy::constant(depth + 1).take(n as usize)),
-                    ),
-                    PathContribution,
-                )
-                .update_by_destination(exec, 0.0f32, SumF32, paths.slice_mut(..))?;
+            graph::traverse(
+                exec,
+                graph.csr(),
+                frontier.slice(..),
+                graph.edge_capacity()?,
+            )?
+            .map(
+                zip3(
+                    graph::destination(distance.slice(..)),
+                    graph::source(paths.slice(..)),
+                    graph::source(lazy::constant(depth + 1).take(n)),
+                ),
+                PathContribution,
+            )
+            .update_by_destination(exec, zero.clone(), SumF32, paths.slice_mut(..))?;
         }
 
         let dependency = common::filled(exec, n as usize, 0.0f32)?;
         for depth in (0..=max_depth).rev() {
             let frontier = vertices_at_depth(exec, &distance, depth)?;
-            let values = graph::traverse(exec, graph.csr(), frontier.slice(..))?
-                .map(
-                    zip5(
-                        graph::source(paths.slice(..)),
-                        graph::destination(paths.slice(..)),
-                        graph::destination(dependency.slice(..)),
-                        graph::source(distance.slice(..)),
-                        graph::destination(distance.slice(..)),
-                    ),
-                    DependencyContribution,
-                )
-                .reduce_by_source(exec, 0.0f32, SumF32)?;
+            let values = graph::traverse(
+                exec,
+                graph.csr(),
+                frontier.slice(..),
+                graph.edge_capacity()?,
+            )?
+            .map(
+                zip5(
+                    graph::source(paths.slice(..)),
+                    graph::destination(paths.slice(..)),
+                    graph::destination(dependency.slice(..)),
+                    graph::source(distance.slice(..)),
+                    graph::destination(distance.slice(..)),
+                ),
+                DependencyContribution,
+            )
+            .reduce_by_source(exec, zero.clone(), SumF32)?;
             vector::scatter(
                 exec,
                 values.slice(..),
@@ -163,7 +177,7 @@ pub fn solve<R: Runtime>(
                 zip2(centrality.slice(..), dependency.slice(..)),
                 zip2(
                     common::counting_u32(0, n as usize),
-                    lazy::constant(source).take(n as usize),
+                    lazy::constant(source).take(n),
                 ),
             ),
             AccumulateCentrality,

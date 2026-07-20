@@ -30,17 +30,22 @@ pub fn solve<R: Runtime>(
     matrix: &DeviceWeightedCsr<R>,
     vector: &DeviceVec<R, f32>,
 ) -> common::Result<DeviceVec<R, f32>> {
-    assert_eq!(vector.len(), matrix.graph().vertex_count() as usize);
+    assert_eq!(vector.capacity(), matrix.graph().vertex_count() as usize);
     let frontier = common::counting_u32(0, matrix.graph().vertex_count() as usize);
-    graph::traverse(exec, matrix.graph().csr(), frontier)?
-        .map(
-            zip2(
-                graph::edge(matrix.weights().slice(..)),
-                graph::destination(vector.slice(..)),
-            ),
-            MulF32,
-        )
-        .reduce_by_source(exec, 0.0, SumF32)
+    graph::traverse(
+        exec,
+        matrix.graph().csr(),
+        frontier,
+        matrix.graph().edge_capacity()?,
+    )?
+    .map(
+        zip2(
+            graph::edge(matrix.weights().slice(..)),
+            graph::destination(vector.slice(..)),
+        ),
+        MulF32,
+    )
+    .reduce_by_source(exec, exec.value(0.0)?, SumF32)
 }
 
 #[cfg(test)]

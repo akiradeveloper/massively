@@ -73,7 +73,7 @@ fn scatter_combine_a13<
         + Sync
         + 'static,
     SourceExpr: Eval13<Item, L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12>,
-    IndexExpr: Eval13<usize, I0, I1, I2, I3, I4, I5, I6, I7, I8, I9, I10, I11, I12>,
+    IndexExpr: Eval13<crate::MIndex, I0, I1, I2, I3, I4, I5, I6, I7, I8, I9, I10, I11, I12>,
     Layout: Decompose<Item, Leaves = Leaves> + Recompose<Item, Leaves = Leaves>,
     Op: ReductionOp<Item>,
 >(
@@ -107,6 +107,7 @@ fn scatter_combine_a13<
     index_offsets: &[u32],
     positions: &[u32],
     len: &[u32],
+    active_len: &[u32],
     output0: &mut [O0],
     output1: &mut [O1],
     output2: &mut [O2],
@@ -122,7 +123,7 @@ fn scatter_combine_a13<
     output_offsets: &[u32],
 ) {
     let position = ABSOLUTE_POS as usize;
-    if position < len[0] as usize {
+    if position < len[0] as usize && position < active_len[0] as usize {
         let index_position = positions[position] as usize;
         let destination = IndexExpr::eval13(
             index0,
@@ -172,7 +173,7 @@ fn scatter_combine_a13<
             output10,
             output11,
             output_offsets,
-            destination,
+            destination as usize,
         ));
         Layout::decompose(Op::apply(previous, proposal)).store_padded(
             output0,
@@ -188,7 +189,7 @@ fn scatter_combine_a13<
             output10,
             output11,
             output_offsets,
-            destination,
+            destination as usize,
         );
     }
 }
@@ -201,6 +202,7 @@ pub trait ScatterCombineInput<R: Runtime, Indices, Output>: ReadExpression + Siz
         exec: &Executor<R>,
         indices: Indices,
         positions: &crate::DeviceVec<R, u32>,
+        active_len: &crate::DeviceVec<R, u32>,
         output: Output,
     ) -> Result<(), Error>
     where
@@ -211,7 +213,7 @@ impl<R, Source, Indices, Output> ScatterCombineInput<R, Indices, Output> for Sou
 where
     R: Runtime,
     Source: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
-    Indices: ReadExpression<Item = usize> + LowerReadExpression + StageRead<R, Env0>,
+    Indices: ReadExpression<Item = crate::MIndex> + LowerReadExpression + StageRead<R, Env0>,
     Output:
         crate::core::facade::KernelOutput<R> + crate::output::OutputExpression<Item = Source::Item>,
     Source::Item: StorageLayout,
@@ -224,23 +226,24 @@ where
         exec: &Executor<R>,
         indices: Indices,
         positions: &crate::DeviceVec<R, u32>,
+        active_len: &crate::DeviceVec<R, u32>,
         output: Output,
     ) -> Result<(), Error>
     where
         Op: ReductionOp<Self::Item>,
     {
         let len = self.logical_len()?;
-        if len != positions.len() {
+        if len != positions.capacity() {
             return Err(Error::LengthMismatch {
                 left: len,
-                right: positions.len(),
+                right: positions.capacity(),
             });
         }
         if len == 0 {
             return Ok(());
         }
 
-        let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+        let extent = self.logical_extent()?.zipped(&positions.logical_extent())?;
         let mut source_reads = StagedBindings::new();
         self.stage_at(exec.client(), exec.id(), &mut source_reads)?;
         source_reads.pad_to_thirteen(exec.client());
@@ -260,7 +263,7 @@ where
         let output_offsets = exec
             .client()
             .create_from_slice(u32::as_bytes(&writes.offsets));
-        let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len_u32]));
+        let len_handle = extent.materialize(exec)?;
 
         unsafe {
             scatter_combine_a13::launch_unchecked::<
@@ -350,8 +353,9 @@ where
                 BufferArg::from_raw_parts(index_reads.slots[11].0.clone(), index_reads.slots[11].1),
                 BufferArg::from_raw_parts(index_reads.slots[12].0.clone(), index_reads.slots[12].1),
                 BufferArg::from_raw_parts(index_offsets, index_reads.offsets.len()),
-                BufferArg::from_raw_parts(positions.handle.clone(), positions.len()),
-                BufferArg::from_raw_parts(len_handle, 1),
+                BufferArg::from_raw_parts(positions.handle.clone(), positions.capacity()),
+                BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
+                BufferArg::from_raw_parts(active_len.handle.clone(), 1),
                 BufferArg::from_raw_parts(writes.slots[0].0.clone(), writes.slots[0].1),
                 BufferArg::from_raw_parts(writes.slots[1].0.clone(), writes.slots[1].1),
                 BufferArg::from_raw_parts(writes.slots[2].0.clone(), writes.slots[2].1),
@@ -376,6 +380,7 @@ pub(crate) fn apply<R, Source, Indices, Output, Op>(
     source: Source,
     indices: Indices,
     positions: &crate::DeviceVec<R, u32>,
+    active_len: &crate::DeviceVec<R, u32>,
     output: Output,
 ) -> Result<(), Error>
 where
@@ -383,5 +388,5 @@ where
     Source: ScatterCombineInput<R, Indices, Output>,
     Op: ReductionOp<Source::Item>,
 {
-    source.scatter_combine::<Op>(exec, indices, positions, output)
+    source.scatter_combine::<Op>(exec, indices, positions, active_len, output)
 }

@@ -13,8 +13,8 @@ struct LessU32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for LessU32 {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs < rhs
+    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+        massively::op::mbool(lhs < rhs)
     }
 }
 
@@ -22,8 +22,8 @@ struct EqualU32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for EqualU32 {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs == rhs
+    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+        massively::op::mbool(lhs == rhs)
     }
 }
 
@@ -35,7 +35,9 @@ pub fn solve<R: Runtime>(
     assert_eq!(lhs.vertex_count(), rhs.vertex_count());
     let n = lhs.vertex_count();
 
-    let capacity = graph::traverse(exec, rhs.csr(), lhs.destinations().slice(..))?.edge_count();
+    let capacity = graph::traverse(exec, rhs.csr(), lhs.destinations().slice(..), 0)?
+        .edge_count()
+        .read(exec)?;
     let mut destinations = exec.alloc::<u32>(capacity as usize);
     let offsets = exec.alloc::<u32>(n as usize + 1);
     let mut output_len = 0u32;
@@ -52,21 +54,27 @@ pub fn solve<R: Runtime>(
         let frontier = lhs
             .destinations()
             .slice(bounds[0] as usize..bounds[1] as usize);
-        if frontier.is_empty() {
+        if frontier.capacity() == 0 {
             continue;
         }
 
-        let traversal = graph::traverse(exec, rhs.csr(), frontier)?;
-        if traversal.edge_count() == 0 {
+        let traversal = graph::traverse(exec, rhs.csr(), frontier, capacity)?;
+        if traversal.edge_count().read(exec)? == 0 {
             continue;
         }
-        let candidates = traversal
-            .map(graph::destination_id(), Identity)
-            .emit(exec)?;
+        let candidates = common::materialize_exact(
+            exec,
+            traversal
+                .map(graph::destination_id(), Identity)
+                .emit(exec)?,
+        )?;
         let sorted = vector::sort(exec, candidates.slice(..), LessU32)?;
-        let row = vector::unique(exec, sorted.slice(..), EqualU32)?;
-        let row_len = u32::try_from(row.len())
-            .map_err(|_| massively::Error::LengthTooLarge { len: row.len() })?;
+        let row =
+            common::materialize_exact(exec, vector::unique(exec, sorted.slice(..), EqualU32)?)?;
+        let row_len =
+            u32::try_from(row.capacity()).map_err(|_| massively::Error::LengthTooLarge {
+                len: row.capacity(),
+            })?;
         vector::scatter(
             exec,
             row.slice(..),

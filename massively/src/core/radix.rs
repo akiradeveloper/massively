@@ -121,16 +121,19 @@ impl_radix_scalar!(
 fn block_digit_sort_kernel<T: CubePrimitive, Op: RadixDigitOp<T>>(
     keys: &[T],
     permutation: &[u32],
+    logical_len_buffer: &[u32],
     params: &[u32],
     block_permutation: &mut [u32],
     local_metadata: &mut [u32],
     histograms: &mut [u32],
 ) {
-    // params = [shift, logical length, block count, identity-input flag]
+    // params = [shift, block count, identity-input flag]
     let block = CUBE_POS as usize;
     let start = block * RADIX_BLOCK_ITEMS;
-    let logical_len = params[1] as usize;
-    let end = if start + RADIX_BLOCK_ITEMS < logical_len {
+    let logical_len = logical_len_buffer[0] as usize;
+    let end = if start >= logical_len {
+        start
+    } else if start + RADIX_BLOCK_ITEMS < logical_len {
         start + RADIX_BLOCK_ITEMS
     } else {
         logical_len
@@ -145,7 +148,7 @@ fn block_digit_sort_kernel<T: CubePrimitive, Op: RadixDigitOp<T>>(
     let mut plane_prefixes = Shared::<[u32]>::new_slice(RADIX_BLOCK_ITEMS);
 
     if valid {
-        let source = if params[3] != 0u32 {
+        let source = if params[2] != 0u32 {
             global as u32
         } else {
             permutation[global]
@@ -232,7 +235,7 @@ fn block_digit_sort_kernel<T: CubePrimitive, Op: RadixDigitOp<T>>(
     };
     if local < RADIX_BUCKETS {
         plane_prefixes[local] = (end - start) as u32;
-        histograms[local * params[2] as usize + block] = 0u32;
+        histograms[local * params[1] as usize + block] = 0u32;
     }
     sync_cube();
     if valid {
@@ -269,7 +272,7 @@ fn block_digit_sort_kernel<T: CubePrimitive, Op: RadixDigitOp<T>>(
             RADIX_BUCKETS as u32
         };
         if next_digit != sorted_digit {
-            histograms[sorted_digit as usize * params[2] as usize + block] =
+            histograms[sorted_digit as usize * params[1] as usize + block] =
                 local as u32 + 1u32 - plane_prefixes[sorted_digit as usize];
         }
     }
@@ -286,7 +289,7 @@ fn histogram_prefix_kernel(
     // phase continues to scale when the number of input blocks grows.
     let bucket = CUBE_POS as usize;
     let lane = UNIT_POS as usize;
-    let blocks = params[2] as usize;
+    let blocks = params[1] as usize;
     let chunk_size = blocks.div_ceil(CUBE_DIM as usize);
     let chunk_start = if lane * chunk_size < blocks {
         lane * chunk_size
@@ -348,16 +351,17 @@ fn stable_digit_scatter_kernel(
     local_metadata: &[u32],
     block_prefixes: &[u32],
     bucket_offsets: &[u32],
+    logical_len: &[u32],
     params: &[u32],
     output: &mut [u32],
 ) {
     let index = ABSOLUTE_POS as usize;
-    if index < block_permutation.len() {
+    if index < logical_len[0] as usize {
         let digit = (local_metadata[index] / RADIX_BLOCK_ITEMS as u32) as usize;
         let rank = local_metadata[index] % RADIX_BLOCK_ITEMS as u32;
         let block = index / RADIX_BLOCK_ITEMS;
         let destination =
-            bucket_offsets[digit] + block_prefixes[digit * params[2] as usize + block] + rank;
+            bucket_offsets[digit] + block_prefixes[digit * params[1] as usize + block] + rank;
         output[destination as usize] = block_permutation[index];
     }
 }
@@ -376,10 +380,16 @@ pub(crate) struct RadixControl<R: Runtime> {
 }
 
 impl<R: Runtime> RadixControl<R> {
-    fn new(exec: &Executor<R>, len: usize) -> Result<Self, Error> {
+    fn new(
+        exec: &Executor<R>,
+        len: usize,
+        extent: crate::extent::LogicalExtent,
+    ) -> Result<Self, Error> {
         let block_count = len.div_ceil(RADIX_BLOCK_ITEMS);
-        let current = exec.alloc_row::<u32>(len);
-        let scratch = exec.alloc_row::<u32>(len);
+        let mut current = exec.alloc_row::<u32>(len);
+        current.set_logical_extent(extent.clone());
+        let mut scratch = exec.alloc_row::<u32>(len);
+        scratch.set_logical_extent(extent);
         Ok(Self {
             current,
             scratch,
@@ -400,13 +410,13 @@ impl<R: Runtime> RadixControl<R> {
         keys: &DeviceVec<R, T>,
         shift: u32,
     ) -> Result<(), Error> {
-        let len = self.current.len();
+        let len = self.current.capacity();
         if len == 0 {
             return Ok(());
         }
+        let logical_len = self.current.logical_extent().materialize(exec)?;
         let params_handle = exec.client().create_from_slice(u32::as_bytes(&[
             shift,
-            u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?,
             u32::try_from(self.block_count).map_err(|_| Error::LengthTooLarge {
                 len: self.block_count,
             })?,
@@ -420,26 +430,33 @@ impl<R: Runtime> RadixControl<R> {
                 exec.client(),
                 rank_count,
                 CubeDim::new_1d(RADIX_BLOCK_ITEMS as u32),
-                BufferArg::from_raw_parts(keys.handle.clone(), keys.len()),
+                BufferArg::from_raw_parts(keys.handle.clone(), keys.capacity()),
                 BufferArg::from_raw_parts(self.current.handle.clone(), len),
-                BufferArg::from_raw_parts(params_handle.clone(), 4),
+                BufferArg::from_raw_parts(logical_len.handle.clone(), 1),
+                BufferArg::from_raw_parts(params_handle.clone(), 3),
                 BufferArg::from_raw_parts(self.block_permutation.handle.clone(), len),
                 BufferArg::from_raw_parts(self.local_metadata.handle.clone(), len),
-                BufferArg::from_raw_parts(self.histograms.handle.clone(), self.histograms.len()),
+                BufferArg::from_raw_parts(
+                    self.histograms.handle.clone(),
+                    self.histograms.capacity(),
+                ),
             );
             histogram_prefix_kernel::launch_unchecked::<R>(
                 exec.client(),
                 cube_count_1d(RADIX_BUCKETS)?,
                 CubeDim::new_1d(prefix_lanes),
-                BufferArg::from_raw_parts(self.histograms.handle.clone(), self.histograms.len()),
-                BufferArg::from_raw_parts(params_handle.clone(), 4),
+                BufferArg::from_raw_parts(
+                    self.histograms.handle.clone(),
+                    self.histograms.capacity(),
+                ),
+                BufferArg::from_raw_parts(params_handle.clone(), 3),
                 BufferArg::from_raw_parts(
                     self.block_prefixes.handle.clone(),
-                    self.block_prefixes.len(),
+                    self.block_prefixes.capacity(),
                 ),
                 BufferArg::from_raw_parts(
                     self.bucket_totals.handle.clone(),
-                    self.bucket_totals.len(),
+                    self.bucket_totals.capacity(),
                 ),
             );
             bucket_offsets_kernel::launch_unchecked::<R>(
@@ -448,11 +465,11 @@ impl<R: Runtime> RadixControl<R> {
                 CubeDim::new_1d(1),
                 BufferArg::from_raw_parts(
                     self.bucket_totals.handle.clone(),
-                    self.bucket_totals.len(),
+                    self.bucket_totals.capacity(),
                 ),
                 BufferArg::from_raw_parts(
                     self.bucket_offsets.handle.clone(),
-                    self.bucket_offsets.len(),
+                    self.bucket_offsets.capacity(),
                 ),
             );
             stable_digit_scatter_kernel::launch_unchecked::<R>(
@@ -463,13 +480,14 @@ impl<R: Runtime> RadixControl<R> {
                 BufferArg::from_raw_parts(self.local_metadata.handle.clone(), len),
                 BufferArg::from_raw_parts(
                     self.block_prefixes.handle.clone(),
-                    self.block_prefixes.len(),
+                    self.block_prefixes.capacity(),
                 ),
                 BufferArg::from_raw_parts(
                     self.bucket_offsets.handle.clone(),
-                    self.bucket_offsets.len(),
+                    self.bucket_offsets.capacity(),
                 ),
-                BufferArg::from_raw_parts(params_handle, 4),
+                BufferArg::from_raw_parts(logical_len.handle.clone(), 1),
+                BufferArg::from_raw_parts(params_handle, 3),
                 BufferArg::from_raw_parts(self.scratch.handle.clone(), len),
             );
         }
@@ -516,12 +534,13 @@ pub(crate) fn permutation<R, Keys>(
     exec: &Executor<R>,
     keys: &Keys,
     len: usize,
+    extent: crate::extent::LogicalExtent,
 ) -> Result<DeviceVec<R, u32>, Error>
 where
     R: Runtime,
     Keys: RadixStorage<R>,
 {
-    let mut control = RadixControl::new(exec, len)?;
+    let mut control = RadixControl::new(exec, len, extent)?;
     keys.radix_passes(exec, &mut control)?;
     Ok(control.current)
 }

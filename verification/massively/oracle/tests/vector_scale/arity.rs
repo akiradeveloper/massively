@@ -102,12 +102,15 @@ fn lazify_reduce_at_read_arity_13() {
             device[10].slice(..),
             device[11].slice(..),
         ),
-        lazy::counting(0).take(A13_SCALE_LEN),
+        lazy::counting(0).take(A13_SCALE_LEN as massively::MIndex),
     ));
     let zero = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
     assert_eq!(
-        massively::vector::reduce(&exec, lazified, zero, MaxTwelve).unwrap(),
+        massively::vector::reduce(&exec, lazified, exec.value(zero).unwrap(), MaxTwelve)
+            .unwrap()
+            .read(&exec)
+            .unwrap(),
         reference::reduce(&aos, zero, MaxTwelve),
     );
 }

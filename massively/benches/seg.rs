@@ -30,15 +30,15 @@ impl UnaryOp<u32> for AddOne {
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for Equal {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs == rhs
+    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+        massively::op::mbool(lhs == rhs)
     }
 }
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for Less {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs < rhs
+    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+        massively::op::mbool(lhs < rhs)
     }
 }
 
@@ -187,12 +187,13 @@ fn bench_reduce(c: &mut Criterion) {
             let segment_count = host_offsets.len() - 1;
             let segment_offsets = exec.to_device(&host_offsets);
             let keys = exec.to_device(&common::run_keys(len, segment_len));
+            let init = exec.value(0u32).unwrap();
             let _segment_count = segment_count;
             exec.sync().unwrap();
 
             group.bench_function(BenchmarkId::new(format!("foreach_{pattern}"), len), |b| {
                 b.iter(|| {
-                    let output = ForEachSegment(Reduce(Sum, 0u32))
+                    let output = ForEachSegment(Reduce(Sum, init.clone()))
                         .run(
                             &exec,
                             SegmentIterator::new(
@@ -213,7 +214,7 @@ fn bench_reduce(c: &mut Criterion) {
                         black_box(keys.slice(..)),
                         black_box(values.slice(..)),
                         Equal,
-                        0u32,
+                        init.clone(),
                         Sum,
                     )
                     .unwrap();

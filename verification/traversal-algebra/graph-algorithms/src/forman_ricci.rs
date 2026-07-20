@@ -21,19 +21,23 @@ pub fn solve<R: Runtime>(
     graph: &DeviceCsr<R>,
 ) -> common::Result<DeviceVec<R, i32>> {
     let degree = common::resident_degrees(exec, graph)?;
-    graph::traverse(
+    common::materialize_exact(
         exec,
-        graph.csr(),
-        common::counting_u32(0, graph.vertex_count() as usize),
-    )?
-    .map(
-        zip2(
-            graph::source(degree.slice(..)),
-            graph::destination(degree.slice(..)),
-        ),
-        Curvature,
+        graph::traverse(
+            exec,
+            graph.csr(),
+            common::counting_u32(0, graph.vertex_count() as usize),
+            graph.edge_capacity()?,
+        )?
+        .map(
+            zip2(
+                graph::source(degree.slice(..)),
+                graph::destination(degree.slice(..)),
+            ),
+            Curvature,
+        )
+        .emit(exec)?,
     )
-    .emit(exec)
 }
 
 #[cfg(test)]

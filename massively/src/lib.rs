@@ -59,9 +59,20 @@ pub(crate) use core::storage::{S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, S12
 pub(crate) use core::transform::materialize;
 pub(crate) use core::value::MStorageElement;
 pub(crate) use core::{
-    allocation, arg_reduce, arity, eval, indexed, launch, merge, ordering, output, predicate,
-    radix, read, reduce, scan, search, segmented, selection, storage, transform, value,
+    allocation, arg_reduce, arity, eval, extent, indexed, launch, merge, ordering, output,
+    predicate, radix, read, reduce, scan, search, segmented, selection, storage, transform, value,
 };
+
+/// Boolean value used by Massively device APIs.
+///
+/// This is an alias of `u32`: zero is false and every non-zero value is true.
+/// Values produced by Massively predicates are normalized to zero or one.
+pub type MBool = u32;
+
+/// Index and logical-length value used by Massively device APIs.
+///
+/// This is an alias of `u32`.
+pub type MIndex = u32;
 
 pub use api::iter::{
     MAlloc, MIter, MIterMut, MStorage, MVec, RadixKey, zip2, zip3, zip4, zip5, zip6, zip7, zip8,
@@ -71,11 +82,13 @@ pub use api::iter::{
 pub use api::iter::{MItem, Zipped};
 #[doc(hidden)]
 pub use api::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor};
+pub use api::value::MVal;
 pub use api::{Error, lazy, op, util};
 /// Common public data and operation types.
 pub mod prelude {
     pub use crate::{
-        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MAlloc, MIter, MIterMut, MStorage, MVec,
-        RadixKey, zip2, zip3, zip4, zip5, zip6, zip7, zip8, zip9, zip10, zip11, zip12,
+        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MAlloc, MBool, MIndex, MIter, MIterMut,
+        MStorage, MVal, MVec, RadixKey, zip2, zip3, zip4, zip5, zip6, zip7, zip8, zip9, zip10,
+        zip11, zip12,
     };
 }

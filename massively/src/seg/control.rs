@@ -1,6 +1,8 @@
 use cubecl::prelude::*;
 
-use crate::{DeviceVec, Error, Executor, MIter, MIterMut, op::BinaryPredicateOp, op::ReductionOp};
+use crate::{
+    DeviceVec, Error, Executor, MIndex, MIter, MIterMut, op::BinaryPredicateOp, op::ReductionOp,
+};
 
 const BLOCK_SIZE: u32 = 256;
 
@@ -10,7 +12,7 @@ fn mark_segment_heads_kernel(offsets: &[u32], segment_count: &[u32], heads: &mut
     if segment < segment_count[0] as usize {
         let start = offsets[segment] as usize;
         let end = offsets[segment + 1usize] as usize;
-        if start < end {
+        if start < end && start < heads.len() {
             heads[start] = segment as u32 + 1u32;
         }
     }
@@ -128,8 +130,8 @@ pub(crate) struct EqualU32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for EqualU32 {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs == rhs
+    fn apply(lhs: u32, rhs: u32) -> crate::MBool {
+        crate::op::mbool(lhs == rhs)
     }
 }
 
@@ -137,8 +139,8 @@ pub(crate) struct LessU32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for LessU32 {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs < rhs
+    fn apply(lhs: u32, rhs: u32) -> crate::MBool {
+        crate::op::mbool(lhs < rhs)
     }
 }
 
@@ -157,7 +159,7 @@ impl<R: Runtime> SegmentControl<R> {
         value_len: usize,
     ) -> Result<Self, Error>
     where
-        Offsets: MIter<R, Item = u32>,
+        Offsets: MIter<R, Item = MIndex>,
     {
         let offsets = crate::api::iter::materialize_u32(exec, offsets)?;
         Self::from_materialized(exec, offsets, value_len)
@@ -168,10 +170,11 @@ impl<R: Runtime> SegmentControl<R> {
         offsets: DeviceVec<R, u32>,
         value_len: usize,
     ) -> Result<Self, Error> {
-        let Some(segment_count) = offsets.len().checked_sub(1) else {
+        let Some(segment_count) = offsets.capacity().checked_sub(1) else {
             return Err(Error::LengthMismatch { left: 1, right: 0 });
         };
-        let heads = exec.full(value_len, 0u32)?;
+        let zero = exec.value(0u32)?;
+        let heads = exec.full(value_len, &zero)?;
 
         if segment_count != 0 && value_len != 0 {
             let segment_count_u32 = u32::try_from(segment_count)
@@ -184,9 +187,9 @@ impl<R: Runtime> SegmentControl<R> {
                     exec.client(),
                     crate::launch::cube_count_1d(segment_count.div_ceil(BLOCK_SIZE as usize))?,
                     CubeDim::new_1d(BLOCK_SIZE),
-                    BufferArg::from_raw_parts(offsets.handle.clone(), offsets.len()),
+                    BufferArg::from_raw_parts(offsets.handle.clone(), offsets.capacity()),
                     BufferArg::from_raw_parts(segment_count_handle, 1),
-                    BufferArg::from_raw_parts(heads.handle.clone(), heads.len()),
+                    BufferArg::from_raw_parts(heads.handle.clone(), heads.capacity()),
                 );
             }
         }
@@ -219,10 +222,10 @@ impl<R: Runtime> SegmentControl<R> {
                 exec.client(),
                 crate::launch::cube_count_1d(self.value_len.div_ceil(BLOCK_SIZE as usize))?,
                 CubeDim::new_1d(BLOCK_SIZE),
-                BufferArg::from_raw_parts(self.offsets.handle.clone(), self.offsets.len()),
-                BufferArg::from_raw_parts(self.ids.handle.clone(), self.ids.len()),
+                BufferArg::from_raw_parts(self.offsets.handle.clone(), self.offsets.capacity()),
+                BufferArg::from_raw_parts(self.ids.handle.clone(), self.ids.capacity()),
                 BufferArg::from_raw_parts(len_handle, 1),
-                BufferArg::from_raw_parts(indices.handle.clone(), indices.len()),
+                BufferArg::from_raw_parts(indices.handle.clone(), indices.capacity()),
             );
         }
         Ok(indices)
@@ -233,10 +236,10 @@ impl<R: Runtime> SegmentControl<R> {
         exec: &Executor<R>,
         flags: &DeviceVec<R, u32>,
     ) -> Result<(), Error> {
-        if flags.len() != self.value_len {
+        if flags.capacity() != self.value_len {
             return Err(Error::LengthMismatch {
                 left: self.value_len,
-                right: flags.len(),
+                right: flags.capacity(),
             });
         }
         if self.value_len == 0 {
@@ -251,9 +254,9 @@ impl<R: Runtime> SegmentControl<R> {
                 exec.client(),
                 crate::launch::cube_count_1d(self.value_len.div_ceil(BLOCK_SIZE as usize))?,
                 CubeDim::new_1d(BLOCK_SIZE),
-                BufferArg::from_raw_parts(self.heads.handle.clone(), self.heads.len()),
+                BufferArg::from_raw_parts(self.heads.handle.clone(), self.heads.capacity()),
                 BufferArg::from_raw_parts(len_handle, 1),
-                BufferArg::from_raw_parts(flags.handle.clone(), flags.len()),
+                BufferArg::from_raw_parts(flags.handle.clone(), flags.capacity()),
             );
         }
         Ok(())
@@ -264,10 +267,10 @@ impl<R: Runtime> SegmentControl<R> {
         exec: &Executor<R>,
         flags: &DeviceVec<R, u32>,
     ) -> Result<(), Error> {
-        if flags.len() != self.value_len {
+        if flags.capacity() != self.value_len {
             return Err(Error::LengthMismatch {
                 left: self.value_len,
-                right: flags.len(),
+                right: flags.capacity(),
             });
         }
         if self.value_len == 0 {
@@ -282,9 +285,9 @@ impl<R: Runtime> SegmentControl<R> {
                 exec.client(),
                 crate::launch::cube_count_1d(self.value_len.div_ceil(BLOCK_SIZE as usize))?,
                 CubeDim::new_1d(BLOCK_SIZE),
-                BufferArg::from_raw_parts(self.heads.handle.clone(), self.heads.len()),
+                BufferArg::from_raw_parts(self.heads.handle.clone(), self.heads.capacity()),
                 BufferArg::from_raw_parts(len_handle, 1),
-                BufferArg::from_raw_parts(flags.handle.clone(), flags.len()),
+                BufferArg::from_raw_parts(flags.handle.clone(), flags.capacity()),
             );
         }
         Ok(())
@@ -295,10 +298,10 @@ impl<R: Runtime> SegmentControl<R> {
         exec: &Executor<R>,
         breaks: &DeviceVec<R, u32>,
     ) -> Result<DeviceVec<R, u32>, Error> {
-        if breaks.len() != self.value_len {
+        if breaks.capacity() != self.value_len {
             return Err(Error::LengthMismatch {
                 left: self.value_len,
-                right: breaks.len(),
+                right: breaks.capacity(),
             });
         }
         let candidates = exec.alloc::<u32>(self.value_len);
@@ -314,12 +317,12 @@ impl<R: Runtime> SegmentControl<R> {
                 exec.client(),
                 crate::launch::cube_count_1d(self.value_len.div_ceil(BLOCK_SIZE as usize))?,
                 CubeDim::new_1d(BLOCK_SIZE),
-                BufferArg::from_raw_parts(self.offsets.handle.clone(), self.offsets.len()),
-                BufferArg::from_raw_parts(self.heads.handle.clone(), self.heads.len()),
-                BufferArg::from_raw_parts(self.ids.handle.clone(), self.ids.len()),
-                BufferArg::from_raw_parts(breaks.handle.clone(), breaks.len()),
+                BufferArg::from_raw_parts(self.offsets.handle.clone(), self.offsets.capacity()),
+                BufferArg::from_raw_parts(self.heads.handle.clone(), self.heads.capacity()),
+                BufferArg::from_raw_parts(self.ids.handle.clone(), self.ids.capacity()),
+                BufferArg::from_raw_parts(breaks.handle.clone(), breaks.capacity()),
                 BufferArg::from_raw_parts(len_handle, 1),
-                BufferArg::from_raw_parts(candidates.handle.clone(), candidates.len()),
+                BufferArg::from_raw_parts(candidates.handle.clone(), candidates.capacity()),
             );
         }
         Ok(candidates)
@@ -330,10 +333,10 @@ impl<R: Runtime> SegmentControl<R> {
         exec: &Executor<R>,
         reduced: &DeviceVec<R, u32>,
     ) -> Result<DeviceVec<R, u32>, Error> {
-        if reduced.len() != self.segment_count {
+        if reduced.capacity() != self.segment_count {
             return Err(Error::LengthMismatch {
                 left: self.segment_count,
-                right: reduced.len(),
+                right: reduced.capacity(),
             });
         }
         let output = exec.alloc::<u32>(self.segment_count);
@@ -352,10 +355,10 @@ impl<R: Runtime> SegmentControl<R> {
                 exec.client(),
                 crate::launch::cube_count_1d(self.segment_count.div_ceil(BLOCK_SIZE as usize))?,
                 CubeDim::new_1d(BLOCK_SIZE),
-                BufferArg::from_raw_parts(self.offsets.handle.clone(), self.offsets.len()),
-                BufferArg::from_raw_parts(reduced.handle.clone(), reduced.len()),
+                BufferArg::from_raw_parts(self.offsets.handle.clone(), self.offsets.capacity()),
+                BufferArg::from_raw_parts(reduced.handle.clone(), reduced.capacity()),
                 BufferArg::from_raw_parts(segment_count_handle, 1),
-                BufferArg::from_raw_parts(output.handle.clone(), output.len()),
+                BufferArg::from_raw_parts(output.handle.clone(), output.capacity()),
             );
         }
         Ok(output)
@@ -368,16 +371,17 @@ impl<R: Runtime> SegmentControl<R> {
         flags: DeviceVec<R, u32>,
         output: Output,
         output_offsets: OutputOffsets,
-    ) -> Result<u32, Error>
+    ) -> Result<DeviceVec<R, u32>, Error>
     where
         Input: crate::core::facade::KernelInput<R, Item = Output::Item>,
         Output: MIterMut<R>,
-        OutputOffsets: MIterMut<R, Item = u32>,
+        OutputOffsets: MIterMut<R, Item = MIndex>,
     {
         let positions = crate::core::scan::inclusive_scan_u32(exec, &flags)?;
         let offset_count = self.segment_count + 1;
         let selected_offsets = if self.value_len == 0 {
-            exec.full(offset_count, 0u32)?
+            let zero = exec.value(0u32)?;
+            exec.full(offset_count, &zero)?
         } else {
             let selected_offsets = exec.alloc::<u32>(offset_count);
             let offset_count_u32 = u32::try_from(offset_count)
@@ -390,12 +394,12 @@ impl<R: Runtime> SegmentControl<R> {
                     exec.client(),
                     crate::launch::cube_count_1d(offset_count.div_ceil(BLOCK_SIZE as usize))?,
                     CubeDim::new_1d(BLOCK_SIZE),
-                    BufferArg::from_raw_parts(self.offsets.handle.clone(), self.offsets.len()),
-                    BufferArg::from_raw_parts(positions.handle.clone(), positions.len()),
+                    BufferArg::from_raw_parts(self.offsets.handle.clone(), self.offsets.capacity()),
+                    BufferArg::from_raw_parts(positions.handle.clone(), positions.capacity()),
                     BufferArg::from_raw_parts(offset_count_handle, 1),
                     BufferArg::from_raw_parts(
                         selected_offsets.handle.clone(),
-                        selected_offsets.len(),
+                        selected_offsets.capacity(),
                     ),
                 );
             }
@@ -409,12 +413,13 @@ impl<R: Runtime> SegmentControl<R> {
         )?;
 
         let selection = crate::selection::SelectionControl::from_positions(exec, positions, false)?;
-        crate::api::algorithm::apply_permutation_into(
+        crate::vector::apply_permutation_prefix_into(
             exec,
             input,
             selection.indices().column(),
+            selection.count(),
             output,
         )?;
-        Ok(selection.count())
+        Ok(selection.count().clone())
     }
 }

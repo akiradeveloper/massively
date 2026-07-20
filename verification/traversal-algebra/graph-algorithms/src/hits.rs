@@ -42,10 +42,16 @@ fn normalize<R: Runtime>(
     exec: &Executor<R>,
     values: DeviceVec<R, f32>,
 ) -> common::Result<DeviceVec<R, f32>> {
-    let len = u32::try_from(values.len())
-        .map_err(|_| massively::Error::LengthTooLarge { len: values.len() })?;
-    let norm_squared =
-        vector::reduce(exec, lazy::transform(values.slice(..), Square), 0.0, SumF32)?;
+    let len = u32::try_from(values.capacity()).map_err(|_| massively::Error::LengthTooLarge {
+        len: values.capacity(),
+    })?;
+    let norm_squared = vector::reduce(
+        exec,
+        lazy::transform(values.slice(..), Square),
+        exec.value(0.0)?,
+        SumF32,
+    )?
+    .read(exec)?;
     let scale = if norm_squared == 0.0 {
         1.0
     } else {
@@ -53,7 +59,7 @@ fn normalize<R: Runtime>(
     };
     vector::transform(
         exec,
-        zip2(values.slice(..), lazy::constant(scale).take(len as usize)),
+        zip2(values.slice(..), lazy::constant(scale).take(len)),
         Scale,
     )
 }
@@ -67,16 +73,27 @@ pub fn solve<R: Runtime>(
     assert!(n != 0);
     let mut hubs = common::filled(exec, n as usize, 1.0f32)?;
     let mut authorities = common::filled(exec, n as usize, 1.0f32)?;
+    let zero = exec.value(0.0f32)?;
 
     for _ in 0..iterations {
-        authorities = graph::traverse(exec, graph.csr(), common::counting_u32(0, n as usize))?
-            .map(graph::source(hubs.slice(..)), Identity)
-            .reduce_by_destination(exec, 0.0, SumF32)?;
+        authorities = graph::traverse(
+            exec,
+            graph.csr(),
+            common::counting_u32(0, n as usize),
+            graph.edge_capacity()?,
+        )?
+        .map(graph::source(hubs.slice(..)), Identity)
+        .reduce_by_destination(exec, zero.clone(), SumF32)?;
         authorities = normalize(exec, authorities)?;
 
-        hubs = graph::traverse(exec, graph.csr(), common::counting_u32(0, n as usize))?
-            .map(graph::destination(authorities.slice(..)), Identity)
-            .reduce_by_source(exec, 0.0, SumF32)?;
+        hubs = graph::traverse(
+            exec,
+            graph.csr(),
+            common::counting_u32(0, n as usize),
+            graph.edge_capacity()?,
+        )?
+        .map(graph::destination(authorities.slice(..)), Identity)
+        .reduce_by_source(exec, zero.clone(), SumF32)?;
         hubs = normalize(exec, hubs)?;
     }
 

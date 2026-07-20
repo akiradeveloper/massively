@@ -12,8 +12,8 @@ struct Sum;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for Equal {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs == rhs
+    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+        massively::op::mbool(lhs == rhs)
     }
 }
 
@@ -61,6 +61,7 @@ fn bench_by_key_patterns(c: &mut Criterion) {
     let mut exclusive = c.benchmark_group("exclusive_scan_by_key_patterns");
     for &len in common::SIZES {
         let values = exec.to_device(&common::dense_f32(len));
+        let init = exec.value(0.0_f32).unwrap();
         for (pattern, host_keys) in key_patterns(len) {
             let keys = exec.to_device(&host_keys);
             exclusive.bench_function(BenchmarkId::new(pattern, len), |b| {
@@ -70,7 +71,7 @@ fn bench_by_key_patterns(c: &mut Criterion) {
                         black_box(keys.slice(..)),
                         black_box(values.slice(..)),
                         Equal,
-                        0.0,
+                        init.clone(),
                         Sum,
                     )
                     .unwrap();
@@ -85,6 +86,7 @@ fn bench_by_key_patterns(c: &mut Criterion) {
     let mut reduce = c.benchmark_group("reduce_by_key_patterns");
     for &len in common::SIZES {
         let values = exec.to_device(&common::dense_f32(len));
+        let init = exec.value(0.0_f32).unwrap();
         for (pattern, host_keys) in key_patterns(len) {
             let keys = exec.to_device(&host_keys);
             reduce.bench_function(BenchmarkId::new(pattern, len), |b| {
@@ -94,7 +96,7 @@ fn bench_by_key_patterns(c: &mut Criterion) {
                         black_box(keys.slice(..)),
                         black_box(values.slice(..)),
                         Equal,
-                        0.0,
+                        init.clone(),
                         Sum,
                     )
                     .unwrap();

@@ -1,5 +1,7 @@
 //! Recursive allocation of flat-row SoA storage.
 
+#![allow(private_interfaces)]
+
 use std::ops::RangeBounds;
 
 use cubecl::prelude::Runtime;
@@ -35,6 +37,8 @@ pub trait RowStorage<R: Runtime> {
 
     fn len(&self) -> Result<usize, Error>;
     fn truncate(&mut self, len: usize);
+    fn logical_extent(&self) -> crate::extent::LogicalExtent;
+    fn set_logical_extent(&mut self, extent: crate::extent::LogicalExtent);
     fn read(&self) -> Self::Read;
     fn write(&self) -> Self::Write;
     fn read_first(&self, exec: &Executor<R>) -> Result<Self::Item, Error>;
@@ -61,10 +65,16 @@ where
     type Write = DeviceSliceMut<T>;
 
     fn len(&self) -> Result<usize, Error> {
-        Ok(self.len())
+        Ok(self.capacity())
     }
     fn truncate(&mut self, len: usize) {
         DeviceVec::truncate(self, len);
+    }
+    fn logical_extent(&self) -> crate::extent::LogicalExtent {
+        DeviceVec::logical_extent(self)
+    }
+    fn set_logical_extent(&mut self, extent: crate::extent::LogicalExtent) {
+        DeviceVec::set_logical_extent(self, extent);
     }
     fn read(&self) -> Self::Read {
         self.column()
@@ -86,10 +96,10 @@ where
     }
 
     fn read_item(&self, exec: &Executor<R>, index: usize) -> Result<Self::Item, Error> {
-        if index >= self.len() {
+        if index >= self.capacity() {
             return Err(Error::LengthMismatch {
                 left: index + 1,
-                right: self.len(),
+                right: self.capacity(),
             });
         }
         Ok(exec.to_host(&self.slice(index..index + 1))?[0])
@@ -163,6 +173,15 @@ where
     fn truncate(&mut self, len: usize) {
         self.0.truncate(len);
         self.1.truncate(len);
+    }
+    fn logical_extent(&self) -> crate::extent::LogicalExtent {
+        RowStorage::logical_extent(&self.0)
+            .zipped(&RowStorage::logical_extent(&self.1))
+            .expect("storage columns have equal logical extents")
+    }
+    fn set_logical_extent(&mut self, extent: crate::extent::LogicalExtent) {
+        RowStorage::set_logical_extent(&mut self.0, extent.clone());
+        RowStorage::set_logical_extent(&mut self.1, extent);
     }
 
     fn read(&self) -> Self::Read {
@@ -705,12 +724,20 @@ where
         exec.alloc_column::<T>(len)
     }
 
-    fn len(&self) -> Result<usize, Error> {
-        Ok(self.len())
+    fn capacity(&self) -> Result<crate::MIndex, Error> {
+        crate::api::iter::logical_len(self.capacity())
     }
 
-    fn truncate(&mut self, len: usize) {
-        DeviceVec::truncate(self, len);
+    fn truncate(&mut self, len: crate::MIndex) {
+        DeviceVec::truncate(self, len as usize);
+    }
+
+    fn logical_extent(&self) -> crate::extent::LogicalExtent {
+        DeviceVec::logical_extent(self)
+    }
+
+    fn set_logical_extent(&mut self, extent: crate::extent::LogicalExtent) {
+        DeviceVec::set_logical_extent(self, extent);
     }
 
     fn into_columns(self) -> Self::Columns {
@@ -721,7 +748,7 @@ where
     where
         Bounds: RangeBounds<usize>,
     {
-        let (start, count) = crate::api::iter::resolve_iter_range(self.len(), range);
+        let (start, count) = crate::api::iter::resolve_iter_range(self.capacity(), range);
         self.slice(start..start + count)
     }
 
@@ -729,7 +756,7 @@ where
     where
         Bounds: RangeBounds<usize>,
     {
-        let (start, count) = crate::api::iter::resolve_iter_range(self.len(), range);
+        let (start, count) = crate::api::iter::resolve_iter_range(self.capacity(), range);
         self.slice_mut(start..start + count)
     }
 }
@@ -766,13 +793,25 @@ where
         Zip::new(Left::allocate(exec, len), Right::allocate(exec, len))
     }
 
-    fn len(&self) -> Result<usize, Error> {
-        RowStorage::len(self)
+    fn capacity(&self) -> Result<crate::MIndex, Error> {
+        crate::api::iter::logical_len(RowStorage::len(self)?)
     }
 
-    fn truncate(&mut self, len: usize) {
+    fn truncate(&mut self, len: crate::MIndex) {
         self.0.truncate(len);
         self.1.truncate(len);
+    }
+
+    fn logical_extent(&self) -> crate::extent::LogicalExtent {
+        self.0
+            .logical_extent()
+            .zipped(&self.1.logical_extent())
+            .expect("storage columns have equal logical extents")
+    }
+
+    fn set_logical_extent(&mut self, extent: crate::extent::LogicalExtent) {
+        self.0.set_logical_extent(extent.clone());
+        self.1.set_logical_extent(extent);
     }
 
     fn into_columns(self) -> Self::Columns {
@@ -783,8 +822,8 @@ where
     where
         Bounds: RangeBounds<usize>,
     {
-        let len = MStorage::len(self).expect("storage columns have equal lengths");
-        let (start, count) = crate::api::iter::resolve_iter_range(len, range);
+        let len = MStorage::capacity(self).expect("storage columns have equal lengths");
+        let (start, count) = crate::api::iter::resolve_iter_range(len as usize, range);
         StorageSlice::new(self, start, count)
     }
 
@@ -792,8 +831,8 @@ where
     where
         Bounds: RangeBounds<usize>,
     {
-        let len = MStorage::len(self).expect("storage columns have equal lengths");
-        let (start, count) = crate::api::iter::resolve_iter_range(len, range);
+        let len = MStorage::capacity(self).expect("storage columns have equal lengths");
+        let (start, count) = crate::api::iter::resolve_iter_range(len as usize, range);
         StorageSliceMut::new(self, start, count)
     }
 }
@@ -812,7 +851,8 @@ impl<R: Runtime> Executor<R> {
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     /// let output = exec.alloc::<u32>(4);
     /// let values = exec.alloc::<u32>(4);
-    /// fill(&exec, 7_u32, values.slice_mut(..)).unwrap();
+    /// let value = exec.value(7_u32).unwrap();
+    /// fill(&exec, &value, values.slice_mut(..)).unwrap();
     /// scatter(
     ///     &exec,
     ///     values.slice(..),
@@ -842,16 +882,21 @@ impl<R: Runtime> Executor<R> {
     /// use massively::Executor;
     ///
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-    /// let values = exec.full::<u32>(3, 42).unwrap();
+    /// let value = exec.value(42_u32).unwrap();
+    /// let values = exec.full(3, &value).unwrap();
     ///
     /// assert_eq!(exec.to_host(&values).unwrap(), vec![42, 42, 42]);
     /// ```
-    pub fn full<Item>(&self, len: usize, value: Item) -> Result<crate::MVec<R, Item>, Error>
+    pub fn full<Item>(
+        &self,
+        len: usize,
+        value: &crate::MVal<R, Item>,
+    ) -> Result<crate::MVec<R, Item>, Error>
     where
         Item: MAlloc<R>,
     {
         let storage = self.alloc::<Item>(len);
-        storage.slice_mut(..).fill_with(self, value)?;
+        crate::vector::fill(self, value, MStorage::slice_mut(&storage, ..))?;
         Ok(storage)
     }
 }
@@ -899,7 +944,15 @@ where
 {
     fn prepend(self, exec: &Executor<R>, prefix: Self::Item) -> Result<Self::Storage, Error> {
         let len = self.logical_len()?;
-        let prefixed = Input::Item::alloc_scratch(exec, len + 1);
+        let input_extent = self.logical_extent()?;
+        let output_extent = crate::extent::LogicalExtent::add(
+            exec,
+            &crate::extent::LogicalExtent::fixed(1),
+            &input_extent,
+            len + 1,
+        )?;
+        let mut prefixed = Input::Item::alloc_scratch(exec, len + 1);
+        prefixed.set_logical_extent(output_extent);
         prefixed.slice_mut(..1).fill_output(exec, prefix)?;
         materialize(exec, self, prefixed.slice_mut(1..))?;
         Ok(prefixed)
@@ -930,7 +983,9 @@ where
 
     fn normalize(self, exec: &Executor<R>) -> Result<Self::Storage, Error> {
         let len = self.logical_len()?;
-        let storage = Input::Item::alloc_scratch(exec, len);
+        let extent = self.logical_extent()?;
+        let mut storage = Input::Item::alloc_scratch(exec, len);
+        storage.set_logical_extent(extent);
         materialize(exec, self, storage.write())?;
         Ok(storage)
     }
@@ -974,7 +1029,9 @@ where
 
     fn normalize_owned(self, exec: &Executor<R>) -> Result<Self::OwnedStorage, Error> {
         let len = self.logical_len()?;
-        let storage = exec.alloc_row::<Input::Item>(len);
+        let extent = self.logical_extent()?;
+        let mut storage = exec.alloc_row::<Input::Item>(len);
+        storage.set_logical_extent(extent);
         materialize(exec, self, storage.write())?;
         Ok(storage)
     }
@@ -999,7 +1056,9 @@ where
     <Input::Item as ScratchStorage<R>>::Storage: RowStorage<R, Item = Input::Item>,
 {
     let len = input.logical_len()?;
-    let storage = Input::Item::alloc_scratch(exec, len);
+    let extent = input.logical_extent()?;
+    let mut storage = Input::Item::alloc_scratch(exec, len);
+    storage.set_logical_extent(extent);
     crate::transform::materialize_fixed(exec, &input, &storage.write())?;
     Ok(storage)
 }
@@ -1041,7 +1100,8 @@ mod tests {
     #[test]
     fn full_writes_and_exposes_flat_columns() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-        let storage = exec.full::<FlatRow3>(2, (7, 3.5, -2)).unwrap();
+        let value = exec.value((7, 3.5, -2)).unwrap();
+        let storage = exec.full::<FlatRow3>(2, &value).unwrap();
         let (a, b, c) = storage.into_columns();
 
         assert_eq!(exec.to_host(&a).unwrap(), vec![7, 7]);

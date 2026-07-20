@@ -1,7 +1,8 @@
 use cubecl::prelude::{CubeType, Runtime};
 
 use crate::{
-    Error, Executor, MAlloc, MIter, MIterMut, MStorage, MVec, op::PredicateOp, op::UnaryOp,
+    Error, Executor, MAlloc, MIndex, MIter, MIterMut, MStorage, MVal, MVec, op::PredicateOp,
+    op::UnaryOp,
 };
 
 struct CopyWhereOperation<'a, R: Runtime, Input, Stencil, const REMOVE: bool> {
@@ -16,9 +17,9 @@ where
     R: Runtime,
     Item: CubeType + Send + Sync + 'static,
     Input: MIter<R, Item = Item>,
-    Stencil: MIter<R, Item = bool>,
+    Stencil: MIter<R, Item = crate::MBool>,
 {
-    type Result = Result<u32, Error>;
+    type Result = Result<crate::DeviceVec<R, u32>, Error>;
 
     fn run<Output>(self, output: Output) -> Self::Result
     where
@@ -41,6 +42,33 @@ struct PartitionOperation<'a, R: Runtime, Input, Pred> {
     pred: Pred,
 }
 
+struct FillValueOperation<'a, R: Runtime, Item: MAlloc<R>> {
+    exec: &'a Executor<R>,
+    value: &'a MVal<R, Item>,
+}
+
+impl<R, Item> crate::api::iter::OutputOperation<R, Item> for FillValueOperation<'_, R, Item>
+where
+    R: Runtime,
+    Item: MAlloc<R>,
+{
+    type Result = Result<(), Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        let len = crate::output::OutputExpression::logical_len(&output)?;
+        crate::indexed::gather_direct(
+            self.exec,
+            crate::api::iter::lower::<R, _>(self.value.as_iter()),
+            crate::Constant::new(0u32, len),
+            output,
+        )
+    }
+}
+
 impl<R, Item, Input, Pred> crate::api::iter::OutputOperation<R, Item>
     for PartitionOperation<'_, R, Input, Pred>
 where
@@ -49,7 +77,7 @@ where
     Input: MIter<R, Item = Item>,
     Pred: PredicateOp<Item>,
 {
-    type Result = Result<u32, Error>;
+    type Result = Result<crate::DeviceVec<R, u32>, Error>;
 
     fn run<Output>(self, output: Output) -> Self::Result
     where
@@ -60,35 +88,6 @@ where
             self.exec,
             crate::api::iter::lower_fixed::<R, _>(self.input),
             self.pred,
-            output,
-        )
-    }
-}
-
-struct ReplaceWhereOperation<'a, R: Runtime, Item, Stencil> {
-    exec: &'a Executor<R>,
-    value: Item,
-    stencil: Stencil,
-}
-
-impl<R, Item, Stencil> crate::api::iter::OutputOperation<R, Item>
-    for ReplaceWhereOperation<'_, R, Item, Stencil>
-where
-    R: Runtime,
-    Item: CubeType + Send + Sync + 'static,
-    Stencil: MIter<R, Item = bool>,
-{
-    type Result = Result<(), Error>;
-
-    fn run<Output>(self, output: Output) -> Self::Result
-    where
-        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
-        Output: crate::api::iter::ConcreteOutput<R, Item>,
-    {
-        crate::selection::replace_where(
-            self.exec,
-            self.value,
-            crate::api::iter::lower::<R, _>(self.stencil),
             output,
         )
     }
@@ -108,7 +107,7 @@ where
     Item: CubeType + Send + Sync + 'static,
     Input: MIter<R>,
     Op: UnaryOp<Input::Item, Output = Item>,
-    Stencil: MIter<R, Item = bool>,
+    Stencil: MIter<R, Item = crate::MBool>,
 {
     type Result = Result<(), Error>;
 
@@ -133,15 +132,14 @@ where
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, lazy, op::U32ToBool, vector::copy_where};
+/// use massively::{Executor, vector::copy_where};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[10_u32, 20, 30, 40]);
 /// let stencil = exec.to_device(&[1_u32, 0, 1, 0]);
-/// let stencil = lazy::transform(stencil.slice(..), U32ToBool);
-/// let output = copy_where(&exec, input.slice(..), stencil).unwrap();
+/// let output = copy_where(&exec, input.slice(..), stencil.slice(..)).unwrap();
 ///
-/// assert_eq!(output.len(), 2);
+/// assert_eq!(output.read_len(&exec).unwrap(), 2);
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![10, 30]);
 /// ```
 pub fn copy_where<R, Input, Item, Stencil>(
@@ -153,12 +151,12 @@ where
     R: Runtime,
     Input: MIter<R, Item = Item>,
     Item: MAlloc<R>,
-    Stencil: MIter<R, Item = bool>,
+    Stencil: MIter<R, Item = crate::MBool>,
 {
-    let capacity = input.len()? as usize;
+    let capacity = input.capacity()? as usize;
     let mut output = exec.alloc::<Item>(capacity);
     let len = copy_where_into(exec, input, stencil, output.slice_mut(..))?;
-    output.truncate(len as usize);
+    output.set_logical_extent(len.logical_extent(capacity));
     Ok(output)
 }
 
@@ -169,42 +167,20 @@ pub(crate) fn copy_where_into<R, Input, Stencil, Output>(
     input: Input,
     stencil: Stencil,
     output: Output,
-) -> Result<u32, Error>
+) -> Result<MVal<R, MIndex>, Error>
 where
     R: Runtime,
     Input: MIter<R, Item = Output::Item>,
-    Stencil: MIter<R, Item = bool>,
+    Stencil: MIter<R, Item = crate::MBool>,
     Output: MIterMut<R>,
 {
-    output.run_output_operation(CopyWhereOperation::<_, _, _, false> {
-        exec,
-        input,
-        stencil,
-    })
-}
-
-/// Copies rows selected by a stored `u32` stencil after converting it at the read boundary.
-pub(crate) fn copy_where_raw_into<R, Input, Stencil, Output>(
-    exec: &Executor<R>,
-    input: Input,
-    stencil: Stencil,
-    output: Output,
-) -> Result<u32, Error>
-where
-    R: Runtime,
-    Input: MIter<R, Item = Output::Item>,
-    Stencil: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
-{
-    let stencil = crate::Transform::new(
-        crate::api::iter::lower::<R, _>(stencil),
-        crate::op::U32ToBool,
-    );
-    output.run_output_operation(CopyWhereOperation::<_, _, _, false> {
-        exec,
-        input,
-        stencil,
-    })
+    MVal::from_storage(
+        output.run_output_operation(CopyWhereOperation::<_, _, _, false> {
+            exec,
+            input,
+            stencil,
+        })?,
+    )
 }
 
 /// Copies rows whose stencil is false.
@@ -213,15 +189,14 @@ where
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, lazy, op::U32ToBool, vector::remove_where};
+/// use massively::{Executor, vector::remove_where};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[10_u32, 20, 30, 40]);
 /// let stencil = exec.to_device(&[1_u32, 0, 1, 0]);
-/// let stencil = lazy::transform(stencil.slice(..), U32ToBool);
-/// let output = remove_where(&exec, input.slice(..), stencil).unwrap();
+/// let output = remove_where(&exec, input.slice(..), stencil.slice(..)).unwrap();
 ///
-/// assert_eq!(output.len(), 2);
+/// assert_eq!(output.read_len(&exec).unwrap(), 2);
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![20, 40]);
 /// ```
 pub fn remove_where<R, Input, Item, Stencil>(
@@ -233,12 +208,12 @@ where
     R: Runtime,
     Input: MIter<R, Item = Item>,
     Item: MAlloc<R>,
-    Stencil: MIter<R, Item = bool>,
+    Stencil: MIter<R, Item = crate::MBool>,
 {
-    let capacity = input.len()? as usize;
+    let capacity = input.capacity()? as usize;
     let mut output = exec.alloc::<Item>(capacity);
     let len = remove_where_into(exec, input, stencil, output.slice_mut(..))?;
-    output.truncate(len as usize);
+    output.set_logical_extent(len.logical_extent(capacity));
     Ok(output)
 }
 
@@ -249,42 +224,20 @@ pub(crate) fn remove_where_into<R, Input, Stencil, Output>(
     input: Input,
     stencil: Stencil,
     output: Output,
-) -> Result<u32, Error>
+) -> Result<MVal<R, MIndex>, Error>
 where
     R: Runtime,
     Input: MIter<R, Item = Output::Item>,
-    Stencil: MIter<R, Item = bool>,
+    Stencil: MIter<R, Item = crate::MBool>,
     Output: MIterMut<R>,
 {
-    output.run_output_operation(CopyWhereOperation::<_, _, _, true> {
-        exec,
-        input,
-        stencil,
-    })
-}
-
-/// Copies rows rejected by a stored `u32` stencil after converting it at the read boundary.
-pub(crate) fn remove_where_raw_into<R, Input, Stencil, Output>(
-    exec: &Executor<R>,
-    input: Input,
-    stencil: Stencil,
-    output: Output,
-) -> Result<u32, Error>
-where
-    R: Runtime,
-    Input: MIter<R, Item = Output::Item>,
-    Stencil: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
-{
-    let stencil = crate::Transform::new(
-        crate::api::iter::lower::<R, _>(stencil),
-        crate::op::U32ToBool,
-    );
-    output.run_output_operation(CopyWhereOperation::<_, _, _, true> {
-        exec,
-        input,
-        stencil,
-    })
+    MVal::from_storage(
+        output.run_output_operation(CopyWhereOperation::<_, _, _, true> {
+            exec,
+            input,
+            stencil,
+        })?,
+    )
 }
 
 /// Stably partitions passing items before failing items.
@@ -302,8 +255,8 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::PredicateOp<u32> for Even {
-///     fn apply(value: u32) -> bool {
-///         value % 2 == 0
+///     fn apply(value: u32) -> massively::MBool {
+///         op::mbool(value % 2 == 0)
 ///     }
 /// }
 ///
@@ -311,24 +264,26 @@ where
 /// let input = exec.to_device(&[1_u32, 2, 3, 4]);
 /// let (output, boundary) = partition(&exec, input.slice(..), Even).unwrap();
 ///
-/// assert_eq!(boundary, 2);
+/// assert_eq!(boundary.read(&exec).unwrap(), 2);
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![2, 4, 1, 3]);
 /// ```
 pub fn partition<R, Input, Item, Pred>(
     exec: &Executor<R>,
     input: Input,
     pred: Pred,
-) -> Result<(MVec<R, Item>, usize), Error>
+) -> Result<(MVec<R, Item>, MVal<R, MIndex>), Error>
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
     Item: MAlloc<R>,
     Pred: PredicateOp<Item>,
 {
-    let len = input.len()? as usize;
-    let output = exec.alloc::<Item>(len);
+    let len = input.capacity()? as usize;
+    let extent = input.logical_extent()?;
+    let mut output = exec.alloc::<Item>(len);
+    output.set_logical_extent(extent);
     let boundary = partition_into(exec, input, pred, output.slice_mut(..))?;
-    Ok((output, boundary as usize))
+    Ok((output, boundary))
 }
 
 /// Stably partitions into caller-provided storage.
@@ -338,14 +293,14 @@ pub(crate) fn partition_into<R, Input, Output, Pred>(
     input: Input,
     pred: Pred,
     output: Output,
-) -> Result<u32, Error>
+) -> Result<MVal<R, MIndex>, Error>
 where
     R: Runtime,
     Input: MIter<R, Item = Output::Item>,
     Output: MIterMut<R>,
     Pred: PredicateOp<Input::Item>,
 {
-    output.run_output_operation(PartitionOperation { exec, input, pred })
+    MVal::from_storage(output.run_output_operation(PartitionOperation { exec, input, pred })?)
 }
 
 /// Fills every output item with one value.
@@ -358,30 +313,22 @@ where
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let output = exec.alloc::<u32>(4);
-/// fill(&exec, 7_u32, output.slice_mut(..)).unwrap();
+/// let value = exec.value(7_u32).unwrap();
+/// fill(&exec, &value, output.slice_mut(..)).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![7, 7, 7, 7]);
 /// ```
-pub fn fill<R, Output>(exec: &Executor<R>, value: Output::Item, output: Output) -> Result<(), Error>
-where
-    R: Runtime,
-    Output: MIterMut<R>,
-{
-    fill_into(exec, value, output)
-}
-
-/// Fills caller-provided storage with one value.
-#[doc(hidden)]
-pub(crate) fn fill_into<R, Output>(
+pub fn fill<R, Output>(
     exec: &Executor<R>,
-    value: Output::Item,
+    value: &MVal<R, Output::Item>,
     output: Output,
 ) -> Result<(), Error>
 where
     R: Runtime,
     Output: MIterMut<R>,
+    Output::Item: MAlloc<R>,
 {
-    output.fill_with(exec, value)
+    output.run_output_operation(FillValueOperation { exec, value })
 }
 
 /// Replaces output items whose stencil is true.
@@ -390,39 +337,38 @@ where
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, lazy, op::U32ToBool, vector::replace_where};
+/// use massively::{Executor, vector::replace_where};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let stencil = exec.to_device(&[0_u32, 1, 0, 1]);
-/// let stencil = lazy::transform(stencil.slice(..), U32ToBool);
 /// let output = exec.to_device(&[10_u32, 20, 30, 40]);
 ///
-/// replace_where(
-///     &exec,
-///     99,
-///     stencil,
-///     output.slice_mut(..),
-/// )
+/// let value = exec.value(99_u32).unwrap();
+/// replace_where(&exec, &value, stencil.slice(..), output.slice_mut(..))
 /// .unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![10, 99, 30, 99]);
 /// ```
 pub fn replace_where<R, Stencil, Output>(
     exec: &Executor<R>,
-    value: Output::Item,
+    value: &MVal<R, Output::Item>,
     stencil: Stencil,
     output: Output,
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Stencil: MIter<R, Item = bool>,
+    Stencil: MIter<R, Item = crate::MBool>,
     Output: MIterMut<R>,
+    Output::Item: MAlloc<R>,
 {
-    output.run_output_operation(ReplaceWhereOperation {
+    let len = stencil.capacity()?;
+    crate::vector::gather_where(
         exec,
-        value,
+        value.as_iter(),
+        crate::lazy::constant(0u32).take(len),
         stencil,
-    })
+        output,
+    )
 }
 
 /// Applies an operation where the stencil is true.
@@ -434,11 +380,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{
-///     Executor, lazy,
-///     op::{self, U32ToBool},
-///     vector::transform_where,
-/// };
+/// use massively::{Executor, op, vector::transform_where};
 ///
 /// struct AddOne;
 ///
@@ -454,14 +396,13 @@ where
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3]);
 /// let stencil = exec.to_device(&[1_u32, 0, 1]);
-/// let stencil = lazy::transform(stencil.slice(..), U32ToBool);
 /// let output = exec.to_device(&[100_u32, 100, 100]);
 ///
 /// transform_where(
 ///     &exec,
 ///     input.slice(..),
 ///     AddOne,
-///     stencil,
+///     stencil.slice(..),
 ///     output.slice_mut(..),
 /// )
 /// .unwrap();
@@ -478,37 +419,10 @@ pub fn transform_where<R, Input, Stencil, Output, Op>(
 where
     R: Runtime,
     Input: MIter<R>,
-    Stencil: MIter<R, Item = bool>,
+    Stencil: MIter<R, Item = crate::MBool>,
     Output: MIterMut<R>,
     Op: UnaryOp<Input::Item, Output = Output::Item>,
 {
-    output.run_output_operation(TransformWhereOperation {
-        exec,
-        input,
-        op,
-        stencil,
-    })
-}
-
-/// Applies a selected transform from a stored `u32` stencil after converting it at the read boundary.
-pub(crate) fn transform_where_raw<R, Input, Stencil, Output, Op>(
-    exec: &Executor<R>,
-    input: Input,
-    op: Op,
-    stencil: Stencil,
-    output: Output,
-) -> Result<(), Error>
-where
-    R: Runtime,
-    Input: MIter<R>,
-    Stencil: MIter<R, Item = u32>,
-    Output: MIterMut<R>,
-    Op: UnaryOp<Input::Item, Output = Output::Item>,
-{
-    let stencil = crate::Transform::new(
-        crate::api::iter::lower::<R, _>(stencil),
-        crate::op::U32ToBool,
-    );
     output.run_output_operation(TransformWhereOperation {
         exec,
         input,

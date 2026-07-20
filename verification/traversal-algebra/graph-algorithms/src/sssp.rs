@@ -37,9 +37,17 @@ pub fn solve<R: Runtime>(
         common::indices(frontier.slice(..)),
         distance.slice_mut(..),
     )?;
+    let infinity = exec.value(INF)?;
 
-    while !frontier.is_empty() {
-        frontier = graph::traverse(exec, graph.graph().csr(), frontier.slice(..))?
+    while frontier.capacity() != 0 {
+        frontier = common::materialize_exact(
+            exec,
+            graph::traverse(
+                exec,
+                graph.graph().csr(),
+                frontier.slice(..),
+                graph.graph().edge_capacity()?,
+            )?
             .map(
                 zip2(
                     graph::source(distance.slice(..)),
@@ -47,7 +55,13 @@ pub fn solve<R: Runtime>(
                 ),
                 AddDistance,
             )
-            .relax_min_by_destination(exec, INF, distance.slice(..), distance.slice_mut(..))?;
+            .relax_min_by_destination(
+                exec,
+                infinity.clone(),
+                distance.slice(..),
+                distance.slice_mut(..),
+            )?,
+        )?;
     }
 
     Ok(distance)

@@ -1,15 +1,18 @@
+#![allow(private_interfaces)]
+
 use core::marker::PhantomData;
 use cubecl::prelude::{CubeType, Runtime};
 use std::ops::{Bound, RangeBounds};
 
 use crate::core::iter::Zip;
-use crate::{Error, Executor};
+use crate::{Error, Executor, MIndex};
 use crate::{
     output::{ReadOutput, SliceOutput},
     read::SliceExpression,
 };
 
 /// Owned device storage for one flat logical row type.
+#[allow(private_interfaces)]
 pub trait MStorage<R: Runtime>: Sized {
     type Item: CubeType + Send + Sync + 'static;
 
@@ -35,16 +38,66 @@ pub trait MStorage<R: Runtime>: Sized {
     #[doc(hidden)]
     fn allocate(exec: &Executor<R>, len: usize) -> Self;
 
-    fn len(&self) -> Result<usize, Error>;
+    /// Returns the host-known physical allocation bound.
+    ///
+    /// This never synchronizes with the device. The logical length can be
+    /// shorter than this bound; use [`MStorage::len`] when it must remain on
+    /// the device or [`MStorage::read_len`] at an explicit host boundary.
+    fn capacity(&self) -> Result<MIndex, Error>;
 
-    fn is_empty(&self) -> Result<bool, Error> {
-        Ok(self.len()? == 0)
+    /// Returns the logical item count as a device-resident value.
+    ///
+    /// Calling this method never copies the count to the host.
+    fn len(&self, exec: &Executor<R>) -> Result<crate::MVal<R, MIndex>, Error>
+    where
+        MIndex: MAlloc<R, Owned = crate::DeviceVec<R, MIndex>>,
+    {
+        crate::MVal::from_storage(self.logical_extent().materialize(exec)?)
+    }
+
+    /// Explicitly reads the logical item count.
+    ///
+    /// This returns immediately for fixed-size storage. If the count was
+    /// produced on the device, it is the synchronization boundary that copies
+    /// that scalar to the host.
+    fn read_len(&self, exec: &Executor<R>) -> Result<MIndex, Error> {
+        let len = self.logical_extent().read(exec)?;
+        MIndex::try_from(len).map_err(|_| Error::LengthTooLarge { len })
+    }
+
+    /// Tests the logical length on the device without synchronizing the host.
+    fn is_empty(&self, exec: &Executor<R>) -> Result<crate::MVal<R, crate::MBool>, Error>
+    where
+        crate::MBool: MAlloc<R, Owned = crate::DeviceVec<R, crate::MBool>>,
+    {
+        crate::MVal::from_storage(crate::extent::LogicalExtent::equal_value(
+            exec,
+            &self.logical_extent(),
+            &crate::extent::LogicalExtent::fixed(0),
+        )?)
     }
 
     /// Shrinks the logical length without copying or reallocating device memory.
     ///
     /// Multi-column storage truncates every physical column to the same length.
-    fn truncate(&mut self, len: usize);
+    fn truncate(&mut self, len: MIndex);
+
+    /// Records an already-verified host length as exact.
+    ///
+    /// This is reserved for explicit synchronization boundaries that first
+    /// read the device-resident length. Ordinary GPU pipelines must preserve
+    /// the original device extent instead.
+    #[doc(hidden)]
+    fn set_fixed_len(&mut self, len: MIndex) {
+        self.truncate(len);
+        self.set_logical_extent(crate::extent::LogicalExtent::fixed(len as usize));
+    }
+
+    #[doc(hidden)]
+    fn logical_extent(&self) -> crate::extent::LogicalExtent;
+
+    #[doc(hidden)]
+    fn set_logical_extent(&mut self, extent: crate::extent::LogicalExtent);
 
     /// Consumes this storage and returns its columns as a flat native tuple.
     fn into_columns(self) -> Self::Columns;
@@ -100,28 +153,29 @@ where
 /// Internal algorithm dispatch carried by every canonically allocatable row.
 #[doc(hidden)]
 pub(crate) trait ItemDispatch<R: Runtime> {
-    type Item: CubeType + Send + Sync + Sized + 'static;
+    type Item: CubeType + Send + Sync + Sized + 'static + crate::allocation::ScratchStorage<R>;
+    type Storage: MStorage<R, Item = Self::Item>;
+
+    fn store_value(exec: &Executor<R>, value: Self::Item) -> Result<Self::Storage, Error>;
+
+    fn read_value(exec: &Executor<R>, storage: &Self::Storage) -> Result<Self::Item, Error>;
+
+    fn scratch_ref(
+        storage: &Self::Storage,
+    ) -> &<Self::Item as crate::allocation::ScratchStorage<R>>::Storage;
+
+    fn into_scratch(
+        storage: Self::Storage,
+    ) -> <Self::Item as crate::allocation::ScratchStorage<R>>::Storage;
 
     fn reduce<Input, Op>(
         exec: &Executor<R>,
         input: Input,
-        init: Self::Item,
+        init: Self::Storage,
         op: Op,
-    ) -> Result<Self::Item, Error>
+    ) -> Result<Self::Storage, Error>
     where
         Input: MIter<R, Item = Self::Item>,
-        Op: crate::op::ReductionOp<Self::Item>;
-
-    fn exclusive_scan_into<Input, Output, Op>(
-        exec: &Executor<R>,
-        input: Input,
-        init: Self::Item,
-        op: Op,
-        output: Output,
-    ) -> Result<(), Error>
-    where
-        Input: MIter<R, Item = Self::Item>,
-        Output: MIterMut<R, Item = Self::Item>,
         Op: crate::op::ReductionOp<Self::Item>;
 
     fn sort_into<Input, Output, Less>(
@@ -141,40 +195,47 @@ where
     R: Runtime,
     Item: SortAbi<R> + crate::core::allocation::ScratchStorage<R>,
     <Item as crate::RowAlloc<R>>::RowStorage: MStorage<R, Item = Item>,
+    Item: crate::core::allocation::ScratchStorage<
+            R,
+            Storage = <Item as crate::RowAlloc<R>>::RowStorage,
+        >,
 {
     type Item = Item;
+    type Storage = <Item as crate::RowAlloc<R>>::RowStorage;
+
+    fn store_value(exec: &Executor<R>, value: Item) -> Result<Self::Storage, Error> {
+        let storage = <Self::Storage as MStorage<R>>::allocate(exec, 1);
+        storage.slice_mut(..).fill_with(exec, value)?;
+        Ok(storage)
+    }
+
+    fn read_value(exec: &Executor<R>, storage: &Self::Storage) -> Result<Item, Error> {
+        crate::RowStorage::read_first(storage, exec)
+    }
+
+    fn scratch_ref(
+        storage: &Self::Storage,
+    ) -> &<Item as crate::allocation::ScratchStorage<R>>::Storage {
+        storage
+    }
+
+    fn into_scratch(
+        storage: Self::Storage,
+    ) -> <Item as crate::allocation::ScratchStorage<R>>::Storage {
+        storage
+    }
 
     fn reduce<Input, Op>(
         exec: &Executor<R>,
         input: Input,
-        init: Item,
+        init: Self::Storage,
         op: Op,
-    ) -> Result<Item, Error>
+    ) -> Result<Self::Storage, Error>
     where
         Input: MIter<R, Item = Item>,
         Op: crate::op::ReductionOp<Item>,
     {
         crate::reduce::reduce(exec, lower_fixed::<R, _>(input), init, op)
-    }
-
-    fn exclusive_scan_into<Input, Output, Op>(
-        exec: &Executor<R>,
-        input: Input,
-        init: Item,
-        op: Op,
-        output: Output,
-    ) -> Result<(), Error>
-    where
-        Input: MIter<R, Item = Item>,
-        Output: MIterMut<R, Item = Item>,
-        Op: crate::op::ReductionOp<Item>,
-    {
-        output.run_output_operation(ExclusiveScanOperation {
-            exec,
-            input,
-            init,
-            op,
-        })
     }
 
     fn sort_into<Input, Output, Less>(
@@ -217,6 +278,10 @@ where
     (start, end - start)
 }
 
+pub(crate) fn logical_len(len: usize) -> Result<MIndex, Error> {
+    MIndex::try_from(len).map_err(|_| Error::LengthTooLarge { len })
+}
+
 /// Lowers a logical iterator while preserving its actual physical read arity.
 pub(crate) fn lower<R, Input>(input: Input) -> Input::Read
 where
@@ -247,8 +312,8 @@ where
     R: Runtime,
     Input: MIter<R, Item = u32>,
 {
-    let len = input.len()?;
-    let output = exec.alloc::<u32>(len);
+    let len = input.capacity()?;
+    let output = exec.alloc::<u32>(len as usize);
     let input = lower_fixed::<R, _>(input);
     let output_view = output.slice_mut(..);
     crate::transform::materialize_fixed(exec, &input, &output_view)?;
@@ -287,20 +352,22 @@ where
 pub trait MAlloc<R: Runtime>: CubeType + Send + Sync + Sized + 'static {
     /// The owned SoA storage used for this flat row.
     #[doc(hidden)]
-    type Storage: MStorage<R, Item = Self>;
+    type Owned: MStorage<R, Item = Self>;
 
     #[doc(hidden)]
-    type Dispatch: ItemDispatch<R, Item = Self>;
+    type Dispatch: ItemDispatch<R, Item = Self, Storage = Self::Owned>;
 }
 
 #[doc(hidden)]
 impl<R, Item> MAlloc<R> for Item
 where
     R: Runtime,
-    Item: crate::RowAlloc<R> + ItemDispatch<R, Item = Item>,
+    Item: crate::RowAlloc<R>
+        + crate::allocation::ScratchStorage<R, Storage = <Item as crate::RowAlloc<R>>::RowStorage>
+        + ItemDispatch<R, Item = Item, Storage = <Item as crate::RowAlloc<R>>::RowStorage>,
     <Item as crate::RowAlloc<R>>::RowStorage: MStorage<R, Item = Item>,
 {
-    type Storage = <Item as crate::RowAlloc<R>>::RowStorage;
+    type Owned = <Item as crate::RowAlloc<R>>::RowStorage;
     type Dispatch = Item;
 }
 
@@ -309,7 +376,7 @@ where
 pub use MAlloc as MItem;
 
 /// Owned device storage for a flat row type.
-pub type MVec<R, Item> = <Item as MAlloc<R>>::Storage;
+pub type MVec<R, Item> = <Item as MAlloc<R>>::Owned;
 
 trait RadixKeyArity {}
 
@@ -359,7 +426,7 @@ where
         keys: &MVec<R, Self>,
         len: usize,
     ) -> Result<crate::DeviceVec<R, u32>, Error> {
-        crate::radix::permutation(exec, keys, len)
+        crate::radix::permutation(exec, keys, len, keys.logical_extent())
     }
 }
 
@@ -411,37 +478,6 @@ pub(crate) trait OutputOperation<R: Runtime, Item: CubeType + Send + Sync + 'sta
 struct FillOperation<'a, R: Runtime, Item> {
     exec: &'a Executor<R>,
     value: Item,
-}
-
-struct ExclusiveScanOperation<'a, R: Runtime, Input, Item, Op> {
-    exec: &'a Executor<R>,
-    input: Input,
-    init: Item,
-    op: Op,
-}
-
-impl<R, Item, Input, Op> OutputOperation<R, Item> for ExclusiveScanOperation<'_, R, Input, Item, Op>
-where
-    R: Runtime,
-    Item: KernelRow + crate::allocation::ScratchStorage<R>,
-    Input: MIter<R, Item = Item>,
-    Op: crate::op::ReductionOp<Item>,
-{
-    type Result = Result<(), Error>;
-
-    fn run<Output>(self, output: Output) -> Self::Result
-    where
-        Item: KernelRow + crate::allocation::ScratchStorage<R>,
-        Output: ConcreteOutput<R, Item>,
-    {
-        crate::scan::exclusive_scan(
-            self.exec,
-            lower_fixed::<R, _>(self.input),
-            self.init,
-            self.op,
-            output,
-        )
-    }
 }
 
 struct SortOperation<'a, R: Runtime, Input, Less> {
@@ -510,6 +546,7 @@ where
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![20, 30, 40]);
 /// ```
+#[allow(private_interfaces)]
 pub trait MIter<R: Runtime>: Clone + Sized {
     /// Semantic value produced by one indexed read.
     ///
@@ -531,14 +568,48 @@ pub trait MIter<R: Runtime>: Clone + Sized {
     where
         Bounds: RangeBounds<usize>;
 
-    fn len(&self) -> Result<usize, Error>;
+    /// Returns the host-known physical dispatch bound.
+    ///
+    /// This never synchronizes with the device and may be larger than the
+    /// iterator's logical length.
+    fn capacity(&self) -> Result<MIndex, Error>;
 
-    fn is_empty(&self) -> Result<bool, Error> {
-        Ok(self.len()? == 0)
+    /// Returns the logical item count as a device-resident value.
+    fn len(&self, exec: &Executor<R>) -> Result<crate::MVal<R, MIndex>, Error>
+    where
+        MIndex: MAlloc<R, Owned = crate::DeviceVec<R, MIndex>>,
+    {
+        crate::MVal::from_storage(self.logical_extent()?.materialize(exec)?)
+    }
+
+    /// Explicitly reads the logical number of items represented by this
+    /// iterator. Device-produced lengths synchronize only at this call.
+    fn read_len(&self, exec: &Executor<R>) -> Result<MIndex, Error> {
+        let len = self.logical_extent()?.read(exec)?;
+        MIndex::try_from(len).map_err(|_| Error::LengthTooLarge { len })
+    }
+
+    /// Tests the logical length on the device without synchronizing the host.
+    fn is_empty(&self, exec: &Executor<R>) -> Result<crate::MVal<R, crate::MBool>, Error>
+    where
+        crate::MBool: MAlloc<R, Owned = crate::DeviceVec<R, crate::MBool>>,
+    {
+        crate::MVal::from_storage(crate::extent::LogicalExtent::equal_value(
+            exec,
+            &self.logical_extent()?,
+            &crate::extent::LogicalExtent::fixed(0),
+        )?)
     }
 
     #[doc(hidden)]
     fn lower_read(self) -> Self::Read;
+
+    #[doc(hidden)]
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        Ok(crate::extent::LogicalExtent::fixed(
+            self.capacity()? as usize
+        ))
+    }
 }
 
 /// Public preallocated output stream.
@@ -569,11 +640,8 @@ pub trait MIterMut<R: Runtime>: Sized {
     where
         Bounds: RangeBounds<usize>;
 
-    fn len(&self) -> Result<usize, Error>;
-
-    fn is_empty(&self) -> Result<bool, Error> {
-        Ok(self.len()? == 0)
-    }
+    /// Returns the host-known writable capacity.
+    fn capacity(&self) -> Result<MIndex, Error>;
 
     /// Internal fixed-ABI output tree. This is a structural lowering contract
     /// and contains no algorithm operations.
@@ -627,8 +695,12 @@ where
         crate::read::Slice::new(self.slice_expression(start, len))
     }
 
-    fn len(&self) -> Result<usize, Error> {
-        private::IterLength::logical_len(self)
+    fn capacity(&self) -> Result<MIndex, Error> {
+        logical_len(private::IterLength::logical_len(self)?)
+    }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        private::IterLength::logical_extent(self)
     }
 
     fn lower_read(self) -> Self::Read {
@@ -678,8 +750,8 @@ where
         crate::output::Slice::new(self.slice_output(start..start + len))
     }
 
-    fn len(&self) -> Result<usize, Error> {
-        crate::output::OutputExpression::logical_len(self)
+    fn capacity(&self) -> Result<MIndex, Error> {
+        logical_len(crate::output::OutputExpression::logical_len(self)?)
     }
 
     fn lower_output(self) -> Self::LoweredOutput {
@@ -743,8 +815,12 @@ where
         Self::new(self.storage, self.start + start, len)
     }
 
-    fn len(&self) -> Result<usize, Error> {
-        Ok(self.len)
+    fn capacity(&self) -> Result<MIndex, Error> {
+        logical_len(self.len)
+    }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        private::IterLength::logical_extent(&self.clone().lower_read())
     }
 
     fn lower_read(self) -> Self::Read {
@@ -816,8 +892,8 @@ where
         Self::new(self.storage, self.start + start, len)
     }
 
-    fn len(&self) -> Result<usize, Error> {
-        Ok(self.len)
+    fn capacity(&self) -> Result<MIndex, Error> {
+        logical_len(self.len)
     }
 
     fn lower_output(self) -> Self::LoweredOutput {
@@ -875,13 +951,20 @@ where
         crate::read::Slice::new(input.slice_expression(start, count))
     }
 
-    fn len(&self) -> Result<usize, Error> {
-        let left = self.0.len()?;
-        let right = self.1.len()?;
+    fn capacity(&self) -> Result<MIndex, Error> {
+        let left = self.0.capacity()?;
+        let right = self.1.capacity()?;
         if left != right {
-            return Err(Error::LengthMismatch { left, right });
+            return Err(Error::LengthMismatch {
+                left: left as usize,
+                right: right as usize,
+            });
         }
         Ok(left)
+    }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.0.logical_extent()?.zipped(&self.1.logical_extent()?)
     }
 
     fn lower_read(self) -> Self::Read {
@@ -948,11 +1031,14 @@ where
         crate::output::Slice::new(output.slice_output(start..start + count))
     }
 
-    fn len(&self) -> Result<usize, Error> {
-        let left = MIterMut::len(&self.0)?;
-        let right = MIterMut::len(&self.1)?;
+    fn capacity(&self) -> Result<MIndex, Error> {
+        let left = MIterMut::capacity(&self.0)?;
+        let right = MIterMut::capacity(&self.1)?;
         if left != right {
-            return Err(Error::LengthMismatch { left, right });
+            return Err(Error::LengthMismatch {
+                left: left as usize,
+                right: right as usize,
+            });
         }
         Ok(left)
     }
@@ -1210,15 +1296,15 @@ mod tests {
 
     #[cubecl::cube]
     impl crate::op::BinaryPredicateOp<ReadOnlyValue> for ReadOnlyEqual {
-        fn apply(lhs: ReadOnlyValue, rhs: ReadOnlyValue) -> bool {
-            lhs.value == rhs.value
+        fn apply(lhs: ReadOnlyValue, rhs: ReadOnlyValue) -> crate::MBool {
+            crate::op::mbool(lhs.value == rhs.value)
         }
     }
 
     #[cubecl::cube]
     impl crate::op::BinaryPredicateOp<ReadOnlyValue> for ReadOnlyLess {
-        fn apply(lhs: ReadOnlyValue, rhs: ReadOnlyValue) -> bool {
-            lhs.value < rhs.value
+        fn apply(lhs: ReadOnlyValue, rhs: ReadOnlyValue) -> crate::MBool {
+            crate::op::mbool(lhs.value < rhs.value)
         }
     }
 
@@ -1245,7 +1331,13 @@ mod tests {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let keys = crate::read::Transform::new(crate::Counting::new(7, 3), MakeReadOnly);
 
-        assert!(crate::vector::is_sorted(&exec, keys, ReadOnlyLess).unwrap());
+        assert_eq!(
+            crate::vector::is_sorted(&exec, keys, ReadOnlyLess)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
+            1
+        );
     }
 
     #[test]
@@ -1316,6 +1408,12 @@ mod tests {
         let right_values = exec.to_device(&[7_u64, 8, 9]);
         let right = crate::read::Transform::new(right_values.column(), MakeReadOnlyFromU64);
 
-        assert!(crate::vector::equal(&exec, left, right, ReadOnlyEqual).unwrap());
+        assert_eq!(
+            crate::vector::equal(&exec, left, right, ReadOnlyEqual)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
+            1,
+        );
     }
 }

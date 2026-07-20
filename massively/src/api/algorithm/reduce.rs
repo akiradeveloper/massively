@@ -2,7 +2,7 @@
 
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MAlloc, MIter, op::ReductionOp};
+use crate::{Error, Executor, MAlloc, MIter, MVal, op::ReductionOp};
 
 /// Reduces all input items, starting from `init`.
 ///
@@ -25,23 +25,29 @@ use crate::{Error, Executor, MAlloc, MIter, op::ReductionOp};
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3, 4]);
 ///
-/// let sum = reduce(&exec, input.slice(..), 0, Add).unwrap();
+/// let init = exec.value(0_u32).unwrap();
+/// let sum = reduce(&exec, input.slice(..), init, Add).unwrap();
 ///
-/// assert_eq!(sum, 10);
+/// assert_eq!(sum.read(&exec).unwrap(), 10);
 /// ```
 pub fn reduce<R, Input, Op>(
     exec: &Executor<R>,
     input: Input,
-    init: Input::Item,
+    init: MVal<R, Input::Item>,
     op: Op,
-) -> Result<Input::Item, Error>
+) -> Result<MVal<R, Input::Item>, Error>
 where
     R: Runtime,
     Input: MIter<R>,
     Input::Item: MAlloc<R>,
     Op: ReductionOp<Input::Item>,
 {
-    <<Input::Item as MAlloc<R>>::Dispatch as crate::api::iter::ItemDispatch<R>>::reduce(
-        exec, input, init, op,
-    )
+    let storage =
+        <<Input::Item as MAlloc<R>>::Dispatch as crate::api::iter::ItemDispatch<R>>::reduce(
+            exec,
+            input,
+            init.into_storage(),
+            op,
+        )?;
+    MVal::from_storage(storage)
 }

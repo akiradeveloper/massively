@@ -47,7 +47,7 @@ macro_rules! length_preserving_case {
                 let (values, offsets) = flatten(&segments);
                 let values_gpu = exec.to_device(&values);
                 let offsets_gpu = exec.to_device(&offsets);
-                let output = ForEachSegment($algorithm).run(
+                let output = ForEachSegment(($algorithm)(&exec)).run(
                     &exec,
                     SegmentIterator::new(
                         lazify(values_gpu.slice(..)),
@@ -78,16 +78,17 @@ macro_rules! compacting_case {
                 let (values, offsets) = flatten(&segments);
                 let values_gpu = exec.to_device(&values);
                 let offsets_gpu = exec.to_device(&offsets);
-                let output = ForEachSegment($algorithm).run(
+                let (output, output_len) = ForEachSegment($algorithm).run(
                     &exec,
                     SegmentIterator::new(
                         lazify(values_gpu.slice(..)),
                         lazify(offsets_gpu.slice(..)),
                     ),
                 ).unwrap();
+                let output_len = output_len.read(&exec).unwrap() as usize;
 
                 let (expected_values, expected_offsets) = flatten(&$oracle(&segments));
-                prop_assert_eq!(exec.to_host(output.values()).unwrap(), expected_values);
+                prop_assert_eq!(&exec.to_host(output.values()).unwrap()[..output_len], &expected_values);
                 prop_assert_eq!(exec.to_host(output.offsets()).unwrap(), expected_offsets);
             }
         }
@@ -104,36 +105,40 @@ macro_rules! summarizing_case {
                 let (values, offsets) = flatten(&segments);
                 let values_gpu = exec.to_device(&values);
                 let offsets_gpu = exec.to_device(&offsets);
-                let output = ForEachSegment($algorithm).run(
+                let output = ForEachSegment(($algorithm)(&exec)).run(
                     &exec,
                     SegmentIterator::new(
                         lazify(values_gpu.slice(..)),
                         lazify(offsets_gpu.slice(..)),
                     ),
                 ).unwrap();
-
                 prop_assert_eq!(exec.to_host(&output).unwrap(), $oracle(&segments));
             }
         }
     };
 }
 
-length_preserving_case!(seg_transform, Transform(AddOne), |segments| reference::map(
-    segments, AddOne
-));
-length_preserving_case!(seg_sort, Sort(Less), |segments| reference::sort(
+length_preserving_case!(seg_transform, |_| Transform(AddOne), |segments| {
+    reference::map(segments, AddOne)
+});
+length_preserving_case!(seg_sort, |_| Sort(Less), |segments| reference::sort(
     segments, Less
 ));
-length_preserving_case!(seg_reverse, Reverse, reference::reverse);
-length_preserving_case!(seg_inclusive_scan, InclusiveScan(Sum), |segments| {
+length_preserving_case!(seg_reverse, |_| Reverse, reference::reverse);
+length_preserving_case!(seg_inclusive_scan, |_| InclusiveScan(Sum), |segments| {
     reference::inclusive_scan(segments, Sum)
 });
-length_preserving_case!(seg_exclusive_scan, ExclusiveScan(Sum, 7), |segments| {
-    reference::exclusive_scan(segments, Sum, 7)
-});
+length_preserving_case!(
+    seg_exclusive_scan,
+    |exec: &massively::Executor<cubecl::wgpu::WgpuRuntime>| ExclusiveScan(
+        Sum,
+        exec.value(7).unwrap(),
+    ),
+    |segments| { reference::exclusive_scan(segments, Sum, 7) }
+);
 length_preserving_case!(
     seg_adjacent_difference,
-    AdjacentDifference(Sum),
+    |_| AdjacentDifference(Sum),
     |segments| reference::adjacent_difference(segments, Sum)
 );
 
@@ -144,25 +149,29 @@ compacting_case!(seg_filter, Filter(Even), |segments| reference::filter(
     segments, Even
 ));
 
-summarizing_case!(seg_reduce, Reduce(Sum, 7), |segments| reference::reduce(
-    segments, Sum, 7
-));
-summarizing_case!(seg_count_if, CountIf(Even), |segments| {
+summarizing_case!(
+    seg_reduce,
+    |exec: &massively::Executor<cubecl::wgpu::WgpuRuntime>| Reduce(Sum, exec.value(7).unwrap()),
+    |segments| reference::reduce(segments, Sum, 7)
+);
+summarizing_case!(seg_count_if, |_| CountIf(Even), |segments| {
     reference::count_if(segments, Even)
 });
-summarizing_case!(seg_all_of, AllOf(Even), |segments| reference::all_of(
+summarizing_case!(seg_all_of, |_| AllOf(Even), |segments| reference::all_of(
     segments, Even
 ));
-summarizing_case!(seg_any_of, AnyOf(Even), |segments| reference::any_of(
+summarizing_case!(seg_any_of, |_| AnyOf(Even), |segments| reference::any_of(
     segments, Even
 ));
-summarizing_case!(seg_none_of, NoneOf(Even), |segments| reference::none_of(
-    segments, Even
-));
-summarizing_case!(seg_is_sorted, IsSorted(Less), |segments| {
+summarizing_case!(
+    seg_none_of,
+    |_| NoneOf(Even),
+    |segments| reference::none_of(segments, Even)
+);
+summarizing_case!(seg_is_sorted, |_| IsSorted(Less), |segments| {
     reference::is_sorted(segments, Less)
 });
-summarizing_case!(seg_is_sorted_until, IsSortedUntil(Less), |segments| {
+summarizing_case!(seg_is_sorted_until, |_| IsSortedUntil(Less), |segments| {
     reference::is_sorted_until(segments, Less)
 });
 
@@ -206,8 +215,8 @@ impl op::ReductionOp<Pair> for PairSum {
 
 #[cubecl::cube]
 impl PredicateOp<Pair> for PairEven {
-    fn apply(input: Pair) -> bool {
-        input.0 % 2u32 == 0u32
+    fn apply(input: Pair) -> massively::MBool {
+        massively::op::mbool(input.0 % 2u32 == 0u32)
     }
 }
 
@@ -219,8 +228,8 @@ impl op::PredicateOp<Pair> for PairEven {
 
 #[cubecl::cube]
 impl BinaryPredicateOp<Pair> for PairEqual {
-    fn apply(lhs: Pair, rhs: Pair) -> bool {
-        lhs.0 == rhs.0 && lhs.1 == rhs.1
+    fn apply(lhs: Pair, rhs: Pair) -> massively::MBool {
+        massively::op::mbool(lhs.0 == rhs.0 && lhs.1 == rhs.1)
     }
 }
 
@@ -232,8 +241,8 @@ impl op::BinaryPredicateOp<Pair> for PairEqual {
 
 #[cubecl::cube]
 impl BinaryPredicateOp<Pair> for PairLess {
-    fn apply(lhs: Pair, rhs: Pair) -> bool {
-        lhs.0 < rhs.0
+    fn apply(lhs: Pair, rhs: Pair) -> massively::MBool {
+        massively::op::mbool(lhs.0 < rhs.0)
     }
 }
 
@@ -284,7 +293,7 @@ macro_rules! pair_length_preserving_case {
                 let first_gpu = exec.to_device(&first);
                 let second_gpu = exec.to_device(&second);
                 let offsets_gpu = exec.to_device(&offsets);
-                let output = ForEachSegment($algorithm).run(
+                let output = ForEachSegment(($algorithm)(&exec)).run(
                     &exec,
                     SegmentIterator::new(
                         zip2(lazify(first_gpu.slice(..)), lazify(second_gpu.slice(..))),
@@ -325,22 +334,24 @@ macro_rules! pair_compacting_case {
                 let first_gpu = exec.to_device(&first);
                 let second_gpu = exec.to_device(&second);
                 let offsets_gpu = exec.to_device(&offsets);
-                let output = ForEachSegment($algorithm).run(
+                let (output, output_len) = ForEachSegment($algorithm).run(
                     &exec,
                     SegmentIterator::new(
                         zip2(lazify(first_gpu.slice(..)), lazify(second_gpu.slice(..))),
                         lazify(offsets_gpu.slice(..)),
                     ),
                 ).unwrap();
+                let output_len = output_len.read(&exec).unwrap() as usize;
 
                 let (expected, expected_offsets) = flatten(&$oracle(&segments));
                 let (output_first, output_second) =
                     MStorage::into_columns(output.values().clone());
+                let mut output_first = exec.to_host(&output_first).unwrap();
+                let mut output_second = exec.to_host(&output_second).unwrap();
+                output_first.truncate(output_len);
+                output_second.truncate(output_len);
                 prop_assert_eq!(
-                    pair_rows(
-                        exec.to_host(&output_first).unwrap(),
-                        exec.to_host(&output_second).unwrap(),
-                    ),
+                    pair_rows(output_first, output_second),
                     expected,
                 );
                 prop_assert_eq!(exec.to_host(output.offsets()).unwrap(), expected_offsets);
@@ -361,7 +372,7 @@ macro_rules! pair_item_reduce_case {
                 let first_gpu = exec.to_device(&first);
                 let second_gpu = exec.to_device(&second);
                 let offsets_gpu = exec.to_device(&offsets);
-                let output = ForEachSegment($algorithm).run(
+                let output = ForEachSegment(($algorithm)(&exec)).run(
                     &exec,
                     SegmentIterator::new(
                         zip2(lazify(first_gpu.slice(..)), lazify(second_gpu.slice(..))),
@@ -408,26 +419,29 @@ macro_rules! pair_flag_reduce_case {
     };
 }
 
-pair_length_preserving_case!(seg_pair_transform, Transform(PairAddOne), |segments| {
+pair_length_preserving_case!(seg_pair_transform, |_| Transform(PairAddOne), |segments| {
     reference::map(segments, PairAddOne)
 });
-pair_length_preserving_case!(seg_pair_sort, Sort(PairLess), |segments| reference::sort(
-    segments, PairLess
-));
-pair_length_preserving_case!(seg_pair_reverse, Reverse, reference::reverse);
+pair_length_preserving_case!(seg_pair_sort, |_| Sort(PairLess), |segments| {
+    reference::sort(segments, PairLess)
+});
+pair_length_preserving_case!(seg_pair_reverse, |_| Reverse, reference::reverse);
 pair_length_preserving_case!(
     seg_pair_inclusive_scan,
-    InclusiveScan(PairSum),
+    |_| InclusiveScan(PairSum),
     |segments| reference::inclusive_scan(segments, PairSum)
 );
 pair_length_preserving_case!(
     seg_pair_exclusive_scan,
-    ExclusiveScan(PairSum, (7, 11)),
+    |exec: &massively::Executor<cubecl::wgpu::WgpuRuntime>| ExclusiveScan(
+        PairSum,
+        exec.value((7, 11)).unwrap(),
+    ),
     |segments| reference::exclusive_scan(segments, PairSum, (7, 11))
 );
 pair_length_preserving_case!(
     seg_pair_adjacent_difference,
-    AdjacentDifference(PairSum),
+    |_| AdjacentDifference(PairSum),
     |segments| reference::adjacent_difference(segments, PairSum)
 );
 
@@ -438,9 +452,14 @@ pair_compacting_case!(seg_pair_filter, Filter(PairEven), |segments| {
     reference::filter(segments, PairEven)
 });
 
-pair_item_reduce_case!(seg_pair_reduce, Reduce(PairSum, (7, 11)), |segments| {
-    reference::reduce(segments, PairSum, (7, 11))
-});
+pair_item_reduce_case!(
+    seg_pair_reduce,
+    |exec: &massively::Executor<cubecl::wgpu::WgpuRuntime>| Reduce(
+        PairSum,
+        exec.value((7, 11)).unwrap(),
+    ),
+    |segments| { reference::reduce(segments, PairSum, (7, 11)) }
+);
 pair_flag_reduce_case!(seg_pair_count_if, CountIf(PairEven), |segments| {
     reference::count_if(segments, PairEven)
 });

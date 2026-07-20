@@ -3,12 +3,14 @@
 //! Lazy expressions allocate no result buffer by themselves. They are evaluated by the algorithm
 //! that consumes them.
 
+#![allow(private_interfaces)]
+
 use core::marker::PhantomData;
 use std::ops::RangeBounds;
 
 use cubecl::prelude::Runtime;
 
-use crate::{Error, MIter, MStorageElement, op::UnaryOp};
+use crate::{Error, MIndex, MIter, MStorageElement, op::UnaryOp};
 use crate::{core::facade as private, read::SliceExpression};
 
 pub use crate::core::read::Taken;
@@ -31,7 +33,7 @@ impl<R, Values, Indices> MIter<R> for Permute<Values, Indices>
 where
     R: Runtime,
     Values: MIter<R>,
-    Indices: MIter<R, Item = usize>,
+    Indices: MIter<R, Item = MIndex>,
     crate::read::Permute<Values::Read, Indices::Read>:
         private::KernelInput<R, Item = Values::Item> + private::IterLength + SliceExpression,
 {
@@ -50,8 +52,12 @@ where
         crate::read::Slice::new(input.slice_expression(start, count))
     }
 
-    fn len(&self) -> Result<usize, Error> {
-        self.indices.len()
+    fn capacity(&self) -> Result<MIndex, Error> {
+        self.indices.capacity()
+    }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.indices.logical_extent()
     }
 
     fn lower_read(self) -> Self::Read {
@@ -94,8 +100,12 @@ where
         crate::read::Slice::new(input.slice_expression(start, count))
     }
 
-    fn len(&self) -> Result<usize, Error> {
-        self.values.len()
+    fn capacity(&self) -> Result<MIndex, Error> {
+        self.values.capacity()
+    }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.values.logical_extent()
     }
 
     fn lower_read(self) -> Self::Read {
@@ -154,8 +164,12 @@ where
         crate::read::Slice::new(input.slice_expression(start, count))
     }
 
-    fn len(&self) -> Result<usize, Error> {
-        self.input.len()
+    fn capacity(&self) -> Result<MIndex, Error> {
+        self.input.capacity()
+    }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.input.logical_extent()
     }
 
     fn lower_read(self) -> Self::Read {
@@ -171,37 +185,21 @@ pub struct Constant<T> {
 
 impl<T> Constant<T> {
     /// Limits this source to `len` logical items.
-    pub fn take(self, len: usize) -> Taken<Self> {
-        Taken::new(self, len)
+    pub fn take(self, len: MIndex) -> Taken<Self> {
+        Taken::new(self, len as usize)
     }
 }
 
-/// An unbounded stream of consecutive [`usize`] values.
+/// An unbounded stream of consecutive [`MIndex`] values.
 #[derive(Clone, Copy, Debug)]
 pub struct Counting {
-    start: usize,
+    start: MIndex,
 }
 
 impl Counting {
     /// Limits this source to `len` logical items.
-    pub fn take(self, len: usize) -> Taken<Self> {
-        Taken::new(self, len)
-    }
-}
-
-/// An unbounded stream of consecutive `u32` values.
-///
-/// This is distinct from [`counting`], whose item type is the logical index
-/// type `usize`.
-#[derive(Clone, Copy, Debug)]
-pub struct CountingU32 {
-    start: u32,
-}
-
-impl CountingU32 {
-    /// Limits this source to `len` logical items.
-    pub fn take(self, len: usize) -> Taken<Self> {
-        Taken::new(self, len)
+    pub fn take(self, len: MIndex) -> Taken<Self> {
+        Taken::new(self, len as usize)
     }
 }
 
@@ -216,36 +214,7 @@ where
     }
 }
 
-impl crate::read::TakenSource for Constant<bool> {
-    type Read = crate::read::Transform<crate::read::Constant<u32>, crate::op::U32ToBool>;
-
-    fn lower(&self, _offset: usize, len: usize) -> Self::Read {
-        crate::read::Transform::new(
-            crate::read::Constant::new(u32::from(self.value), len),
-            crate::op::U32ToBool,
-        )
-    }
-}
-
 impl crate::read::TakenSource for Counting {
-    type Read = crate::read::Transform<crate::read::Counting, crate::op::U32ToUsize>;
-
-    fn lower(&self, offset: usize, len: usize) -> Self::Read {
-        let start = self
-            .start
-            .checked_add(offset)
-            .expect("counting slice start overflow");
-        crate::read::Transform::new(
-            crate::read::Counting::new(
-                u32::try_from(start).expect("counting value exceeds device u32 range"),
-                len,
-            ),
-            crate::op::U32ToUsize,
-        )
-    }
-}
-
-impl crate::read::TakenSource for CountingU32 {
     type Read = crate::read::Counting;
 
     fn lower(&self, offset: usize, len: usize) -> Self::Read {
@@ -255,20 +224,6 @@ impl crate::read::TakenSource for CountingU32 {
                 .checked_add(offset)
                 .expect("counting start overflow"),
             len,
-        )
-    }
-}
-
-impl crate::read::TakenSource for Constant<usize> {
-    type Read = crate::read::Transform<crate::read::Constant<u32>, crate::op::U32ToUsize>;
-
-    fn lower(&self, _offset: usize, len: usize) -> Self::Read {
-        crate::read::Transform::new(
-            crate::read::Constant::new(
-                u32::try_from(self.value).expect("constant value exceeds device u32 range"),
-                len,
-            ),
-            crate::op::U32ToUsize,
         )
     }
 }
@@ -310,13 +265,8 @@ pub fn constant<T>(value: T) -> Constant<T> {
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![20, 30, 40]);
 /// ```
-pub fn counting(start: usize) -> Counting {
+pub fn counting(start: MIndex) -> Counting {
     Counting { start }
-}
-
-/// Creates an unbounded stream of consecutive `u32` values.
-pub fn counting_u32(start: u32) -> CountingU32 {
-    CountingU32 { start }
 }
 
 /// Lazily applies `op` whenever an algorithm reads an item.
@@ -358,17 +308,12 @@ pub fn transform<Input, Op>(input: Input, op: Op) -> Transform<Input, Op> {
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{
-///     Executor, lazy,
-///     op::{self, U32ToUsize},
-///     vector::transform,
-/// };
+/// use massively::{Executor, lazy, op, vector::transform};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let values = exec.to_device(&[10_u32, 20, 30]);
 /// let indices = exec.to_device(&[2_u32, 0]);
-/// let indices = lazy::transform(indices.slice(..), U32ToUsize);
-/// let permuted = lazy::permute(values.slice(..), indices);
+/// let permuted = lazy::permute(values.slice(..), indices.slice(..));
 /// let output = transform(&exec, permuted, op::Identity).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![30, 10]);

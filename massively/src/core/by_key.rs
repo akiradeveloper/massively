@@ -12,10 +12,10 @@ use crate::{
 const BLOCK_SIZE: u32 = 256;
 
 #[cubecl::cube(launch_unchecked)]
-fn tail_indices_kernel(head_indices: &[u32], source_len: &[u32], tails: &mut [u32]) {
+fn tail_indices_kernel(head_indices: &[u32], count: &[u32], source_len: &[u32], tails: &mut [u32]) {
     let rank = ABSOLUTE_POS as usize;
-    if rank < head_indices.len() {
-        tails[rank] = if rank + 1usize < head_indices.len() {
+    if rank < count[0] as usize {
+        tails[rank] = if rank + 1usize < count[0] as usize {
             head_indices[rank + 1usize] - 1u32
         } else {
             source_len[0] - 1u32
@@ -28,23 +28,34 @@ pub(crate) fn tail_control_from_heads<R: Runtime>(
     heads: &SelectionControl<R>,
 ) -> Result<SelectionControl<R>, Error> {
     let count = heads.count();
-    let tails = exec.alloc_row::<u32>(count as usize);
-    if count != 0u32 {
-        let len =
-            u32::try_from(heads.len()).map_err(|_| Error::LengthTooLarge { len: heads.len() })?;
-        let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len]));
+    let mut tails = exec.alloc_row::<u32>(heads.len());
+    tails.set_logical_extent(crate::extent::LogicalExtent::from_device(
+        count,
+        heads.len(),
+    ));
+    if heads.len() != 0 {
+        let len_handle = heads.source_extent().materialize(exec)?;
         unsafe {
             tail_indices_kernel::launch_unchecked::<R>(
                 exec.client(),
-                crate::launch::cube_count_1d((count as usize).div_ceil(BLOCK_SIZE as usize))?,
+                crate::launch::cube_count_1d(heads.len().div_ceil(BLOCK_SIZE as usize))?,
                 CubeDim::new_1d(BLOCK_SIZE),
-                BufferArg::from_raw_parts(heads.indices().handle.clone(), heads.indices().len()),
-                BufferArg::from_raw_parts(len_handle, 1),
-                BufferArg::from_raw_parts(tails.handle.clone(), tails.len()),
+                BufferArg::from_raw_parts(
+                    heads.indices().handle.clone(),
+                    heads.indices().capacity(),
+                ),
+                BufferArg::from_raw_parts(count.handle.clone(), 1),
+                BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
+                BufferArg::from_raw_parts(tails.handle.clone(), tails.capacity()),
             );
         }
     }
-    Ok(SelectionControl::from_indices(heads.len(), tails, count))
+    Ok(SelectionControl::from_indices(
+        heads.len(),
+        heads.source_extent(),
+        tails,
+        count.clone(),
+    ))
 }
 
 /// Key-only phase producing segment head flags.
@@ -68,7 +79,7 @@ fn segmented_lowered_storage<R, Values, Op>(
     exec: &Executor<R>,
     values: Values,
     heads: &DeviceVec<R, u32>,
-    init: Option<Values::Item>,
+    init: Option<<Values::Item as ScratchStorage<R>>::Storage>,
     op: Op,
     mode: u8,
 ) -> Result<<Values::Item as ScratchStorage<R>>::Storage, Error>
@@ -112,7 +123,7 @@ pub(crate) fn exclusive_scan_by_key_lowered<R, Keys, Values, Equal, Op, Output>(
     keys: Keys,
     values: Values,
     _equal: Equal,
-    init: Values::Item,
+    init: <Values::Item as ScratchStorage<R>>::Storage,
     op: Op,
     output: Output,
 ) -> Result<(), Error>
@@ -137,11 +148,11 @@ pub(crate) fn reduce_by_key_lowered<R, Keys, Values, Equal, Op, KeyOutput, Value
     keys: Keys,
     values: Values,
     _equal: Equal,
-    init: Values::Item,
+    init: <Values::Item as ScratchStorage<R>>::Storage,
     op: Op,
     key_output: KeyOutput,
     value_output: ValueOutput,
-) -> Result<u32, Error>
+) -> Result<DeviceVec<R, u32>, Error>
 where
     R: Runtime,
     Keys: crate::core::facade::KernelInput<R, Item = KeyOutput::Item> + SegmentKeyInput<R, Equal>,
@@ -156,10 +167,26 @@ where
     let reduced = segmented_lowered_storage(exec, values, &heads, Some(init), op, 2)?;
     let head_control = SelectionControl::from_flags(exec, heads)?;
     let tail_control = tail_control_from_heads(exec, &head_control)?;
-    crate::indexed::gather_u32(exec, keys, head_control.indices().column(), key_output)?;
+    crate::indexed::IndexedCopyInput::indexed_copy_selected(
+        keys,
+        exec,
+        head_control.indices().column(),
+        None,
+        Some(head_control.count()),
+        true,
+        key_output,
+    )?;
     let reduced = crate::read::FixedRead::new(reduced.read());
-    crate::indexed::gather_u32(exec, reduced, tail_control.indices().column(), value_output)?;
-    Ok(head_control.count())
+    crate::indexed::IndexedCopyInput::indexed_copy_selected(
+        reduced,
+        exec,
+        tail_control.indices().column(),
+        None,
+        Some(tail_control.count()),
+        true,
+        value_output,
+    )?;
+    Ok(head_control.count().clone())
 }
 
 /// Reduces values using an already-computed segment-head control.
@@ -168,7 +195,7 @@ pub(crate) fn reduce_values_by_heads_lowered<R, Values, Op, Output>(
     values: Values,
     heads: &DeviceVec<R, u32>,
     head_control: &SelectionControl<R>,
-    init: Values::Item,
+    init: <Values::Item as ScratchStorage<R>>::Storage,
     op: Op,
     output: Output,
 ) -> Result<(), Error>
@@ -183,7 +210,15 @@ where
     let reduced = segmented_lowered_storage(exec, values, heads, Some(init), op, 2)?;
     let tail_control = tail_control_from_heads(exec, head_control)?;
     let reduced = crate::read::FixedRead::new(reduced.read());
-    crate::indexed::gather_u32(exec, reduced, tail_control.indices().column(), output)
+    crate::indexed::IndexedCopyInput::indexed_copy_selected(
+        reduced,
+        exec,
+        tail_control.indices().column(),
+        None,
+        Some(tail_control.count()),
+        true,
+        output,
+    )
 }
 
 /// Key phase for stable adjacent-key deduplication.
@@ -193,6 +228,7 @@ where
 #[doc(hidden)]
 pub trait UniqueByKeyKeys<R: Runtime, Equal>: ReadExpression + Sized {
     fn unique_key_len(&self) -> Result<usize, Error>;
+    fn unique_key_extent(&self) -> Result<crate::extent::LogicalExtent, Error>;
     fn unique_key_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error>;
 }
 
@@ -206,6 +242,10 @@ where
 {
     fn unique_key_len(&self) -> Result<usize, Error> {
         crate::reduce::StageRead::logical_len(self)
+    }
+
+    fn unique_key_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        crate::reduce::StageRead::logical_extent(self)
     }
 
     fn unique_key_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error> {
@@ -224,7 +264,7 @@ pub(crate) fn unique_by_key<R, Keys, Values, Equal, ValueOutput>(
     values: Values,
     _equal: Equal,
     value_output: ValueOutput,
-) -> Result<u32, Error>
+) -> Result<DeviceVec<R, u32>, Error>
 where
     R: Runtime,
     Keys: UniqueByKeyKeys<R, Equal>,
@@ -238,6 +278,7 @@ where
             right: value_len,
         });
     }
+    keys.unique_key_extent()?.zipped(&values.source_extent()?)?;
     let control = keys.unique_key_control(exec)?;
     values.copy_selected(exec, &control, value_output)
 }
@@ -253,8 +294,8 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<Three> for EqualThree {
-        fn apply(lhs: Three, rhs: Three) -> bool {
-            lhs.0 == rhs.0 && lhs.1 == rhs.1 && lhs.2 == rhs.2
+        fn apply(lhs: Three, rhs: Three) -> crate::MBool {
+            crate::op::mbool(lhs.0 == rhs.0 && lhs.1 == rhs.1 && lhs.2 == rhs.2)
         }
     }
 
@@ -262,8 +303,8 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<u32> for EqualU32 {
-        fn apply(lhs: u32, rhs: u32) -> bool {
-            lhs == rhs
+        fn apply(lhs: u32, rhs: u32) -> crate::MBool {
+            crate::op::mbool(lhs == rhs)
         }
     }
 
@@ -339,6 +380,7 @@ mod tests {
         );
 
         let count = unique_by_key(&exec, keys, value_input, EqualThree, value_output).unwrap();
+        let count = exec.to_host(&count).unwrap()[0] as usize;
         assert_eq!(count, 3);
         for (column, output) in out_values.iter().enumerate() {
             let base = column as u32 * 100;
@@ -355,7 +397,7 @@ mod tests {
         let keys = exec.to_device(&[1_u32, 1]);
         let values = exec.to_device(&[10_u32]);
         let out_values = exec.to_device(&[0_u32; 2]);
-        assert_eq!(
+        assert!(matches!(
             unique_by_key(
                 &exec,
                 keys.column(),
@@ -364,7 +406,7 @@ mod tests {
                 out_values.slice_mut(..),
             ),
             Err(Error::LengthMismatch { left: 2, right: 1 })
-        );
+        ));
     }
 
     #[test]
@@ -395,10 +437,7 @@ mod tests {
                     ),
                 ),
             );
-            Permute::new(
-                seven,
-                Transform::new(Counting::new(0, len), crate::op::U32ToUsize),
-            )
+            Permute::new(seven, Counting::new(0, len))
         };
 
         let inclusive = exec.alloc_row::<Seven>(len);
@@ -418,13 +457,14 @@ mod tests {
         assert_eq!((seventh[299], seventh[300], seventh[599]), (2100, 7, 2100));
 
         let init: Seven = (10, 20, 30, 40, 50, 60, 70);
+        let init = exec.value(init).unwrap();
         let exclusive = exec.alloc_row::<Seven>(len);
         crate::api::algorithm::exclusive_scan_by_key_into(
             &exec,
             keys.column(),
             values(),
             EqualU32,
-            init,
+            init.clone(),
             SumSeven,
             exclusive.write(),
         )
@@ -449,6 +489,7 @@ mod tests {
             value_output.write(),
         )
         .unwrap();
+        let count = count.read(&exec).unwrap();
         assert_eq!(count, 2);
         assert_eq!(exec.to_host(&key_output.slice(..2)).unwrap(), vec![1, 2]);
         let (first, _, _, _, _, _, seventh) = crate::MStorage::into_columns(value_output);

@@ -24,8 +24,8 @@ struct Equal;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for Equal {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs == rhs
+    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+        massively::op::mbool(lhs == rhs)
     }
 }
 
@@ -53,7 +53,7 @@ impl UnaryOp<Segment<u32>> for SliceLength {
 
 #[cubecl::cube]
 impl BinaryPredicateOp<Segment<u32>> for LexicographicalBytes {
-    fn apply(lhs: Segment<u32>, rhs: Segment<u32>) -> bool {
+    fn apply(lhs: Segment<u32>, rhs: Segment<u32>) -> massively::MBool {
         let lhs_len = lhs.len();
         let rhs_len = rhs.len();
         let common_len = if lhs_len < rhs_len { lhs_len } else { rhs_len };
@@ -71,13 +71,13 @@ impl BinaryPredicateOp<Segment<u32>> for LexicographicalBytes {
             cursor.store(cursor.read() + 1u32);
         }
 
-        if ordering.read() == 1u32 {
+        massively::op::mbool(if ordering.read() == 1u32 {
             true
         } else if ordering.read() == 2u32 {
             false
         } else {
             lhs_len < rhs_len
-        }
+        })
     }
 }
 
@@ -101,7 +101,7 @@ struct LexicographicalCodes;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<Segment<Code>> for LexicographicalCodes {
-    fn apply(lhs: Segment<Code>, rhs: Segment<Code>) -> bool {
+    fn apply(lhs: Segment<Code>, rhs: Segment<Code>) -> massively::MBool {
         let lhs_len = lhs.len();
         let rhs_len = rhs.len();
         let common_len = if lhs_len < rhs_len { lhs_len } else { rhs_len };
@@ -119,13 +119,13 @@ impl BinaryPredicateOp<Segment<Code>> for LexicographicalCodes {
             cursor.store(cursor.read() + 1u32);
         }
 
-        if ordering.read() == 1u32 {
+        massively::op::mbool(if ordering.read() == 1u32 {
             true
         } else if ordering.read() == 2u32 {
             false
         } else {
             lhs_len < rhs_len
-        }
+        })
     }
 }
 
@@ -133,8 +133,8 @@ struct SlicesEqual;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<Segment<u32>> for SlicesEqual {
-    fn apply(lhs: Segment<u32>, rhs: Segment<u32>) -> bool {
-        if lhs.len() != rhs.len() {
+    fn apply(lhs: Segment<u32>, rhs: Segment<u32>) -> massively::MBool {
+        massively::op::mbool(if lhs.len() != rhs.len() {
             false
         } else {
             let cursor = RuntimeCell::<u32>::new(0u32);
@@ -146,7 +146,7 @@ impl BinaryPredicateOp<Segment<u32>> for SlicesEqual {
                 cursor.store(cursor.read() + 1u32);
             }
             equal.read() != 0u32
-        }
+        })
     }
 }
 
@@ -176,16 +176,20 @@ fn segmented_algorithms_return_owned_device_results() {
     );
     assert_eq!(exec.to_host(transformed.offsets()).unwrap(), vec![0, 3, 5]);
 
-    let unique = ForEachSegment(Unique(Equal))
+    let (unique, unique_len) = ForEachSegment(Unique(Equal))
         .run(
             &exec,
             SegmentIterator::new(values.slice(..), offsets.slice(..)),
         )
         .unwrap();
-    assert_eq!(exec.to_host(unique.values()).unwrap(), vec![1, 2, 3]);
+    let unique_len = unique_len.read(&exec).unwrap() as usize;
+    assert_eq!(
+        &exec.to_host(unique.values()).unwrap()[..unique_len],
+        &[1, 2, 3]
+    );
     assert_eq!(exec.to_host(unique.offsets()).unwrap(), vec![0, 2, 3]);
 
-    let reduced = ForEachSegment(Reduce(Add, 0))
+    let reduced = ForEachSegment(Reduce(Add, exec.value(0).unwrap()))
         .run(
             &exec,
             SegmentIterator::new(values.slice(..), offsets.slice(..)),
@@ -211,10 +215,16 @@ fn segment_iterator_is_an_miter_of_shared_read_only_segments() {
 
     fn assert_item<R: Runtime, Input: MIter<R, Item = Segment<u32>>>(_input: &Input) {}
     assert_item::<WgpuRuntime, _>(&rows);
-    assert_eq!(<_ as MIter<WgpuRuntime>>::len(&rows).unwrap(), 5);
+    assert_eq!(<_ as MIter<WgpuRuntime>>::capacity(&rows).unwrap(), 5);
     let lengths = vector_transform(&exec, rows.clone(), SliceLength).unwrap();
     assert_eq!(exec.to_host(&lengths).unwrap(), vec![0, 1, 2, 2, 1]);
-    assert!(is_sorted(&exec, rows.clone(), LexicographicalBytes).unwrap());
+    assert_eq!(
+        is_sorted(&exec, rows.clone(), LexicographicalBytes)
+            .unwrap()
+            .read(&exec)
+            .unwrap(),
+        1
+    );
 
     let lazy_rows = SegmentIterator::new(
         massively::lazy::transform(values.slice(..), WrapCode),
@@ -222,17 +232,35 @@ fn segment_iterator_is_an_miter_of_shared_read_only_segments() {
     );
     fn assert_lazy_item<R: Runtime, Input: MIter<R, Item = Segment<Code>>>(_input: &Input) {}
     assert_lazy_item::<WgpuRuntime, _>(&lazy_rows);
-    assert!(is_sorted(&exec, lazy_rows, LexicographicalCodes).unwrap());
+    assert_eq!(
+        is_sorted(&exec, lazy_rows, LexicographicalCodes)
+            .unwrap()
+            .read(&exec)
+            .unwrap(),
+        1
+    );
 
     let middle = rows.slice(1..4);
-    assert_eq!(<_ as MIter<WgpuRuntime>>::len(&middle).unwrap(), 3);
-    assert!(is_sorted(&exec, middle, LexicographicalBytes).unwrap());
+    assert_eq!(<_ as MIter<WgpuRuntime>>::capacity(&middle).unwrap(), 3);
+    assert_eq!(
+        is_sorted(&exec, middle, LexicographicalBytes)
+            .unwrap()
+            .read(&exec)
+            .unwrap(),
+        1
+    );
 
     // [ab], [aa]
     let unsorted_values = exec.to_device(&[b'a' as u32, b'b' as u32, b'a' as u32, b'a' as u32]);
     let unsorted_offsets = exec.to_device(&[0_u32, 2, 4]);
     let unsorted = SegmentIterator::new(unsorted_values.slice(..), unsorted_offsets.slice(..));
-    assert!(!is_sorted(&exec, unsorted, LexicographicalBytes).unwrap());
+    assert_eq!(
+        is_sorted(&exec, unsorted, LexicographicalBytes)
+            .unwrap()
+            .read(&exec)
+            .unwrap(),
+        0
+    );
 
     // The two operands use independent backing expressions and absolute offsets.
     let left_values = exec.to_device(&[1_u32, 2, 3]);
@@ -244,5 +272,11 @@ fn segment_iterator_is_an_miter_of_shared_read_only_segments() {
         massively::lazy::transform(right_values.slice(..), massively::op::Identity),
         right_offsets.slice(..),
     );
-    assert!(equal(&exec, left, right, SlicesEqual).unwrap());
+    assert_eq!(
+        equal(&exec, left, right, SlicesEqual)
+            .unwrap()
+            .read(&exec)
+            .unwrap(),
+        1
+    );
 }

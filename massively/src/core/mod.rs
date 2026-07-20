@@ -4,6 +4,7 @@ pub(crate) mod arity;
 pub(crate) mod by_key;
 pub(crate) mod error;
 pub(crate) mod eval;
+pub(crate) mod extent;
 pub(crate) mod facade;
 pub(crate) mod indexed;
 pub(crate) mod iter;

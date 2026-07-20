@@ -68,19 +68,23 @@ where
     R: Runtime,
     Rule: OccurrenceRule,
 {
-    let len = own_lower.len();
-    if other_lower.len() != len || other_upper.len() != len {
+    let len = own_lower.capacity();
+    if other_lower.capacity() != len || other_upper.capacity() != len {
         return Err(Error::LengthMismatch {
             left: len,
-            right: other_lower.len().min(other_upper.len()),
+            right: other_lower.capacity().min(other_upper.capacity()),
         });
     }
-    let flags = exec.alloc_row::<u32>(len);
+    let extent = own_lower
+        .logical_extent()
+        .zipped(&other_lower.logical_extent())?
+        .zipped(&other_upper.logical_extent())?;
+    let mut flags = exec.alloc_row::<u32>(len);
+    flags.set_logical_extent(extent.clone());
     if len == 0 {
         return Ok(flags);
     }
-    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-    let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len_u32]));
+    let len_handle = extent.materialize(exec)?;
     unsafe {
         occurrence_flags_kernel::launch_unchecked::<Rule, R>(
             exec.client(),
@@ -89,7 +93,7 @@ where
             BufferArg::from_raw_parts(own_lower.handle.clone(), len),
             BufferArg::from_raw_parts(other_lower.handle.clone(), len),
             BufferArg::from_raw_parts(other_upper.handle.clone(), len),
-            BufferArg::from_raw_parts(len_handle, 1),
+            BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
             BufferArg::from_raw_parts(flags.handle.clone(), len),
         );
     }
@@ -106,7 +110,7 @@ pub(crate) fn set_storage<R, Item, Less, Output>(
     _less: Less,
     output: Output,
     mode: u8,
-) -> Result<u32, Error>
+) -> Result<DeviceVec<R, u32>, Error>
 where
     R: Runtime,
     Item: crate::allocation::ScratchStorage<R>,
@@ -141,16 +145,21 @@ where
         let right_extra =
             occurrence_flags::<R, UnionExtra>(exec, &right_own_lower, &left_lower, &left_upper)?;
 
-        let total = merge.left_len + merge.right_len;
+        let total = merge.left_capacity + merge.right_capacity;
         let conceptual_flags = exec.alloc_row::<u32>(total);
-        crate::selection::fill(exec, 1u32, conceptual_flags.slice_mut(..merge.left_len))?;
+        crate::selection::fill(
+            exec,
+            1u32,
+            conceptual_flags.slice_mut(..merge.left_capacity),
+        )?;
         crate::materialize(
             exec,
             right_extra.column(),
-            conceptual_flags.slice_mut(merge.left_len..),
+            conceptual_flags.slice_mut(merge.left_capacity..),
         )?;
-        let merged_flags = exec.alloc_row::<u32>(total);
-        crate::indexed::gather_u32(
+        let mut merged_flags = exec.alloc_row::<u32>(total);
+        merged_flags.set_logical_extent(merge.permutation.logical_extent());
+        crate::indexed::gather_direct(
             exec,
             conceptual_flags.column(),
             merge.permutation.column(),
@@ -158,26 +167,28 @@ where
         )?;
         let selection = SelectionControl::from_flags(exec, merged_flags)?;
         let count = selection.count();
-        let selected_permutation = exec.alloc_row::<u32>(count as usize);
-        crate::indexed::gather_u32(
-            exec,
+        let zero = exec.value(0u32)?;
+        let mut selected_permutation = exec.full(total, &zero)?;
+        crate::indexed::IndexedCopyInput::indexed_copy_selected(
             merge.permutation.column(),
+            exec,
             selection.indices().column(),
+            None,
+            Some(count),
+            true,
             selected_permutation.slice_mut(..),
         )?;
+        selected_permutation
+            .set_logical_extent(crate::extent::LogicalExtent::from_device(count, total));
         let selected = MergeControl {
             permutation: selected_permutation,
-            left_len: merge.left_len,
-            right_len: merge.right_len,
+            left_capacity: merge.left_capacity,
+            right_capacity: merge.right_capacity,
+            left_extent: merge.left_extent,
+            right_extent: merge.right_extent,
         };
-        crate::merge::apply_storage::<R, Item, _>(
-            exec,
-            left,
-            right,
-            &selected,
-            output.slice_output(..count as usize),
-        )?;
-        return Ok(count);
+        crate::merge::apply_storage::<R, Item, _>(exec, left, right, &selected, output)?;
+        return Ok(count.clone());
     }
 
     let left_lower = crate::search::lower_bounds_typed::<R, _, _, Less>(
@@ -208,7 +219,7 @@ pub(crate) fn set_union<R, Left, Right, Less, Output>(
     right: Right,
     _less: Less,
     output: Output,
-) -> Result<u32, Error>
+) -> Result<DeviceVec<R, u32>, Error>
 where
     R: Runtime,
     Left: Clone
@@ -225,16 +236,21 @@ where
     let right_extra =
         occurrence_flags::<R, UnionExtra>(exec, &right_own_lower, &left_lower, &left_upper)?;
 
-    let total = merge.left_len + merge.right_len;
+    let total = merge.left_capacity + merge.right_capacity;
     let conceptual_flags = exec.alloc_row::<u32>(total);
-    crate::selection::fill(exec, 1u32, conceptual_flags.slice_mut(..merge.left_len))?;
+    crate::selection::fill(
+        exec,
+        1u32,
+        conceptual_flags.slice_mut(..merge.left_capacity),
+    )?;
     crate::materialize(
         exec,
         right_extra.column(),
-        conceptual_flags.slice_mut(merge.left_len..),
+        conceptual_flags.slice_mut(merge.left_capacity..),
     )?;
-    let merged_flags = exec.alloc_row::<u32>(total);
-    crate::indexed::gather_u32(
+    let mut merged_flags = exec.alloc_row::<u32>(total);
+    merged_flags.set_logical_extent(merge.permutation.logical_extent());
+    crate::indexed::gather_direct(
         exec,
         conceptual_flags.column(),
         merge.permutation.column(),
@@ -242,25 +258,28 @@ where
     )?;
     let selection = SelectionControl::from_flags(exec, merged_flags)?;
     let count = selection.count();
-    let selected_permutation = exec.alloc_row::<u32>(count as usize);
-    crate::indexed::gather_u32(
-        exec,
+    let zero = exec.value(0u32)?;
+    let mut selected_permutation = exec.full(total, &zero)?;
+    crate::indexed::IndexedCopyInput::indexed_copy_selected(
         merge.permutation.column(),
+        exec,
         selection.indices().column(),
+        None,
+        Some(count),
+        true,
         selected_permutation.slice_mut(..),
     )?;
+    selected_permutation
+        .set_logical_extent(crate::extent::LogicalExtent::from_device(count, total));
     let selected = MergeControl {
         permutation: selected_permutation,
-        left_len: merge.left_len,
-        right_len: merge.right_len,
+        left_capacity: merge.left_capacity,
+        right_capacity: merge.right_capacity,
+        left_extent: merge.left_extent,
+        right_extent: merge.right_extent,
     };
-    left.concat_apply(
-        exec,
-        right,
-        &selected,
-        output.slice_output(..count as usize),
-    )?;
-    Ok(count)
+    left.concat_apply(exec, right, &selected, output)?;
+    Ok(count.clone())
 }
 
 /// Multiset intersection of two sorted ranges.
@@ -270,7 +289,7 @@ pub(crate) fn set_intersection<R, Left, Right, Less, Output>(
     right: Right,
     _less: Less,
     output: Output,
-) -> Result<u32, Error>
+) -> Result<DeviceVec<R, u32>, Error>
 where
     R: Runtime,
     Left: Clone + ReadExpression + SortedBoundsInput<R, Left, Less> + CopySelected<R, Output>,
@@ -292,7 +311,7 @@ pub(crate) fn set_difference<R, Left, Right, Less, Output>(
     right: Right,
     _less: Less,
     output: Output,
-) -> Result<u32, Error>
+) -> Result<DeviceVec<R, u32>, Error>
 where
     R: Runtime,
     Left: Clone + ReadExpression + SortedBoundsInput<R, Left, Less> + CopySelected<R, Output>,
@@ -317,8 +336,8 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<u32> for LessU32 {
-        fn apply(lhs: u32, rhs: u32) -> bool {
-            lhs < rhs
+        fn apply(lhs: u32, rhs: u32) -> crate::MBool {
+            crate::op::mbool(lhs < rhs)
         }
     }
 
@@ -337,8 +356,9 @@ mod tests {
             union.slice_mut(..),
         )
         .unwrap();
+        let union_len = union_len.read(&exec).unwrap() as usize;
         assert_eq!(
-            exec.to_host(&union.slice(..union_len as usize)).unwrap(),
+            exec.to_host(&union.slice(..union_len)).unwrap(),
             vec![1, 2, 2, 2, 3, 4, 4]
         );
 
@@ -351,8 +371,9 @@ mod tests {
             intersection.slice_mut(..),
         )
         .unwrap();
+        let intersection_len = intersection_len.read(&exec).unwrap() as usize;
         assert_eq!(
-            exec.to_host(&intersection.slice(..intersection_len as usize))
+            exec.to_host(&intersection.slice(..intersection_len))
                 .unwrap(),
             vec![2, 2, 4]
         );
@@ -366,9 +387,9 @@ mod tests {
             difference.slice_mut(..),
         )
         .unwrap();
+        let difference_len = difference_len.read(&exec).unwrap() as usize;
         assert_eq!(
-            exec.to_host(&difference.slice(..difference_len as usize))
-                .unwrap(),
+            exec.to_host(&difference.slice(..difference_len)).unwrap(),
             vec![1, 2]
         );
     }

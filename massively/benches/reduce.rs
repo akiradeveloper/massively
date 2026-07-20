@@ -14,8 +14,8 @@ impl ReductionOp<f32> for Sum {
 }
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for Equal {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs == rhs
+    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+        massively::op::mbool(lhs == rhs)
     }
 }
 
@@ -25,15 +25,30 @@ fn bench_reduce(c: &mut Criterion) {
     for &len in common::SIZES {
         let values = exec.to_device(&common::dense_f32(len));
         let keys = exec.to_device(&common::run_keys(len, 8));
+        let init = exec.value(0.0_f32).unwrap();
         exec.sync().unwrap();
         group.bench_function(BenchmarkId::new("reduce", len), |b| {
-            b.iter(|| black_box(reduce(&exec, values.slice(..), 0.0, Sum).unwrap()))
+            b.iter(|| {
+                black_box(
+                    reduce(&exec, values.slice(..), init.clone(), Sum)
+                        .unwrap()
+                        .read(&exec)
+                        .unwrap(),
+                )
+            })
         });
         group.bench_function(BenchmarkId::new("reduce_by_key", len), |b| {
             b.iter(|| {
                 black_box(
-                    reduce_by_key(&exec, keys.slice(..), values.slice(..), Equal, 0.0, Sum)
-                        .unwrap(),
+                    reduce_by_key(
+                        &exec,
+                        keys.slice(..),
+                        values.slice(..),
+                        Equal,
+                        init.clone(),
+                        Sum,
+                    )
+                    .unwrap(),
                 )
             })
         });

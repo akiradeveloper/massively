@@ -108,9 +108,13 @@ fn u32_add_block_prefix_kernel(block_prefixes: &[u32], len: &[u32], output: &mut
 }
 
 #[cubecl::cube(launch_unchecked)]
-fn copy_last_kernel(input: &[u32], output: &mut [u32]) {
+fn copy_last_kernel(input: &[u32], len: &[u32], output: &mut [u32]) {
     if ABSOLUTE_POS == 0 {
-        output[0] = input[input.len() - 1usize];
+        output[0] = if len[0] == 0u32 {
+            0u32
+        } else {
+            input[len[0] as usize - 1usize]
+        };
     }
 }
 
@@ -1111,9 +1115,7 @@ macro_rules! impl_padded_scan_dispatch {
                 let write_offsets = exec.client().create_from_slice(u32::as_bytes(&writes.offsets));
                 let zero_values = [0u32; 12];
                 let zero_offsets = exec.client().create_from_slice(u32::as_bytes(&zero_values));
-                let len_handle = exec.client().create_from_slice(u32::as_bytes(&[
-                    u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?
-                ]));
+                let len_handle = input.logical_extent()?.materialize(exec)?;
                 unsafe {
                     $kernel::launch_unchecked::<
                         Item,
@@ -1130,7 +1132,7 @@ macro_rules! impl_padded_scan_dispatch {
                         CubeDim::new_1d(BLOCK_SIZE),
                         $( BufferArg::from_raw_parts(reads.slots[$index].0.clone(), reads.slots[$index].1), )+
                         BufferArg::from_raw_parts(read_offsets, reads.offsets.len()),
-                        BufferArg::from_raw_parts(len_handle.clone(), 1),
+                        BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
                         BufferArg::from_raw_parts(zero_offsets.clone(), 12),
                         BufferArg::from_raw_parts(write_offsets.clone(), writes.offsets.len()),
                         BufferArg::from_raw_parts(writes.slots[0].0.clone(), writes.slots[0].1),
@@ -1214,6 +1216,7 @@ fn add_fixed_prefixes<R, Output, Item, Op>(
     prefixes: &FixedScanStorage<R, Item>,
     output: &Output,
     len: usize,
+    extent: &crate::extent::LogicalExtent,
 ) -> Result<(), Error>
 where
     R: Runtime,
@@ -1227,7 +1230,7 @@ where
         return Ok(());
     }
     let blocks = len.div_ceil(BLOCK_SIZE as usize);
-    let prefix_len = prefixes.len()?;
+    let prefix_len = RowStorage::len(prefixes)?;
     if prefix_len != blocks {
         return Err(Error::LengthMismatch {
             left: blocks,
@@ -1249,9 +1252,7 @@ where
     let output_offsets = exec
         .client()
         .create_from_slice(u32::as_bytes(&output_bindings.offsets));
-    let len_handle = exec.client().create_from_slice(u32::as_bytes(&[
-        u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?
-    ]));
+    let len_handle = extent.materialize(exec)?;
 
     unsafe {
         add_block_prefix_padded12::launch_unchecked::<
@@ -1324,7 +1325,7 @@ where
                 prefix_bindings.slots[11].0.clone(),
                 prefix_bindings.slots[11].1,
             ),
-            BufferArg::from_raw_parts(len_handle, 1),
+            BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
             BufferArg::from_raw_parts(prefix_offsets, prefix_bindings.offsets.len()),
             BufferArg::from_raw_parts(output_offsets, output_bindings.offsets.len()),
             BufferArg::from_raw_parts(
@@ -1383,7 +1384,7 @@ where
 fn scan_fixed_storage<R, Item, Op>(
     exec: &Executor<R>,
     input: &FixedScanStorage<R, Item>,
-    output: &FixedScanStorage<R, Item>,
+    output: &mut FixedScanStorage<R, Item>,
 ) -> Result<(), Error>
 where
     R: Runtime,
@@ -1402,8 +1403,8 @@ where
             Op,
         >,
 {
-    let len = input.len()?;
-    let output_len = output.len()?;
+    let len = RowStorage::len(input)?;
+    let output_len = RowStorage::len(output)?;
     if output_len != len {
         return Err(Error::LengthMismatch {
             left: len,
@@ -1414,17 +1415,23 @@ where
         return Ok(());
     }
 
+    let extent = RowStorage::logical_extent(input);
+    RowStorage::set_logical_extent(output, extent.clone());
     let blocks = len.div_ceil(BLOCK_SIZE as usize);
-    let partials = Item::alloc_scratch(exec, blocks);
+    let mut partials = Item::alloc_scratch(exec, blocks);
+    RowStorage::set_logical_extent(
+        &mut partials,
+        extent.ceil_div(exec, BLOCK_SIZE as usize, blocks)?,
+    );
     let input_read = FixedScanRead::<R, Item>::new(input.read());
     let output_write = output.write();
     let partial_write = partials.write();
     scan_pass::<R, _, _, _, Item, Op>(exec, &input_read, &output_write, &partial_write)?;
 
     if blocks > 1 {
-        let prefixes = Item::alloc_scratch(exec, blocks);
-        scan_fixed_storage::<R, Item, Op>(exec, &partials, &prefixes)?;
-        add_fixed_prefixes::<R, _, Item, Op>(exec, &prefixes, &output_write, len)?;
+        let mut prefixes = Item::alloc_scratch(exec, blocks);
+        scan_fixed_storage::<R, Item, Op>(exec, &partials, &mut prefixes)?;
+        add_fixed_prefixes::<R, _, Item, Op>(exec, &prefixes, &output_write, len, &extent)?;
     }
     Ok(())
 }
@@ -1474,8 +1481,13 @@ where
             return Ok(());
         }
 
+        let extent = input.logical_extent()?;
         let blocks = len.div_ceil(BLOCK_SIZE as usize);
-        let partials = Item::alloc_scratch(exec, blocks);
+        let mut partials = Item::alloc_scratch(exec, blocks);
+        RowStorage::set_logical_extent(
+            &mut partials,
+            extent.ceil_div(exec, BLOCK_SIZE as usize, blocks)?,
+        );
         let partial_write = partials.write();
         <Dispatch<A13, S12> as InclusiveScanPassDispatch<
             R,
@@ -1489,9 +1501,9 @@ where
         >>::run_pass(exec, input, output, &partial_write)?;
 
         if blocks > 1 {
-            let prefixes = Item::alloc_scratch(exec, blocks);
-            scan_fixed_storage::<R, Item, Op>(exec, &partials, &prefixes)?;
-            add_fixed_prefixes::<R, _, Item, Op>(exec, &prefixes, output, len)?;
+            let mut prefixes = Item::alloc_scratch(exec, blocks);
+            scan_fixed_storage::<R, Item, Op>(exec, &partials, &mut prefixes)?;
+            add_fixed_prefixes::<R, _, Item, Op>(exec, &prefixes, output, len, &extent)?;
         }
         Ok(())
     }
@@ -1656,15 +1668,17 @@ pub(crate) fn inclusive_scan_u32<R: Runtime>(
     exec: &Executor<R>,
     input: &DeviceVec<R, u32>,
 ) -> Result<DeviceVec<R, u32>, Error> {
-    if input.is_empty() {
+    if input.capacity() == 0 {
         return Ok(exec.alloc_row::<u32>(0));
     }
-    let len = input.len();
-    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let len = input.capacity();
     let blocks = len.div_ceil(BLOCK_SIZE as usize);
-    let output = exec.alloc_row::<u32>(len);
-    let block_sums = exec.alloc_row::<u32>(blocks);
-    let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len_u32]));
+    let extent = input.logical_extent();
+    let mut output = exec.alloc_row::<u32>(len);
+    output.set_logical_extent(extent.clone());
+    let mut block_sums = exec.alloc_row::<u32>(blocks);
+    block_sums.set_logical_extent(extent.ceil_div(exec, BLOCK_SIZE as usize, blocks)?);
+    let len_handle = extent.materialize(exec)?;
     let count = cube_count_1d(blocks)?;
     unsafe {
         u32_block_inclusive_scan_kernel::launch_unchecked::<R>(
@@ -1672,7 +1686,7 @@ pub(crate) fn inclusive_scan_u32<R: Runtime>(
             count.clone(),
             CubeDim::new_1d(BLOCK_SIZE),
             BufferArg::from_raw_parts(input.handle.clone(), len),
-            BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
             BufferArg::from_raw_parts(output.handle.clone(), len),
             BufferArg::from_raw_parts(block_sums.handle.clone(), blocks),
         );
@@ -1685,7 +1699,7 @@ pub(crate) fn inclusive_scan_u32<R: Runtime>(
                 count,
                 CubeDim::new_1d(BLOCK_SIZE),
                 BufferArg::from_raw_parts(prefixes.handle.clone(), blocks),
-                BufferArg::from_raw_parts(len_handle, 1),
+                BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
                 BufferArg::from_raw_parts(output.handle.clone(), len),
             );
         }
@@ -1696,21 +1710,20 @@ pub(crate) fn inclusive_scan_u32<R: Runtime>(
 pub(crate) fn last_u32<R: Runtime>(
     exec: &Executor<R>,
     input: &DeviceVec<R, u32>,
-) -> Result<u32, Error> {
-    if input.is_empty() {
-        return Ok(0);
-    }
+) -> Result<DeviceVec<R, u32>, Error> {
     let output = exec.alloc_row::<u32>(1);
+    let len = input.logical_extent().materialize(exec)?;
     unsafe {
         copy_last_kernel::launch_unchecked::<R>(
             exec.client(),
             CubeCount::Static(1, 1, 1),
             CubeDim::new_1d(1),
-            BufferArg::from_raw_parts(input.handle.clone(), input.len()),
+            BufferArg::from_raw_parts(input.handle.clone(), input.capacity()),
+            BufferArg::from_raw_parts(len.handle.clone(), 1),
             BufferArg::from_raw_parts(output.handle.clone(), 1),
         );
     }
-    Ok(exec.to_host(&output)?[0])
+    Ok(output)
 }
 
 #[cfg(test)]
@@ -1730,7 +1743,10 @@ mod tests {
         assert_eq!(actual[256], 257);
         assert_eq!(actual[65_535], 65_536);
         assert_eq!(actual[70_000], 70_001);
-        assert_eq!(last_u32(&exec, &output).unwrap(), 70_001);
+        assert_eq!(
+            exec.to_host(&last_u32(&exec, &output).unwrap()).unwrap(),
+            vec![70_001]
+        );
     }
 
     struct Sum;
@@ -1825,10 +1841,7 @@ mod tests {
                 ),
             ),
         );
-        let input = Permute::new(
-            seven,
-            Transform::new(Counting::new(0, 600), crate::op::U32ToUsize),
-        );
+        let input = Permute::new(seven, Counting::new(0, 600));
         let output = exec.alloc_row::<Seven>(600);
 
         inclusive_scan(&exec, input, SumSevenItems, output.write()).unwrap();
@@ -1863,13 +1876,7 @@ mod tests {
                 ),
             ),
         );
-        let input = Transform::new(
-            Permute::new(
-                seven,
-                Transform::new(Counting::new(0, 600), crate::op::U32ToUsize),
-            ),
-            SumSeven,
-        );
+        let input = Transform::new(Permute::new(seven, Counting::new(0, 600)), SumSeven);
         let output = exec.to_device(&[0_u32; 600]);
         inclusive_scan(&exec, input, Sum, output.slice_mut(..)).unwrap();
         let actual = exec.to_host(&output).unwrap();
@@ -1919,10 +1926,7 @@ mod tests {
                 ),
             ),
         );
-        let input = Permute::new(
-            seven,
-            Transform::new(Counting::new(0, 4), crate::op::U32ToUsize),
-        );
+        let input = Permute::new(seven, Counting::new(0, 4));
         let output = exec.alloc_row::<Seven>(4);
         let init: Seven = (10, 20, 30, 40, 50, 60, 70);
         exclusive_scan(&exec, input, init, SumSevenItems, output.write()).unwrap();

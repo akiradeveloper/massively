@@ -1,7 +1,7 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
-    Executor, MStorage, lazy,
+    Executor, MStorage,
     op::{BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp},
     vector,
 };
@@ -40,22 +40,22 @@ impl ReductionOp<u32> for Add {
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for Less {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs < rhs
+    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+        massively::op::mbool(lhs < rhs)
     }
 }
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for Equal {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs == rhs
+    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
+        massively::op::mbool(lhs == rhs)
     }
 }
 
 #[cubecl::cube]
 impl PredicateOp<u32> for Even {
-    fn apply(value: u32) -> bool {
-        value % 2 == 0
+    fn apply(value: u32) -> massively::MBool {
+        massively::op::mbool(value % 2 == 0)
     }
 }
 
@@ -70,14 +70,14 @@ fn owned_vector_apis_return_device_storage() {
     assert_eq!(exec.to_host(&transformed).unwrap(), vec![4, 2, 3, 3]);
 
     let inclusive = vector::inclusive_scan(&exec, input.slice(..), Add).unwrap();
-    let exclusive = vector::exclusive_scan(&exec, input.slice(..), 0, Add).unwrap();
+    let exclusive =
+        vector::exclusive_scan(&exec, input.slice(..), exec.value(0).unwrap(), Add).unwrap();
     let adjacent = vector::adjacent_difference(&exec, input.slice(..), Add).unwrap();
     assert_eq!(exec.to_host(&inclusive).unwrap(), vec![3, 4, 6, 8]);
     assert_eq!(exec.to_host(&exclusive).unwrap(), vec![0, 3, 4, 6]);
     assert_eq!(exec.to_host(&adjacent).unwrap(), vec![3, 4, 3, 4]);
 
-    let indices = lazy::transform(indices.slice(..), massively::op::U32ToUsize);
-    let gathered = vector::gather(&exec, input.slice(..), indices).unwrap();
+    let gathered = vector::gather(&exec, input.slice(..), indices.slice(..)).unwrap();
     let reversed = vector::reverse(&exec, input.slice(..)).unwrap();
     assert_eq!(exec.to_host(&gathered).unwrap(), vec![1, 2, 3]);
     assert_eq!(exec.to_host(&reversed).unwrap(), vec![2, 2, 1, 3]);
@@ -85,27 +85,18 @@ fn owned_vector_apis_return_device_storage() {
     let sorted = vector::sort(&exec, input.slice(..), Less).unwrap();
     let unique = vector::unique(&exec, sorted.slice(..), Equal).unwrap();
     assert_eq!(exec.to_host(&sorted).unwrap(), vec![1, 2, 2, 3]);
-    assert_eq!(unique.len(), 3);
+    assert_eq!(unique.read_len(&exec).unwrap(), 3);
     assert_eq!(exec.to_host(&unique).unwrap(), vec![1, 2, 3]);
 
-    let copied = vector::copy_where(
-        &exec,
-        input.slice(..),
-        lazy::transform(stencil.slice(..), massively::op::U32ToBool),
-    )
-    .unwrap();
-    let removed = vector::remove_where(
-        &exec,
-        input.slice(..),
-        lazy::transform(stencil.slice(..), massively::op::U32ToBool),
-    )
-    .unwrap();
+    let copied = vector::copy_where(&exec, input.slice(..), stencil.slice(..)).unwrap();
+    let removed = vector::remove_where(&exec, input.slice(..), stencil.slice(..)).unwrap();
     let (partitioned, boundary) = vector::partition(&exec, input.slice(..), Even).unwrap();
     let filled = exec.alloc::<u32>(3);
-    vector::fill(&exec, 7_u32, filled.slice_mut(..)).unwrap();
+    let fill_value = exec.value(7_u32).unwrap();
+    vector::fill(&exec, &fill_value, filled.slice_mut(..)).unwrap();
     assert_eq!(exec.to_host(&copied).unwrap(), vec![3, 2]);
     assert_eq!(exec.to_host(&removed).unwrap(), vec![1, 2]);
-    assert_eq!(boundary, 2);
+    assert_eq!(boundary.read(&exec).unwrap(), 2);
     assert_eq!(exec.to_host(&partitioned).unwrap(), vec![2, 2, 3, 1]);
     assert_eq!(exec.to_host(&filled).unwrap(), vec![7, 7, 7]);
 
@@ -134,14 +125,48 @@ fn u32_stencil_transform_treats_every_nonzero_value_as_true() {
     let input = exec.to_device(&[10_u32, 20, 30, 40]);
     let stencil = exec.to_device(&[0_u32, 7, u32::MAX, 0]);
 
-    let copied = vector::copy_where(
-        &exec,
-        input.slice(..),
-        lazy::transform(stencil.slice(..), massively::op::U32ToBool),
-    )
-    .unwrap();
+    let copied = vector::copy_where(&exec, input.slice(..), stencil.slice(..)).unwrap();
 
     assert_eq!(exec.to_host(&copied).unwrap(), vec![20, 30]);
+}
+
+#[test]
+fn device_logical_length_flows_through_an_algorithm_pipeline() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let input = exec.to_device(&[5_u32, 1, 3, 1, 4, 2]);
+    let stencil = exec.to_device(&[1_u32, 1, 1, 1, 0, 0]);
+
+    // No host readback occurs between these operations. Every consumer uses
+    // the device-resident logical length carried by its input MVec.
+    let compacted = vector::copy_where(&exec, input.slice(..), stencil.slice(..)).unwrap();
+    let sorted = vector::sort(&exec, compacted.slice(..), Less).unwrap();
+    let unique = vector::unique(&exec, sorted.slice(..), Equal).unwrap();
+    let incremented = vector::transform(&exec, unique.slice(..), AddOne).unwrap();
+    let scanned = vector::inclusive_scan(&exec, incremented.slice(..), Add).unwrap();
+    let sum = vector::reduce(&exec, scanned.slice(..), exec.value(0).unwrap(), Add).unwrap();
+
+    assert_eq!(
+        MStorage::len(&unique, &exec).unwrap().read(&exec).unwrap(),
+        3
+    );
+    assert_eq!(exec.to_host(&unique).unwrap(), vec![1, 3, 5]);
+    assert_eq!(exec.to_host(&scanned).unwrap(), vec![2, 6, 12]);
+    assert_eq!(sum.read(&exec).unwrap(), 20);
+}
+
+#[test]
+fn device_logical_length_zero_flows_without_host_control() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let input = exec.to_device(&[3_u32, 2, 1]);
+    let stencil = exec.to_device(&[0_u32, 0, 0]);
+
+    let compacted = vector::copy_where(&exec, input.slice(..), stencil.slice(..)).unwrap();
+    let sorted = vector::sort(&exec, compacted.slice(..), Less).unwrap();
+    let unique = vector::unique(&exec, sorted.slice(..), Equal).unwrap();
+    let sum = vector::reduce(&exec, unique.slice(..), exec.value(7).unwrap(), Add).unwrap();
+
+    assert_eq!(exec.to_host(&unique).unwrap(), Vec::<u32>::new());
+    assert_eq!(sum.read(&exec).unwrap(), 7);
 }
 
 #[test]
@@ -169,12 +194,13 @@ fn owned_by_key_and_flat_tuple_results() {
         Add,
     )
     .unwrap();
+    let init = exec.value(0_u32).unwrap();
     let exclusive = vector::exclusive_scan_by_key(
         &exec,
         sorted_keys.slice(..),
         sorted_values.slice(..),
         Equal,
-        0,
+        init.clone(),
         Add,
     )
     .unwrap();
@@ -186,7 +212,7 @@ fn owned_by_key_and_flat_tuple_results() {
         sorted_keys.slice(..),
         sorted_values.slice(..),
         Equal,
-        0,
+        init,
         Add,
     )
     .unwrap();

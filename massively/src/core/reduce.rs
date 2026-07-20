@@ -1,5 +1,7 @@
 //! Read-arity and storage-arity indexed reductions.
 
+#![allow(private_interfaces)]
+
 use core::marker::PhantomData;
 use cubecl::prelude::*;
 
@@ -53,8 +55,10 @@ const TILE_SIZE: usize = BLOCK_SIZE as usize * ITEMS_PER_UNIT;
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3]);
+/// let init = exec.value(0_u32).unwrap();
 ///
-/// assert_eq!(reduce(&exec, input.slice(..), 0, Add).unwrap(), 6);
+/// let sum = reduce(&exec, input.slice(..), init, Add).unwrap();
+/// assert_eq!(sum.read(&exec).unwrap(), 6);
 /// ```
 #[cubecl::cube]
 pub trait ReductionOp<Item: CubeType>: 'static + Send + Sync {
@@ -240,6 +244,9 @@ impl StagedBindings {
 #[doc(hidden)]
 pub trait StageRead<R: Runtime, Env>: BindSlots<Env> {
     fn logical_len(&self) -> Result<usize, Error>;
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        Ok(crate::extent::LogicalExtent::fixed(self.logical_len()?))
+    }
     fn stage_at(
         &self,
         client: &ComputeClient<R>,
@@ -258,6 +265,10 @@ macro_rules! impl_leaf_staging {
         {
             fn logical_len(&self) -> Result<usize, Error> {
                 Ok(self.len)
+            }
+
+            fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+                Ok(self.extent.clone())
             }
 
             fn stage_at(
@@ -395,6 +406,10 @@ where
         Ok(left)
     }
 
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.0.logical_extent()?.zipped(&self.1.logical_extent()?)
+    }
+
     fn stage_at(
         &self,
         client: &ComputeClient<R>,
@@ -415,6 +430,13 @@ where
 {
     fn logical_len(&self) -> Result<usize, Error> {
         Ok(self.offsets().logical_len()?.saturating_sub(1))
+    }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        Ok(self
+            .offsets()
+            .logical_extent()?
+            .slice(1, self.logical_len()?))
     }
 
     fn stage_at(
@@ -439,6 +461,10 @@ where
         self.input.logical_len()
     }
 
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.input.logical_extent()
+    }
+
     fn stage_at(
         &self,
         client: &ComputeClient<R>,
@@ -458,6 +484,10 @@ where
 {
     fn logical_len(&self) -> Result<usize, Error> {
         self.input.logical_len()
+    }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.input.logical_extent()
     }
 
     fn stage_at(
@@ -481,6 +511,10 @@ where
         self.input.logical_len()
     }
 
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.input.logical_extent()
+    }
+
     fn stage_at(
         &self,
         client: &ComputeClient<R>,
@@ -502,6 +536,10 @@ where
         self.input.logical_len()
     }
 
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.input.logical_extent()
+    }
+
     fn stage_at(
         &self,
         client: &ComputeClient<R>,
@@ -520,6 +558,10 @@ where
 {
     fn logical_len(&self) -> Result<usize, Error> {
         self.input.logical_len()
+    }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.input.logical_extent()
     }
 
     fn stage_at(
@@ -543,6 +585,10 @@ where
         self.indices.logical_len()
     }
 
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.indices.logical_extent()
+    }
+
     fn stage_at(
         &self,
         client: &ComputeClient<R>,
@@ -558,7 +604,6 @@ impl<R, Values, Env> StageRead<R, Env> for crate::read::Reverse<Values>
 where
     R: Runtime,
     Values: StageRead<R, Env>,
-    ReverseCounting: StageRead<R, Values::NextEnv>,
     crate::read::Reverse<Values>: BindSlots<Env>,
 {
     fn logical_len(&self) -> Result<usize, Error> {
@@ -568,15 +613,25 @@ where
         }
     }
 
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        let capacity = self.logical_len()?;
+        Ok(self.values.logical_extent()?.slice(self.offset, capacity))
+    }
+
     fn stage_at(
         &self,
         client: &ComputeClient<R>,
         owner: u64,
         bindings: &mut StagedBindings,
     ) -> Result<(), Error> {
-        let input_len = self.values.logical_len()?;
+        let exec = crate::Executor::from_client(client, owner);
+        let start = self
+            .values
+            .logical_extent()?
+            .reverse_start(&exec, self.offset)?;
         self.values.stage_at(client, owner, bindings)?;
-        self.indices(input_len).stage_at(client, owner, bindings)
+        bindings.push(start.handle.clone(), 1, 0);
+        Ok(())
     }
 }
 
@@ -605,7 +660,9 @@ mod legacy_storage1_reduce {
             let mut plane_valid = Shared::<[u32]>::new_slice(cube_dim);
             let tile_start = (CUBE_POS as usize) * TILE_SIZE;
             let first_index = tile_start + unit;
-            let safe_index = if first_index < logical_len {
+            let safe_index = if logical_len == 0usize {
+                0usize
+            } else if first_index < logical_len {
                 first_index
             } else {
                 logical_len - 1usize
@@ -1010,7 +1067,9 @@ macro_rules! define_padded_reduce_eval_kernel {
             let logical_len = len[0] as usize;
             let tile_start = (CUBE_POS as usize) * TILE_SIZE;
             let first_index = tile_start + unit;
-            let safe_index = if first_index < logical_len {
+            let safe_index = if logical_len == 0usize {
+                0usize
+            } else if first_index < logical_len {
                 first_index
             } else {
                 logical_len - 1usize
@@ -1398,59 +1457,16 @@ fn checked_u32(len: usize) -> Result<u32, Error> {
     u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })
 }
 
-#[cfg(any())]
-fn finish_storage1_reduce<R, Item, Op>(
-    exec: &Executor<R>,
-    mut current: cubecl::server::Handle,
-    mut current_len: usize,
-    init: Item,
-) -> Result<Item, Error>
-where
-    R: Runtime,
-    Item: ReduceStorage1,
-    Op: ReductionOp<Item>,
-{
-    let client = exec.client();
-    while current_len > 1 {
-        let next_len = pass_block_count(current_len);
-        let len = client.create_from_slice(u32::as_bytes(&[checked_u32(current_len)?]));
-        let next = client.empty(next_len * size_of::<Item>());
-        unsafe {
-            reduce_storage1_partials_kernel::launch_unchecked::<Item, Op, R>(
-                client,
-                cube_count_1d(next_len)?,
-                CubeDim::new_1d(BLOCK_SIZE),
-                BufferArg::from_raw_parts(current, current_len),
-                BufferArg::from_raw_parts(len, 1),
-                BufferArg::from_raw_parts(next.clone(), next_len),
-            );
-        }
-        current = next;
-        current_len = next_len;
-    }
-
-    let init_handle = client.create_from_slice(Item::as_bytes(&[init]));
-    let output = client.empty(size_of::<Item>());
-    unsafe {
-        reduce_storage1_finalize_kernel::launch_unchecked::<Item, Op, R>(
-            client,
-            CubeCount::new_single(),
-            CubeDim::new_1d(1),
-            BufferArg::from_raw_parts(current, 1),
-            BufferArg::from_raw_parts(init_handle, 1),
-            BufferArg::from_raw_parts(output.clone(), 1),
-        );
-    }
-    let bytes = client.read_one(output).map_err(|err| Error::Launch {
-        message: format!("{err:?}"),
-    })?;
-    Ok(Item::from_bytes(&bytes)[0])
-}
-
 /// Consumer-specific reduction dispatch.
 #[doc(hidden)]
-pub trait ReduceDispatch<R: Runtime, Input, Item, Op, Slots> {
-    fn execute(exec: &Executor<R>, input: &Input, init: Item) -> Result<Item, Error>;
+pub(crate) trait ReduceDispatch<R: Runtime, Input, Item, Op, Slots> {
+    type Storage;
+
+    fn execute(
+        exec: &Executor<R>,
+        input: &Input,
+        init: Self::Storage,
+    ) -> Result<Self::Storage, Error>;
 }
 
 /// One fixed-ABI reduction pass. The output contains one partial per tile.
@@ -1460,24 +1476,6 @@ where
     R: Runtime,
 {
     fn execute_pass(exec: &Executor<R>, input: &Input, output: &Output) -> Result<(), Error>;
-}
-
-#[cfg(any())]
-macro_rules! leaf_value {
-    ($root:ident; $first:ident $( . $rest:ident )*) => {
-        $root.$first $( .$rest )*
-    };
-}
-
-#[cfg(any())]
-macro_rules! build_leaf_list {
-    (@tail $last:ident) => { Last { value: $last } };
-    (@tail $head:ident, $($tail:ident),+) => {
-        More { head: $head, tail: build_leaf_list!(@tail $($tail),+) }
-    };
-    ($head:ident, $($tail:ident),+) => {
-        More { head: $head, tail: build_leaf_list!(@tail $($tail),+) }
-    };
 }
 
 #[path = "reduce_fixed.rs"]
@@ -1523,8 +1521,8 @@ fn finish_fixed_reduce<R, Item, Op>(
     exec: &Executor<R>,
     mut current: FixedReduceStorage<R, Item>,
     mut current_len: usize,
-    init: Item,
-) -> Result<Item, Error>
+    init: FixedReduceStorage<R, Item>,
+) -> Result<FixedReduceStorage<R, Item>, Error>
 where
     R: Runtime,
     Item: crate::core::allocation::ScratchStorage<R>,
@@ -1543,7 +1541,12 @@ where
 {
     while current_len > 1 {
         let next_len = pass_block_count(current_len);
-        let next = Item::alloc_scratch(exec, next_len);
+        let current_extent = RowStorage::logical_extent(&current);
+        let mut next = Item::alloc_scratch(exec, next_len);
+        RowStorage::set_logical_extent(
+            &mut next,
+            current_extent.ceil_div(exec, TILE_SIZE, next_len)?,
+        );
         let input = FixedReduceRead::<R, Item>::new(current.read());
         let output = next.write();
         reduce_pass::<R, _, _, Item, Op>(exec, &input, &output)?;
@@ -1551,17 +1554,26 @@ where
         current_len = next_len;
     }
 
-    let initial = crate::allocation::scratch_singleton(exec, init)?;
-    let combined = Item::alloc_scratch(exec, 2);
-    initial.copy_storage(exec, combined.slice_mut(..1))?;
+    let current_extent = RowStorage::logical_extent(&current);
+    let mut combined = Item::alloc_scratch(exec, 2);
+    init.copy_storage(exec, combined.slice_mut(..1))?;
     current.copy_storage(exec, combined.slice_mut(1..))?;
+    RowStorage::set_logical_extent(
+        &mut combined,
+        crate::extent::LogicalExtent::add(
+            exec,
+            &crate::extent::LogicalExtent::fixed(1),
+            &current_extent,
+            2,
+        )?,
+    );
 
     let result = Item::alloc_scratch(exec, 1);
     let input = FixedReduceRead::<R, Item>::new(combined.read());
     let output = result.write();
     reduce_pass::<R, _, _, Item, Op>(exec, &input, &output)?;
 
-    result.read_first(exec)
+    Ok(result)
 }
 
 impl<R, Input, Item, Op, Slots> ReduceDispatch<R, Input, Item, Op, Slots> for Dispatch<A13, S12>
@@ -1592,13 +1604,21 @@ where
             >,
         >,
 {
-    fn execute(exec: &Executor<R>, input: &Input, init: Item) -> Result<Item, Error> {
+    type Storage = FixedReduceStorage<R, Item>;
+
+    fn execute(
+        exec: &Executor<R>,
+        input: &Input,
+        init: Self::Storage,
+    ) -> Result<Self::Storage, Error> {
         let len = input.logical_len()?;
         if len == 0 {
             return Ok(init);
         }
+        let extent = input.logical_extent()?;
         let blocks = pass_block_count(len);
-        let partials = Item::alloc_scratch(exec, blocks);
+        let mut partials = Item::alloc_scratch(exec, blocks);
+        RowStorage::set_logical_extent(&mut partials, extent.ceil_div(exec, TILE_SIZE, blocks)?);
         let output = partials.write();
         <Dispatch<A13, S12> as ReducePassDispatch<
             R,
@@ -1619,9 +1639,24 @@ where
 pub(crate) fn reduce<R, Input, Op>(
     exec: &Executor<R>,
     input: Input,
-    init: Input::Item,
+    init: <Dispatch<A13, S12> as ReduceDispatch<
+        R,
+        Input,
+        Input::Item,
+        Op,
+        crate::read::KernelReadSlots<Input::Slots>,
+    >>::Storage,
     _op: Op,
-) -> Result<Input::Item, Error>
+) -> Result<
+    <Dispatch<A13, S12> as ReduceDispatch<
+        R,
+        Input,
+        Input::Item,
+        Op,
+        crate::read::KernelReadSlots<Input::Slots>,
+    >>::Storage,
+    Error,
+>
 where
     R: Runtime,
     Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
@@ -1727,8 +1762,8 @@ mod tests {
         let values = exec.to_device(&vec![1_u32; len]);
         let input = Transform::new(values.column(), Double);
 
-        let output = reduce(&exec, input, 7, Sum).unwrap();
-        assert_eq!(output, 7 + 2 * len as u32);
+        let output = reduce(&exec, input, exec.to_device(&[7]), Sum).unwrap();
+        assert_eq!(exec.to_host(&output).unwrap()[0], 7 + 2 * len as u32);
     }
 
     #[test]
@@ -1739,8 +1774,8 @@ mod tests {
         let right = exec.to_device(&vec![2_u32; len]);
         let input = Transform::new(Zip::new(left.column(), right.column()), AddPair);
 
-        let output = reduce(&exec, input, 0, Sum).unwrap();
-        assert_eq!(output, 3 * len as u32);
+        let output = reduce(&exec, input, exec.to_device(&[0]), Sum).unwrap();
+        assert_eq!(exec.to_host(&output).unwrap()[0], 3 * len as u32);
     }
 
     #[test]
@@ -1755,15 +1790,16 @@ mod tests {
             AddTriple,
         );
 
-        let output = reduce(&exec, input, 0, Sum).unwrap();
-        assert_eq!(output, 6 * len as u32);
+        let output = reduce(&exec, input, exec.to_device(&[0]), Sum).unwrap();
+        assert_eq!(exec.to_host(&output).unwrap()[0], 6 * len as u32);
     }
 
     #[test]
     fn empty_reduce_returns_init_without_launching_or_staging() {
         let exec = executor();
         let input = Transform::new(Column::<u32>::new(), Identity);
-        assert_eq!(reduce(&exec, input, 42, Sum).unwrap(), 42);
+        let output = reduce(&exec, input, exec.to_device(&[42]), Sum).unwrap();
+        assert_eq!(exec.to_host(&output).unwrap(), vec![42]);
     }
 
     #[test]
@@ -1772,10 +1808,10 @@ mod tests {
         let left = exec.to_device(&[1_u32, 2]);
         let right = exec.to_device(&[3_u32]);
         let input = Transform::new(Zip::new(left.column(), right.column()), AddPair);
-        assert_eq!(
-            reduce(&exec, input, 0, Sum),
+        assert!(matches!(
+            reduce(&exec, input, exec.to_device(&[0]), Sum),
             Err(Error::LengthMismatch { left: 2, right: 1 })
-        );
+        ));
     }
 
     type FourColumns = Zip<Zip<Zip<Column<u32>, Column<u32>>, Column<u32>>, Column<u32>>;
@@ -1798,7 +1834,8 @@ mod tests {
             ),
             AddFour,
         );
-        assert_eq!(reduce(&exec, input, 5, Sum).unwrap(), 5 + 10 * 513);
+        let output = reduce(&exec, input, exec.to_device(&[5]), Sum).unwrap();
+        assert_eq!(exec.to_host(&output).unwrap()[0], 5 + 10 * 513);
     }
 
     #[test]
@@ -1824,13 +1861,20 @@ mod tests {
                 ),
             ),
         );
-        let input = Permute::new(
-            seven,
-            crate::Transform::new(Counting::new(0, len), crate::op::U32ToUsize),
-        );
+        let input = Permute::new(seven, Counting::new(0, len));
         let init: Seven = (10, 20, 30, 40, 50, 60, 70);
 
-        let output = reduce(&exec, input, init, AddSeven).unwrap();
+        let output = reduce(
+            &exec,
+            input,
+            exec.value(init).unwrap().into_scratch_storage(),
+            AddSeven,
+        )
+        .unwrap();
+        let output = crate::MVal::<WgpuRuntime, Seven>::from_storage(output)
+            .unwrap()
+            .read(&exec)
+            .unwrap();
         assert_eq!(
             output,
             (

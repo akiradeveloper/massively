@@ -5,14 +5,57 @@ use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 use crate::{
-    A13, DeviceVec, Error, Executor, MStorageElement, ReadExpression,
+    A13, DeviceVec, Error, Executor, MBool, MIndex, MStorageElement, MVal, ReadExpression,
     eval::Eval13,
+    op::UnaryOp,
     ordering::BinaryPredicateOp,
     read::{Env0, Env13, LowerReadExpression},
     reduce::{StageRead, StagedBindings},
 };
 
 const BLOCK_SIZE: u32 = 256;
+
+struct SentinelToOption;
+
+#[cubecl::cube]
+impl UnaryOp<u32> for SentinelToOption {
+    type Output = (MBool, MIndex);
+
+    fn apply(index: u32) -> Self::Output {
+        (crate::op::mbool(index != u32::MAX), index)
+    }
+}
+
+struct EqualityResult;
+
+#[cubecl::cube]
+impl UnaryOp<(u32, u32, u32)> for EqualityResult {
+    type Output = MBool;
+
+    fn apply(input: (u32, u32, u32)) -> MBool {
+        crate::op::mbool(input.2 != 0u32 && input.0 >= input.1)
+    }
+}
+
+struct MismatchResult;
+
+#[cubecl::cube]
+impl UnaryOp<(u32, u32, u32)> for MismatchResult {
+    type Output = (MBool, MIndex);
+
+    fn apply(input: (u32, u32, u32)) -> Self::Output {
+        let within_shared_range = input.0 < input.1;
+        let lengths_differ = input.2 == 0u32;
+        (
+            crate::op::mbool(within_shared_range || lengths_differ),
+            if within_shared_range {
+                input.0
+            } else {
+                input.1
+            },
+        )
+    }
+}
 
 #[cubecl::cube]
 trait PairCodeOp<Item: CubeType>: 'static + Send + Sync {
@@ -28,7 +71,7 @@ where
     Equal: BinaryPredicateOp<Item>,
 {
     fn code(left: Item, right: Item, _left_again: Item, _right_again: Item) -> u32 {
-        if Equal::apply(left, right) {
+        if crate::ordering::binary_predicate::<Item, Equal>(left, right) {
             0u32
         } else {
             1u32
@@ -45,9 +88,9 @@ where
     Less: BinaryPredicateOp<Item>,
 {
     fn code(left: Item, right: Item, left_again: Item, right_again: Item) -> u32 {
-        if Less::apply(left, right) {
+        if crate::ordering::binary_predicate::<Item, Less>(left, right) {
             1u32
-        } else if Less::apply(right_again, left_again) {
+        } else if crate::ordering::binary_predicate::<Item, Less>(right_again, left_again) {
             2u32
         } else {
             0u32
@@ -100,6 +143,24 @@ define_pair_code_kernel!(
     [R0:right0,R1:right1,R2:right2,R3:right3,R4:right4,R5:right5,R6:right6,R7:right7,R8:right8,R9:right9,R10:right10,R11:right11,R12:right12]
 );
 
+#[cubecl::cube(launch_unchecked)]
+fn lexicographical_result_kernel(
+    codes: &[u32],
+    best: &[u32],
+    shared_len: &[u32],
+    left_is_shorter: &[u32],
+    output: &mut [u32],
+) {
+    if ABSOLUTE_POS == 0 {
+        let index = best[0];
+        output[0] = if index < shared_len[0] {
+            crate::op::mbool(codes[index as usize] == 1u32)
+        } else {
+            crate::op::mbool(left_is_shorter[0] != 0u32)
+        };
+    }
+}
+
 macro_rules! define_find_first_of_kernel {
     (
         $name:ident,$eval:ident,$method:ident;
@@ -129,7 +190,7 @@ macro_rules! define_find_first_of_kernel {
                 while needle.read() < needle_len[0] as usize
                     && (index as u32) < best[0].load()
                 {
-                    if Equal::apply(
+                    if crate::ordering::binary_predicate::<Item, Equal>(
                         Source::$method($( $source_slot, )+ source_offsets, index),
                         Needles::$method($( $needle_slot, )+ needle_offsets, needle.read()),
                     ) {
@@ -164,7 +225,7 @@ where
     Less: BinaryPredicateOp<Item>,
 {
     fn go_right(candidate: Item, value: Item) -> bool {
-        Less::apply(candidate, value)
+        crate::ordering::binary_predicate::<Item, Less>(candidate, value)
     }
 }
 
@@ -177,7 +238,7 @@ where
     Less: BinaryPredicateOp<Item>,
 {
     fn go_right(candidate: Item, value: Item) -> bool {
-        !Less::apply(value, candidate)
+        !crate::ordering::binary_predicate::<Item, Less>(value, candidate)
     }
 }
 
@@ -241,7 +302,15 @@ where
         exec: &Executor<R>,
         left: &Left,
         right: &Right,
-    ) -> Result<(DeviceVec<R, u32>, Option<u32>, usize, usize), Error>;
+    ) -> Result<
+        (
+            DeviceVec<R, u32>,
+            DeviceVec<R, u32>,
+            crate::extent::LogicalExtent,
+            crate::extent::LogicalExtent,
+        ),
+        Error,
+    >;
 }
 
 macro_rules! impl_pair_code_dispatch {
@@ -272,13 +341,30 @@ macro_rules! impl_pair_code_dispatch {
                 exec: &Executor<R>,
                 left: &Left,
                 right: &Right,
-            ) -> Result<(DeviceVec<R, u32>, Option<u32>, usize, usize), Error> {
-                let left_len = left.logical_len()?;
-                let right_len = right.logical_len()?;
-                let len = left_len.min(right_len);
-                let codes = exec.alloc_row::<u32>(len);
-                if len == 0 {
-                    return Ok((codes, None, left_len, right_len));
+            ) -> Result<
+                (
+                    DeviceVec<R, u32>,
+                    DeviceVec<R, u32>,
+                    crate::extent::LogicalExtent,
+                    crate::extent::LogicalExtent,
+                ),
+                Error,
+            > {
+                let left_capacity = left.logical_len()?;
+                let right_capacity = right.logical_len()?;
+                let capacity = left_capacity.min(right_capacity);
+                let left_extent = left.logical_extent()?;
+                let right_extent = right.logical_extent()?;
+                let shared_extent = crate::extent::LogicalExtent::min(
+                    exec,
+                    &left_extent,
+                    &right_extent,
+                )?;
+                let mut codes = exec.alloc_row::<u32>(capacity);
+                codes.set_logical_extent(shared_extent.clone());
+                let best = shared_extent.copy_value(exec)?;
+                if capacity == 0 {
+                    return Ok((codes, best, left_extent, right_extent));
                 }
                 let mut left_bindings = StagedBindings::new();
                 let mut right_bindings = StagedBindings::new();
@@ -286,9 +372,7 @@ macro_rules! impl_pair_code_dispatch {
                 right.stage_at(exec.client(), exec.id(), &mut right_bindings)?;
                 let left_offsets = exec.client().create_from_slice(u32::as_bytes(&left_bindings.offsets));
                 let right_offsets = exec.client().create_from_slice(u32::as_bytes(&right_bindings.offsets));
-                let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-                let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len_u32]));
-                let best = exec.to_device(&[len_u32]);
+                let len_handle = shared_extent.materialize(exec)?;
                 unsafe {
                     $kernel::launch_unchecked::<
                         Item,
@@ -300,19 +384,18 @@ macro_rules! impl_pair_code_dispatch {
                         R,
                     >(
                         exec.client(),
-                        crate::launch::cube_count_1d(len.div_ceil(BLOCK_SIZE as usize))?,
+                        crate::launch::cube_count_1d(capacity.div_ceil(BLOCK_SIZE as usize))?,
                         CubeDim::new_1d(BLOCK_SIZE),
                         $( BufferArg::from_raw_parts(left_bindings.slots[$left_index].0.clone(), left_bindings.slots[$left_index].1), )+
                         BufferArg::from_raw_parts(left_offsets, left_bindings.offsets.len()),
                         $( BufferArg::from_raw_parts(right_bindings.slots[$right_index].0.clone(), right_bindings.slots[$right_index].1), )+
                         BufferArg::from_raw_parts(right_offsets, right_bindings.offsets.len()),
-                        BufferArg::from_raw_parts(len_handle, 1),
-                        BufferArg::from_raw_parts(codes.handle.clone(), codes.len()),
-                        BufferArg::from_raw_parts(best.handle.clone(), best.len()),
+                        BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
+                        BufferArg::from_raw_parts(codes.handle.clone(), codes.capacity()),
+                        BufferArg::from_raw_parts(best.handle.clone(), best.capacity()),
                     );
                 }
-                let index = exec.to_host(&best)?[0];
-                Ok((codes, (index < len_u32).then_some(index), left_len, right_len))
+                Ok((codes, best, left_extent, right_extent))
             }
         }
     };
@@ -330,7 +413,11 @@ trait FindFirstDispatch<R, Source, Needles, Item, SourceSlots, NeedleSlots, Equa
 where
     R: Runtime,
 {
-    fn run(exec: &Executor<R>, source: &Source, needles: &Needles) -> Result<Option<u32>, Error>;
+    fn run(
+        exec: &Executor<R>,
+        source: &Source,
+        needles: &Needles,
+    ) -> Result<DeviceVec<R, u32>, Error>;
 }
 
 trait BoundDispatch<R, Source, Values, Item, SourceSlots, ValueSlots, Op>
@@ -372,11 +459,12 @@ macro_rules! impl_range_query_dispatch {
                 exec: &Executor<R>,
                 source: &Source,
                 needles: &Needles,
-            ) -> Result<Option<u32>, Error> {
-                let source_len = source.logical_len()?;
-                let needle_len = needles.logical_len()?;
-                if source_len == 0 || needle_len == 0 {
-                    return Ok(None);
+            ) -> Result<DeviceVec<R, u32>, Error> {
+                let source_capacity = source.logical_len()?;
+                let needle_capacity = needles.logical_len()?;
+                let best = exec.to_device(&[u32::MAX]);
+                if source_capacity == 0 || needle_capacity == 0 {
+                    return Ok(best);
                 }
                 let mut source_bindings = StagedBindings::new();
                 let mut needle_bindings = StagedBindings::new();
@@ -384,11 +472,8 @@ macro_rules! impl_range_query_dispatch {
                 needles.stage_at(exec.client(), exec.id(), &mut needle_bindings)?;
                 let source_offsets = exec.client().create_from_slice(u32::as_bytes(&source_bindings.offsets));
                 let needle_offsets = exec.client().create_from_slice(u32::as_bytes(&needle_bindings.offsets));
-                let source_len_u32 = u32::try_from(source_len).map_err(|_| Error::LengthTooLarge { len: source_len })?;
-                let needle_len_u32 = u32::try_from(needle_len).map_err(|_| Error::LengthTooLarge { len: needle_len })?;
-                let source_len_handle = exec.client().create_from_slice(u32::as_bytes(&[source_len_u32]));
-                let needle_len_handle = exec.client().create_from_slice(u32::as_bytes(&[needle_len_u32]));
-                let best = exec.to_device(&[source_len_u32]);
+                let source_len_handle = source.logical_extent()?.materialize(exec)?;
+                let needle_len_handle = needles.logical_extent()?.materialize(exec)?;
                 unsafe {
                     $find_kernel::launch_unchecked::<
                         Item,
@@ -400,19 +485,18 @@ macro_rules! impl_range_query_dispatch {
                         R,
                     >(
                         exec.client(),
-                        crate::launch::cube_count_1d(source_len.div_ceil(BLOCK_SIZE as usize))?,
+                        crate::launch::cube_count_1d(source_capacity.div_ceil(BLOCK_SIZE as usize))?,
                         CubeDim::new_1d(BLOCK_SIZE),
                         $( BufferArg::from_raw_parts(source_bindings.slots[$source_index].0.clone(), source_bindings.slots[$source_index].1), )+
                         BufferArg::from_raw_parts(source_offsets, source_bindings.offsets.len()),
                         $( BufferArg::from_raw_parts(needle_bindings.slots[$other_index].0.clone(), needle_bindings.slots[$other_index].1), )+
                         BufferArg::from_raw_parts(needle_offsets, needle_bindings.offsets.len()),
-                        BufferArg::from_raw_parts(source_len_handle, 1),
-                        BufferArg::from_raw_parts(needle_len_handle, 1),
-                        BufferArg::from_raw_parts(best.handle.clone(), best.len()),
+                        BufferArg::from_raw_parts(source_len_handle.handle.clone(), 1),
+                        BufferArg::from_raw_parts(needle_len_handle.handle.clone(), 1),
+                        BufferArg::from_raw_parts(best.handle.clone(), best.capacity()),
                     );
                 }
-                let index = exec.to_host(&best)?[0];
-                Ok((index < source_len_u32).then_some(index))
+                Ok(best)
             }
         }
 
@@ -439,10 +523,11 @@ macro_rules! impl_range_query_dispatch {
                 source: &Source,
                 values: &Values,
             ) -> Result<DeviceVec<R, u32>, Error> {
-                let source_len = source.logical_len()?;
-                let value_len = values.logical_len()?;
-                let bounds = exec.alloc_row::<u32>(value_len);
-                if value_len == 0 {
+                let value_capacity = values.logical_len()?;
+                let value_extent = values.logical_extent()?;
+                let mut bounds = exec.alloc_row::<u32>(value_capacity);
+                bounds.set_logical_extent(value_extent.clone());
+                if value_capacity == 0 {
                     return Ok(bounds);
                 }
                 let mut source_bindings = StagedBindings::new();
@@ -451,10 +536,8 @@ macro_rules! impl_range_query_dispatch {
                 values.stage_at(exec.client(), exec.id(), &mut value_bindings)?;
                 let source_offsets = exec.client().create_from_slice(u32::as_bytes(&source_bindings.offsets));
                 let value_offsets = exec.client().create_from_slice(u32::as_bytes(&value_bindings.offsets));
-                let source_len_u32 = u32::try_from(source_len).map_err(|_| Error::LengthTooLarge { len: source_len })?;
-                let value_len_u32 = u32::try_from(value_len).map_err(|_| Error::LengthTooLarge { len: value_len })?;
-                let source_len_handle = exec.client().create_from_slice(u32::as_bytes(&[source_len_u32]));
-                let value_len_handle = exec.client().create_from_slice(u32::as_bytes(&[value_len_u32]));
+                let source_len_handle = source.logical_extent()?.materialize(exec)?;
+                let value_len_handle = value_extent.materialize(exec)?;
                 unsafe {
                     $bound_kernel::launch_unchecked::<
                         Item,
@@ -466,15 +549,15 @@ macro_rules! impl_range_query_dispatch {
                         R,
                     >(
                         exec.client(),
-                        crate::launch::cube_count_1d(value_len.div_ceil(BLOCK_SIZE as usize))?,
+                        crate::launch::cube_count_1d(value_capacity.div_ceil(BLOCK_SIZE as usize))?,
                         CubeDim::new_1d(BLOCK_SIZE),
                         $( BufferArg::from_raw_parts(source_bindings.slots[$source_index].0.clone(), source_bindings.slots[$source_index].1), )+
                         BufferArg::from_raw_parts(source_offsets, source_bindings.offsets.len()),
                         $( BufferArg::from_raw_parts(value_bindings.slots[$other_index].0.clone(), value_bindings.slots[$other_index].1), )+
                         BufferArg::from_raw_parts(value_offsets, value_bindings.offsets.len()),
-                        BufferArg::from_raw_parts(source_len_handle, 1),
-                        BufferArg::from_raw_parts(value_len_handle, 1),
-                        BufferArg::from_raw_parts(bounds.handle.clone(), bounds.len()),
+                        BufferArg::from_raw_parts(source_len_handle.handle.clone(), 1),
+                        BufferArg::from_raw_parts(value_len_handle.handle.clone(), 1),
+                        BufferArg::from_raw_parts(bounds.handle.clone(), bounds.capacity()),
                     );
                 }
                 Ok(bounds)
@@ -496,13 +579,21 @@ trait PairCodeInput<R: Runtime, Right, Op>: ReadExpression {
         self,
         exec: &Executor<R>,
         right: Right,
-    ) -> Result<(DeviceVec<R, u32>, Option<u32>, usize, usize), Error>;
+    ) -> Result<
+        (
+            DeviceVec<R, u32>,
+            DeviceVec<R, u32>,
+            crate::extent::LogicalExtent,
+            crate::extent::LogicalExtent,
+        ),
+        Error,
+    >;
 }
 
 /// Internal public-API capability for `find_first_of`.
 #[doc(hidden)]
 pub trait FindFirstOfInput<R: Runtime, Needles, Equal>: ReadExpression {
-    fn find_first(self, exec: &Executor<R>, needles: Needles) -> Result<Option<u32>, Error>;
+    fn find_first(self, exec: &Executor<R>, needles: Needles) -> Result<DeviceVec<R, u32>, Error>;
 }
 
 impl<R, Source, Needles, Equal> FindFirstOfInput<R, Needles, Equal> for Source
@@ -513,7 +604,7 @@ where
     PairDispatch<crate::S12>:
         FindFirstDispatch<R, Source, Needles, Source::Item, Source::Slots, Needles::Slots, Equal>,
 {
-    fn find_first(self, exec: &Executor<R>, needles: Needles) -> Result<Option<u32>, Error> {
+    fn find_first(self, exec: &Executor<R>, needles: Needles) -> Result<DeviceVec<R, u32>, Error> {
         <PairDispatch<crate::S12> as FindFirstDispatch<
             R,
             Source,
@@ -532,12 +623,16 @@ pub(crate) fn find_first_of<R, Source, Needles, Equal>(
     source: Source,
     needles: Needles,
     _equal: Equal,
-) -> Result<Option<u32>, Error>
+) -> Result<MVal<R, (MBool, MIndex)>, Error>
 where
     R: Runtime,
     Source: FindFirstOfInput<R, Needles, Equal>,
 {
-    source.find_first(exec, needles)
+    MVal::from_storage(crate::vector::transform(
+        exec,
+        source.find_first(exec, needles)?.slice(..),
+        SentinelToOption,
+    )?)
 }
 
 /// Internal public-API capability for batched sorted bounds.
@@ -689,7 +784,15 @@ where
         self,
         exec: &Executor<R>,
         right: Right,
-    ) -> Result<(DeviceVec<R, u32>, Option<u32>, usize, usize), Error> {
+    ) -> Result<
+        (
+            DeviceVec<R, u32>,
+            DeviceVec<R, u32>,
+            crate::extent::LogicalExtent,
+            crate::extent::LogicalExtent,
+        ),
+        Error,
+    > {
         <PairDispatch<crate::S12> as PairCodeDispatch<
             R,
             Left,
@@ -709,7 +812,15 @@ pub trait EqualityInput<R: Runtime, Right, Equal>: ReadExpression + Sized {
         self,
         exec: &Executor<R>,
         right: Right,
-    ) -> Result<(DeviceVec<R, u32>, Option<u32>, usize, usize), Error>;
+    ) -> Result<
+        (
+            DeviceVec<R, u32>,
+            DeviceVec<R, u32>,
+            crate::extent::LogicalExtent,
+            crate::extent::LogicalExtent,
+        ),
+        Error,
+    >;
 }
 
 impl<R, Left, Right, Equal> EqualityInput<R, Right, Equal> for Left
@@ -721,7 +832,15 @@ where
         self,
         exec: &Executor<R>,
         right: Right,
-    ) -> Result<(DeviceVec<R, u32>, Option<u32>, usize, usize), Error> {
+    ) -> Result<
+        (
+            DeviceVec<R, u32>,
+            DeviceVec<R, u32>,
+            crate::extent::LogicalExtent,
+            crate::extent::LogicalExtent,
+        ),
+        Error,
+    > {
         self.pair_codes(exec, right)
     }
 }
@@ -732,13 +851,20 @@ pub(crate) fn equal<R, Left, Right, Equal>(
     left: Left,
     right: Right,
     _equal: Equal,
-) -> Result<bool, Error>
+) -> Result<MVal<R, MBool>, Error>
 where
     R: Runtime,
     Left: EqualityInput<R, Right, Equal>,
 {
-    let (_codes, mismatch, left_len, right_len) = left.mismatch_control(exec, right)?;
-    Ok(left_len == right_len && mismatch.is_none())
+    let (_codes, mismatch, left_extent, right_extent) = left.mismatch_control(exec, right)?;
+    let end =
+        crate::extent::LogicalExtent::min(exec, &left_extent, &right_extent)?.materialize(exec)?;
+    let same_length = crate::extent::LogicalExtent::equal_value(exec, &left_extent, &right_extent)?;
+    MVal::from_storage(crate::vector::transform(
+        exec,
+        crate::zip3(mismatch.slice(..), end.slice(..), same_length.slice(..)),
+        EqualityResult,
+    )?)
 }
 
 /// Returns the first mismatch, including the shared end when lengths differ.
@@ -747,19 +873,20 @@ pub(crate) fn mismatch<R, Left, Right, Equal>(
     left: Left,
     right: Right,
     _equal: Equal,
-) -> Result<Option<u32>, Error>
+) -> Result<MVal<R, (MBool, MIndex)>, Error>
 where
     R: Runtime,
     Left: EqualityInput<R, Right, Equal>,
 {
-    let (_codes, mismatch, left_len, right_len) = left.mismatch_control(exec, right)?;
-    if let Some(index) = mismatch {
-        Ok(Some(index))
-    } else if left_len != right_len {
-        Ok(Some(left_len.min(right_len) as u32))
-    } else {
-        Ok(None)
-    }
+    let (_codes, mismatch, left_extent, right_extent) = left.mismatch_control(exec, right)?;
+    let end =
+        crate::extent::LogicalExtent::min(exec, &left_extent, &right_extent)?.materialize(exec)?;
+    let same_length = crate::extent::LogicalExtent::equal_value(exec, &left_extent, &right_extent)?;
+    MVal::from_storage(crate::vector::transform(
+        exec,
+        crate::zip3(mismatch.slice(..), end.slice(..), same_length.slice(..)),
+        MismatchResult,
+    )?)
 }
 
 /// Internal capability hiding fixed-ABI lexicographical dispatch.
@@ -769,7 +896,15 @@ pub trait LexicographicalInput<R: Runtime, Right, Less>: ReadExpression + Sized 
         self,
         exec: &Executor<R>,
         right: Right,
-    ) -> Result<(DeviceVec<R, u32>, Option<u32>, usize, usize), Error>;
+    ) -> Result<
+        (
+            DeviceVec<R, u32>,
+            DeviceVec<R, u32>,
+            crate::extent::LogicalExtent,
+            crate::extent::LogicalExtent,
+        ),
+        Error,
+    >;
 }
 
 impl<R, Left, Right, Less> LexicographicalInput<R, Right, Less> for Left
@@ -781,7 +916,15 @@ where
         self,
         exec: &Executor<R>,
         right: Right,
-    ) -> Result<(DeviceVec<R, u32>, Option<u32>, usize, usize), Error> {
+    ) -> Result<
+        (
+            DeviceVec<R, u32>,
+            DeviceVec<R, u32>,
+            crate::extent::LogicalExtent,
+            crate::extent::LogicalExtent,
+        ),
+        Error,
+    > {
         self.pair_codes(exec, right)
     }
 }
@@ -792,16 +935,30 @@ pub(crate) fn lexicographical_compare<R, Left, Right, Less>(
     left: Left,
     right: Right,
     _less: Less,
-) -> Result<bool, Error>
+) -> Result<MVal<R, MBool>, Error>
 where
     R: Runtime,
     Left: LexicographicalInput<R, Right, Less>,
 {
-    let (codes, mismatch, left_len, right_len) = left.lexicographical_codes(exec, right)?;
-    Ok(match mismatch {
-        Some(index) => exec.to_host(&codes.slice(index as usize..index as usize + 1))?[0] == 1u32,
-        None => left_len < right_len,
-    })
+    let (codes, mismatch, left_extent, right_extent) = left.lexicographical_codes(exec, right)?;
+    let shared_len =
+        crate::extent::LogicalExtent::min(exec, &left_extent, &right_extent)?.materialize(exec)?;
+    let left_is_shorter =
+        crate::extent::LogicalExtent::less_value(exec, &left_extent, &right_extent)?;
+    let output = exec.alloc_row::<u32>(1);
+    unsafe {
+        lexicographical_result_kernel::launch_unchecked::<R>(
+            exec.client(),
+            CubeCount::new_single(),
+            CubeDim::new_1d(1),
+            BufferArg::from_raw_parts(codes.handle.clone(), codes.capacity()),
+            BufferArg::from_raw_parts(mismatch.handle.clone(), 1),
+            BufferArg::from_raw_parts(shared_len.handle.clone(), 1),
+            BufferArg::from_raw_parts(left_is_shorter.handle.clone(), 1),
+            BufferArg::from_raw_parts(output.handle.clone(), 1),
+        );
+    }
+    MVal::from_storage(output)
 }
 
 #[cfg(test)]
@@ -816,14 +973,16 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<Seven> for EqualSeven {
-        fn apply(lhs: Seven, rhs: Seven) -> bool {
-            lhs.0 == rhs.0
-                && lhs.1 == rhs.1
-                && lhs.2 == rhs.2
-                && lhs.3 == rhs.3
-                && lhs.4 == rhs.4
-                && lhs.5 == rhs.5
-                && lhs.6 == rhs.6
+        fn apply(lhs: Seven, rhs: Seven) -> crate::MBool {
+            crate::op::mbool(
+                lhs.0 == rhs.0
+                    && lhs.1 == rhs.1
+                    && lhs.2 == rhs.2
+                    && lhs.3 == rhs.3
+                    && lhs.4 == rhs.4
+                    && lhs.5 == rhs.5
+                    && lhs.6 == rhs.6,
+            )
         }
     }
 
@@ -831,8 +990,8 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<Seven> for LessSeven {
-        fn apply(lhs: Seven, rhs: Seven) -> bool {
-            lhs.0 < rhs.0
+        fn apply(lhs: Seven, rhs: Seven) -> crate::MBool {
+            crate::op::mbool(lhs.0 < rhs.0)
         }
     }
 
@@ -840,8 +999,8 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<u32> for EqualU32 {
-        fn apply(lhs: u32, rhs: u32) -> bool {
-            lhs == rhs
+        fn apply(lhs: u32, rhs: u32) -> crate::MBool {
+            crate::op::mbool(lhs == rhs)
         }
     }
 
@@ -849,8 +1008,8 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<u32> for LessU32 {
-        fn apply(lhs: u32, rhs: u32) -> bool {
-            lhs < rhs
+        fn apply(lhs: u32, rhs: u32) -> crate::MBool {
+            crate::op::mbool(lhs < rhs)
         }
     }
 
@@ -883,7 +1042,7 @@ mod tests {
                         ),
                     ),
                 ),
-                crate::Transform::new(Counting::new(0, 3), crate::op::U32ToUsize),
+                Counting::new(0, 3),
             )
         };
         let make_right = || {
@@ -904,18 +1063,25 @@ mod tests {
                         ),
                     ),
                 ),
-                crate::Transform::new(Counting::new(0, 3), crate::op::U32ToUsize),
+                Counting::new(0, 3),
             )
         };
 
-        assert!(
-            !crate::api::algorithm::equal(&exec, make_left(), make_right(), EqualSeven).unwrap()
+        assert_eq!(
+            crate::api::algorithm::equal(&exec, make_left(), make_right(), EqualSeven)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
+            0,
         );
         assert_eq!(
-            crate::api::algorithm::mismatch(&exec, make_left(), make_right(), EqualSeven).unwrap(),
-            Some(1)
+            crate::api::algorithm::mismatch(&exec, make_left(), make_right(), EqualSeven)
+                .unwrap()
+                .read(&exec)
+                .unwrap(),
+            (1, 1)
         );
-        assert!(
+        assert_eq!(
             crate::api::algorithm::lexicographical_compare(
                 &exec,
                 make_left(),
@@ -923,6 +1089,9 @@ mod tests {
                 LessSeven,
             )
             .unwrap()
+            .read(&exec)
+            .unwrap(),
+            1,
         );
     }
 
@@ -939,13 +1108,17 @@ mod tests {
                 needles.column(),
                 EqualU32,
             )
+            .unwrap()
+            .read(&exec)
             .unwrap(),
-            Some(1)
+            (1, 1)
         );
         assert_eq!(
             crate::api::algorithm::find_first_of(&exec, source.column(), empty.column(), EqualU32,)
+                .unwrap()
+                .read(&exec)
                 .unwrap(),
-            None
+            (0, u32::MAX)
         );
 
         let values = exec.to_device(&[0_u32, 2, 3, 5]);
@@ -985,14 +1158,17 @@ mod tests {
             .unwrap();
 
         assert_eq!(exec.to_host(&codes).unwrap(), vec![2]);
-        assert!(
-            !crate::api::algorithm::lexicographical_compare(
+        assert_eq!(
+            crate::api::algorithm::lexicographical_compare(
                 &exec,
                 left.column(),
                 right.column(),
                 LessU32,
             )
             .unwrap()
+            .read(&exec)
+            .unwrap(),
+            0,
         );
     }
 }

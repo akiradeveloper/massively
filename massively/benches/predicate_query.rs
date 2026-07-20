@@ -13,19 +13,19 @@ const SIZES: &[usize] = &[1 << 20, 1 << 24];
 struct Even;
 struct FirstLeafEven;
 
-type Seven = (usize, usize, usize, usize, usize, usize, usize);
+type Seven = (u32, u32, u32, u32, u32, u32, u32);
 
 #[cubecl::cube]
-impl PredicateOp<usize> for Even {
-    fn apply(value: usize) -> bool {
-        value % 2usize == 0usize
+impl PredicateOp<u32> for Even {
+    fn apply(value: u32) -> massively::MBool {
+        massively::op::mbool(value % 2u32 == 0u32)
     }
 }
 
 #[cubecl::cube]
 impl PredicateOp<Seven> for FirstLeafEven {
-    fn apply(value: Seven) -> bool {
-        value.0 % 2usize == 0usize
+    fn apply(value: Seven) -> massively::MBool {
+        massively::op::mbool(value.0 % 2u32 == 0u32)
     }
 }
 
@@ -35,32 +35,34 @@ fn bench_predicate_query(c: &mut Criterion) {
 
     for &len in SIZES {
         group.bench_function(BenchmarkId::new("count_if_lazy", len), |b| {
-            b.iter(|| black_box(count_if(&exec, lazy::counting(0).take(len), Even).unwrap()))
+            b.iter(|| black_box(count_if(&exec, lazy::counting(0).take(len as u32), Even).unwrap()))
         });
         group.bench_function(BenchmarkId::new("all_of_lazy", len), |b| {
-            b.iter(|| black_box(all_of(&exec, lazy::counting(0).take(len), Even).unwrap()))
+            b.iter(|| black_box(all_of(&exec, lazy::counting(0).take(len as u32), Even).unwrap()))
         });
         group.bench_function(BenchmarkId::new("any_of_lazy", len), |b| {
-            b.iter(|| black_box(any_of(&exec, lazy::counting(0).take(len), Even).unwrap()))
+            b.iter(|| black_box(any_of(&exec, lazy::counting(0).take(len as u32), Even).unwrap()))
         });
         group.bench_function(BenchmarkId::new("none_of_lazy", len), |b| {
-            b.iter(|| black_box(none_of(&exec, lazy::counting(0).take(len), Even).unwrap()))
+            b.iter(|| black_box(none_of(&exec, lazy::counting(0).take(len as u32), Even).unwrap()))
         });
         group.bench_function(BenchmarkId::new("find_if_lazy", len), |b| {
-            b.iter(|| black_box(find_if(&exec, lazy::counting(0).take(len), Even).unwrap()))
+            b.iter(|| black_box(find_if(&exec, lazy::counting(0).take(len as u32), Even).unwrap()))
         });
         group.bench_function(BenchmarkId::new("is_partitioned_lazy", len), |b| {
-            b.iter(|| black_box(is_partitioned(&exec, lazy::counting(0).take(len), Even).unwrap()))
+            b.iter(|| {
+                black_box(is_partitioned(&exec, lazy::counting(0).take(len as u32), Even).unwrap())
+            })
         });
 
         let streams = [
-            lazy::counting(0).take(len),
-            lazy::counting(1).take(len),
-            lazy::counting(2).take(len),
-            lazy::counting(3).take(len),
-            lazy::counting(4).take(len),
-            lazy::counting(5).take(len),
-            lazy::counting(6).take(len),
+            lazy::counting(0).take(len as u32),
+            lazy::counting(1).take(len as u32),
+            lazy::counting(2).take(len as u32),
+            lazy::counting(3).take(len as u32),
+            lazy::counting(4).take(len as u32),
+            lazy::counting(5).take(len as u32),
+            lazy::counting(6).take(len as u32),
         ];
         group.bench_function(BenchmarkId::new("count_if_lazy_zip7", len), |b| {
             b.iter(|| {
