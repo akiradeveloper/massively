@@ -3,11 +3,10 @@
 use cubecl::prelude::*;
 
 use crate::{
-    A13, Counting, DeviceVec, Dispatch, Error, Executor, MStorageElement, ReadExpression,
-    RowStorage, S12, StorageLayout, Transform,
+    A13, DeviceVec, Dispatch, Error, Executor, MStorageElement, ReadExpression, RowStorage, S12,
+    StorageLayout,
     allocation::PrependInput,
     eval::Eval13,
-    indexed::GatherInput,
     launch::cube_count_1d,
     output::{
         LowerOutputExpression, OutputBindings, OutputExpression, PaddedOutputSlots, StageOutput,
@@ -1607,24 +1606,22 @@ where
     R: Runtime,
     Input: PrependInput<R>,
     Input::Item: crate::allocation::ScratchStorage<R, Storage = Input::Storage>,
-    <Input::Item as StorageLayout>::StorageLeaves:
-        StorePadded12 + crate::core::facade::KernelValue,
+    <Input::Item as StorageLayout>::StorageLeaves: StorePadded12 + crate::core::facade::KernelValue,
     Input::Storage: RowStorage<R, Item = Input::Item>,
-    Input::SemanticRead: LowerReadExpression + StageRead<R, Env0>,
-    <Input::Storage as RowStorage<R>>::Write: LowerOutputExpression + StageOutput<R, Env0>,
+    <Input::Storage as RowStorage<R>>::Read: LowerReadExpression + StageRead<R, Env0>,
+    Output: OutputExpression<Item = Input::Item> + LowerOutputExpression + StageOutput<R, Env0>,
+    Output::Slots: PaddedOutputSlots,
     Dispatch<A13, S12>: InclusiveScanDispatch<
             R,
-            Input::SemanticRead,
-            <Input::Storage as RowStorage<R>>::Write,
+            <Input::Storage as RowStorage<R>>::Read,
+            Output,
             Input::Item,
-            KernelReadSlots<<Input::SemanticRead as LowerReadExpression>::Slots>,
-            crate::output::KernelOutputSlots<
-                <<Input::Item as StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
+            KernelReadSlots<
+                <<Input::Storage as RowStorage<R>>::Read as LowerReadExpression>::Slots,
             >,
+            crate::output::KernelOutputSlots<Output::Slots>,
             Op,
         >,
-    <Input::Storage as RowStorage<R>>::Read:
-        GatherInput<R, Transform<Counting, crate::op::U32ToUsize>, Output>,
     Op: ReductionOp<Input::Item>,
 {
     fn exclusive_scan_into(
@@ -1635,18 +1632,8 @@ where
         output: Output,
     ) -> Result<(), Error> {
         let prefixed = self.prepend(exec, init)?;
-        let prefixed_len = prefixed.len()?;
-        let scanned = <Input::Item as crate::allocation::ScratchStorage<R>>::alloc_scratch(
-            exec,
-            prefixed_len,
-        );
-        inclusive_scan(exec, Input::semantic_read(&prefixed), op, scanned.write())?;
-        crate::indexed::gather_u32(
-            exec,
-            scanned.read(),
-            Counting::new(0, prefixed_len.saturating_sub(1)),
-            output,
-        )
+        let len = prefixed.len()?.saturating_sub(1);
+        inclusive_scan(exec, prefixed.slice(..len), op, output)
     }
 }
 

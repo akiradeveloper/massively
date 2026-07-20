@@ -880,18 +880,28 @@ pub(crate) trait PrependInput<R: Runtime>: NormalizeInput<R> {
 impl<R, Input> PrependInput<R> for Input
 where
     R: Runtime,
-    Input: NormalizeInput<R>,
+    Input: NormalizeInput<R> + LowerReadExpression + StageRead<R, Env0>,
     Input::Item: ScratchStorage<R, Storage = Input::Storage>,
-    Input::Storage: CopyStorage<R>,
     Input::Storage: RowStorage<R, Item = Input::Item>,
-    <Input::Storage as RowStorage<R>>::Write: crate::selection::FillOutput<R>,
+    <Input::Storage as RowStorage<R>>::Write:
+        crate::selection::FillOutput<R> + LowerOutputExpression + StageOutput<R, Env0>,
+    <<Input::Item as StorageLayout>::StorageLeaves as cubecl::prelude::CubeType>::ExpandType:
+        crate::storage::StorePadded12Expand,
+    Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
+            R,
+            Input,
+            <Input::Storage as RowStorage<R>>::Write,
+            crate::read::KernelReadSlots<Input::Slots>,
+            crate::output::KernelOutputSlots<
+                <<Input::Storage as RowStorage<R>>::Write as LowerOutputExpression>::Slots,
+            >,
+        >,
 {
     fn prepend(self, exec: &Executor<R>, prefix: Self::Item) -> Result<Self::Storage, Error> {
-        let values = self.normalize(exec)?;
-        let len = values.len()?;
+        let len = self.logical_len()?;
         let prefixed = Input::Item::alloc_scratch(exec, len + 1);
         prefixed.slice_mut(..1).fill_output(exec, prefix)?;
-        values.copy_storage(exec, prefixed.slice_mut(1..))?;
+        materialize(exec, self, prefixed.slice_mut(1..))?;
         Ok(prefixed)
     }
 }

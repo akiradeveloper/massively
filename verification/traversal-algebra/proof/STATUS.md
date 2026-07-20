@@ -54,6 +54,41 @@ behind each plain-language claim.
   `FrontierPolicy.sparsePreserve` stably filters the destination candidate
   stream.
 
+### Rust-shaped public API and public-operation compiler
+
+- `Verified.PublicAPI.Csr` carries a finite CSR edge position on every ordered
+  edge occurrence. `PublicAPI.EdgeExpr` independently defines exactly the six
+  exported leaf shapes: source, destination, and edge columns plus source,
+  destination, and CSR-edge identifiers. Its only composition constructor is
+  binary `zip`.
+- `PublicAPI.Traversal` and `MappedTraversal` enforce the exported surface
+  shape of one pointwise map after an edge expression. `emit`,
+  `reduceBySource`, and `reduceByDestination` are independently defined with
+  list maps and folds rather than by calling the existing TA terminals.
+  `emit_correct`, `reduceBySource_correct`, and
+  `reduceByDestination_correct` prove exact terminal correspondence.
+- `PublicAPI.ReductionOp` carries the associative, commutative, and identity
+  laws documented as preconditions of the Rust reduction API. The theorem does
+  not infer those laws from an arbitrary CubeCL trait implementation.
+- `PublicAPI.updateByDestination` specifies combination with existing vertex
+  state. `relaxMinByDestination` specifies the current minimum specialization
+  as a canonical dense filter of lowered vertices; it is deliberately distinct
+  from duplicate-preserving `FrontierPolicy.sparsePreserve`.
+- `Typed.PublicAPI.GraphBasis.reduceByDestination` independently specifies the
+  public graph terminal fold. `emitDestinations` specifies
+  `map(destination_id, Identity).emit`, and `emitDestinations_correct` proves
+  that it produces the exact Core candidate stream.
+- `Typed.PublicAPI.VectorBasis.transformStore` and `copyWhere` specify the
+  public dense transform and stable filter contracts used around graph
+  terminals. `Typed.PublicAPI.Program.step` is a host schedule made only from
+  these graph and vector contracts; it is not a fictitious exported Rust
+  program object.
+- `Typed.PublicAPI.compile_step_correct` and `compile_run_correct` prove that
+  compiling a closed Core TA program to that public schedule preserves one
+  step and every finite run. `compileBSP_run_correct` composes this result with
+  `TraversalAlgebra.encode_run_correct`, giving the checked chain
+  `typed Monoidal Frontier BSP -> Core TA -> public graph+vector API basis`.
+
 ### Independent TA expressions and sharing-aware normalization
 
 - `Typed.TraversalAlgebra.Expression.Traversal` is an independently
@@ -219,6 +254,11 @@ signature, and well-typed syntax. They are proofs, not bounded tests.
   derivation from CubeCL IR instructions. `materializedCsrControlPlan` mirrors
   the current Rust call structure at that contract boundary; it is not a
   universal theorem about arbitrary future Rust or CubeCL compiler revisions.
+- The Rust-shaped surface model uses finite identifiers and total column/map
+  functions. Concrete CSR validation, `Fin`/`u32` conversion, buffer lengths,
+  layout, aliasing, and CubeCL callback refinement remain outside the theorem.
+- The public-operation compiler models exported operation contracts. It does
+  not claim that Rust exports its proof-only closed `Program` descriptor.
 - Both languages use the same arbitrary but fixed signature. Signature
   transport and execution-platform lowering are not premises of equivalence.
 
@@ -232,10 +272,14 @@ signature, and well-typed syntax. They are proofs, not bounded tests.
   contention time, and peak allocation liveness;
 - coverage of the full intended algorithm surface, such as the Gunrock suite;
 - universal correspondence with Rust, CubeCL, a device compiler, or hardware.
+- extraction of the current materialize/gather/transform/reduce Rust terminal
+  trace and its exact cost from emitted CubeCL IR;
 
 Consequently, `Expression.Program.toBSP_run_correct` and
 `ofBSP_run_correct` establish bidirectional, signature-relative semantic
-equivalence for the independently compositional closed barrier grammar.
+equivalence for the independently compositional closed barrier grammar, while
+`Typed.PublicAPI.compileBSP_run_correct` carries the BSP-to-TA direction onward
+to a basis of currently exported graph and vector operation contracts.
 Sharing-aware normalization additionally has factor-one syntax growth and
 exact unit work/depth/local-storage preservation. Sparse frontier behavior and
 all three terminal observation shapes now have separate universal theorems;

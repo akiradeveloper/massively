@@ -16,9 +16,16 @@ typed, finite frontier-computation fragment.
 
 Graphs are finite, ordered, directed multigraphs. Parallel edges, self-loops,
 edge payloads, and repeated vertices in a frontier are all represented rather
-than ruled out as special cases. A traversal expression can read source,
-destination, edge, and structural identifiers; combine arbitrary recursively
-nested product values; and compose finite `map` and `zip` trees.
+than ruled out as special cases. The Core TA grammar can read endpoint state
+and edge payloads, combine arbitrary recursively nested product values, and
+compose finite `map` and `zip` trees.
+
+A separate public-API grammar matches the exported Rust shape exactly at its
+denotational boundary: independent `source`, `destination`, and `edge` columns;
+source, destination, and CSR-edge identifiers; recursive `zip`; one pointwise
+`map`; and the public traversal terminals. Reduction laws are explicit premises
+because Rust documents, but cannot type-check, associativity, commutativity,
+and identity.
 
 The model has three public result shapes:
 
@@ -35,7 +42,9 @@ The proof compares independently defined semantics:
 - a directly compositional Traversal Algebra expression grammar;
 - a normalized single-push form used as a compilation target;
 - Monoidal Frontier BSP, which evaluates nested frontier and adjacency rows
-  instead of reusing Traversal Algebra's flattened evaluator.
+  instead of reusing Traversal Algebra's flattened evaluator;
+- the Rust-shaped public traversal API and a host schedule composed from
+  public graph and vector operation contracts.
 
 This independence matters: equivalence is established by theorems, not by
 giving the source and reference languages the same implementation.
@@ -48,6 +57,8 @@ giving the source and reference languages the same implementation.
 | Bidirectional expressiveness | Every closed program in the proved Traversal Algebra fragment has an equivalent typed Monoidal Frontier BSP program, and every program in that BSP fragment has an equivalent Traversal Algebra program. |
 | Schedule-independent destination reduction | Every permutation of the logical edge-message schedule produces the same destination inbox when the declared reduction laws hold. |
 | Public terminal preservation | Translation preserves emission order, repeated source/frontier occurrences, and the complete destination-reduced store. |
+| Rust-shaped API correspondence | The six public edge-expression leaves, recursive zip, one map, and the three general terminals have independent denotations equal to the type-safe TA terminals. Stateful destination update and minimum relaxation have explicit public contracts. |
+| Public API compilation | Every typed Monoidal Frontier BSP program compiles through Core TA to a finite host schedule of public graph destination reduction, destination-ID emission, dense vector transform, and stable vector filtering, preserving the complete store and ordered frontier. |
 | Sharing-aware normalization | Normalization preserves scalar work, dependency depth, and local temporary bounds exactly, with factor-one syntax growth. It does not increase full-stream temporary volume or materialization passes relative to the defined unfused schedule. |
 | Exact sparse-frontier semantics | Stable filtering preserves candidate order and duplicate multiplicity. Its work is characterized exactly, including the condition under which it is no more expensive than a dense scan. |
 | Meaning-preserving resource plans | Backend-neutral CubeCL plans have the same Traversal Algebra observation as the source terminal while exposing symbolic work, span, traffic, synchronization, launch, allocation, and materialization counts. |
@@ -82,7 +93,9 @@ apply uniformly to multi-column values rather than to a fixed tuple arity.
 
 The abstract CubeCL layer ties each executable target instruction to its own
 resource plan. It is therefore impossible inside the model to attach an
-unrelated cheap certificate to arbitrary observer code.
+unrelated cheap certificate to arbitrary observer code. Its fused terminal
+instructions are optimization targets, not a claim that the current Rust
+terminal path already emits those fused kernels.
 
 For emission and source reduction, the proof gives exact symbolic scalar work
 and global traffic formulas. Destination reduction has two explicit paths:
@@ -93,8 +106,8 @@ and global traffic formulas. Destination reduction has two explicit paths:
 - the general path exposes its sorting and reduction-depth term instead of
   assuming atomic support.
 
-The current materialized-CSR control contract also includes topology-wide
-work. Its proved unit-work bound is
+The separately modeled current materialized-CSR control contract includes
+topology-wide work. Its proved unit-work bound is
 `topologyEdges + vertices + 6*frontier + 11*activeEdges + 3`. This prevents a
 sparse traversal from being advertised as active-edge-only while its control
 path still scans or canonicalizes larger structures.
@@ -116,6 +129,9 @@ design decisions:
   cost contracts;
 - emission, source reduction, and destination reduction cannot be conflated
   merely because they consume the same traversal;
+- closed Core TA supersteps need no imaginary Rust graph-program object: they
+  can be expressed by composing the current graph terminals with public dense
+  vector transform and stable filtering contracts;
 - lowering typed primitives or choosing atomic versus sort/reduce execution
   requires explicit semantic evidence rather than an unchecked optimization;
 - cost discussions must include topology, frontier, and materialization terms
@@ -130,6 +146,8 @@ The result does not prove that:
 - a particular application such as PageRank or connected components computes
   its textbook domain result;
 - arbitrary user callbacks are representable by the closed typed grammar;
+- finite Lean identifiers and total denotational callbacks refine concrete
+  `u32` indices, buffers, and generated CubeCL callbacks;
 - every parallel reduction-tree implementation refines the sequential monoid
   denotation;
 - the symbolic resource certificate can be recovered from generated kernels;

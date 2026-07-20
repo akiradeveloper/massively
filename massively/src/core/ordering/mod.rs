@@ -22,6 +22,9 @@ use crate::{
 pub(crate) mod sort;
 
 const BLOCK_SIZE: u32 = 256;
+const SORT_BLOCK_ITEMS: usize = 128;
+const SORT_BLOCK_SIZE: u32 = SORT_BLOCK_ITEMS as u32;
+const SORT_MERGE_ITEMS: usize = 16;
 
 /// Compile-time binary predicate over two semantic items.
 ///
@@ -311,13 +314,156 @@ macro_rules! impl_adjacent_flags_dispatch {
 
 impl_adjacent_flags_dispatch!(A13,Eval13,adjacent_flags_a13; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10,L11:11,L12:12],Env13<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12>);
 
-#[cubecl::cube(launch_unchecked)]
-fn iota_indices_kernel(len: &[u32], indices: &mut [u32]) {
-    let index = ABSOLUTE_POS as usize;
-    if index < len[0] as usize {
-        indices[index] = index as u32;
-    }
+macro_rules! define_block_sort_permutation_kernel {
+    ($name:ident,$eval:ident,$method:ident; $( $leaf:ident:$slot:ident ),+ $(,)?) => {
+        #[cubecl::cube(launch_unchecked, explicit_define)]
+        fn $name<
+            Item: CubeType + Send + Sync + 'static,
+            $( $leaf: CubePrimitive, )+
+            Expr: $eval<Item, $( $leaf ),+>,
+            Less: BinaryPredicateOp<Item>,
+        >(
+            $( $slot: &[$leaf], )+
+            offsets: &[u32],
+            len: &[u32],
+            output: &mut [u32],
+        ) {
+            let local = UNIT_POS as usize;
+            let tile_start = (CUBE_POS as usize) * SORT_BLOCK_ITEMS;
+            let logical_len = len[0] as usize;
+            let tile_len = if logical_len > tile_start {
+                let remaining = logical_len - tile_start;
+                if remaining < SORT_BLOCK_ITEMS {
+                    remaining
+                } else {
+                    SORT_BLOCK_ITEMS
+                }
+            } else {
+                0usize
+            };
+
+            let mut indices_a = Shared::<[u32]>::new_slice(SORT_BLOCK_ITEMS);
+            let mut indices_b = Shared::<[u32]>::new_slice(SORT_BLOCK_ITEMS);
+            if local < tile_len {
+                indices_a[local] = (tile_start + local) as u32;
+            }
+            sync_cube();
+
+            let width = RuntimeCell::<usize>::new(1usize);
+            let source_a = RuntimeCell::<u32>::new(1u32);
+            while width.read() < SORT_BLOCK_ITEMS {
+                if local < tile_len {
+                    let pair_width = width.read() * 2usize;
+                    let base = (local / pair_width) * pair_width;
+                    let left_remaining = tile_len - base;
+                    let left_len = if left_remaining < width.read() {
+                        left_remaining
+                    } else {
+                        width.read()
+                    };
+                    let right_start = base + left_len;
+                    let right_remaining = tile_len - right_start;
+                    let right_len = if right_remaining < width.read() {
+                        right_remaining
+                    } else {
+                        width.read()
+                    };
+                    let rank = local - base;
+                    let low_init = if rank > right_len { rank - right_len } else { 0usize };
+                    let high_init = if rank < left_len { rank } else { left_len };
+                    let low = RuntimeCell::<usize>::new(low_init);
+                    let high = RuntimeCell::<usize>::new(high_init);
+
+                    while low.read() < high.read() {
+                        let left_rank = (low.read() + high.read()) / 2usize;
+                        let right_rank = rank - left_rank;
+                        if left_rank < left_len && right_rank > 0usize {
+                            let left_index = if source_a.read() != 0u32 {
+                                indices_a[base + left_rank]
+                            } else {
+                                indices_b[base + left_rank]
+                            };
+                            let right_index = if source_a.read() != 0u32 {
+                                indices_a[right_start + right_rank - 1usize]
+                            } else {
+                                indices_b[right_start + right_rank - 1usize]
+                            };
+                            if !Less::apply(
+                                Expr::$method($( $slot, )+ offsets, right_index as usize),
+                                Expr::$method($( $slot, )+ offsets, left_index as usize),
+                            ) {
+                                low.store(left_rank + 1usize);
+                            } else {
+                                high.store(left_rank);
+                            }
+                        } else {
+                            high.store(left_rank);
+                        }
+                    }
+
+                    let left_rank = low.read();
+                    let right_rank = rank - left_rank;
+                    let selected = if source_a.read() != 0u32 {
+                        if left_rank < left_len {
+                            let left_index = indices_a[base + left_rank];
+                            if right_rank >= right_len {
+                                left_index
+                            } else {
+                                let right_index = indices_a[right_start + right_rank];
+                                if !Less::apply(
+                                    Expr::$method($( $slot, )+ offsets, right_index as usize),
+                                    Expr::$method($( $slot, )+ offsets, left_index as usize),
+                                ) {
+                                    left_index
+                                } else {
+                                    right_index
+                                }
+                            }
+                        } else {
+                            indices_a[right_start + right_rank]
+                        }
+                    } else if left_rank < left_len {
+                        let left_index = indices_b[base + left_rank];
+                        if right_rank >= right_len {
+                            left_index
+                        } else {
+                            let right_index = indices_b[right_start + right_rank];
+                            if !Less::apply(
+                                Expr::$method($( $slot, )+ offsets, right_index as usize),
+                                Expr::$method($( $slot, )+ offsets, left_index as usize),
+                            ) {
+                                left_index
+                            } else {
+                                right_index
+                            }
+                        }
+                    } else {
+                        indices_b[right_start + right_rank]
+                    };
+
+                    if source_a.read() != 0u32 {
+                        indices_b[local] = selected;
+                    } else {
+                        indices_a[local] = selected;
+                    }
+                }
+                sync_cube();
+                source_a.store(1u32 - source_a.read());
+                width.store(width.read() * 2usize);
+            }
+
+            if local < tile_len {
+                output[tile_start + local] = if source_a.read() != 0u32 {
+                    indices_a[local]
+                } else {
+                    indices_b[local]
+                };
+            }
+        }
+    };
 }
+
+define_block_sort_permutation_kernel!(block_sort_permutation_a13,Eval13,eval13; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7,L8:slot8,L9:slot9,L10:slot10,L11:slot11,L12:slot12);
 
 macro_rules! define_merge_permutation_kernel {
     ($name:ident,$eval:ident,$method:ident; $( $leaf:ident:$slot:ident ),+ $(,)?) => {
@@ -335,78 +481,199 @@ macro_rules! define_merge_permutation_kernel {
             len: &[u32],
             width: &[u32],
         ) {
-            let out = RuntimeCell::<usize>::new(
-                (CUBE_POS as usize) * (CUBE_DIM as usize) + UNIT_POS as usize,
-            );
-            let stride = (CUBE_COUNT as usize) * (CUBE_DIM as usize);
             let logical_len = len[0] as usize;
             let run_width = width[0] as usize;
-            while out.read() < logical_len {
-                let out_index = out.read();
-                let run = out_index / run_width;
-                let base = (run - run % 2usize) * run_width;
-                let left_remaining = logical_len - base;
-                let left_len = if left_remaining < run_width {
-                    left_remaining
+            let pair_width = if run_width > logical_len - run_width {
+                logical_len
+            } else {
+                run_width * 2usize
+            };
+            let merge_tile_items = SORT_BLOCK_ITEMS * SORT_MERGE_ITEMS;
+            let tiles_per_pair = (pair_width + merge_tile_items - 1usize) / merge_tile_items;
+            let pair = (CUBE_POS as usize) / tiles_per_pair;
+            let tile = (CUBE_POS as usize) % tiles_per_pair;
+            let base = pair * pair_width;
+
+            if base < logical_len {
+                let pair_len = if logical_len - base < pair_width {
+                    logical_len - base
                 } else {
-                    run_width
+                    pair_width
                 };
+                let left_len = if pair_len < run_width { pair_len } else { run_width };
                 let right_start = base + left_len;
-                let right_remaining = logical_len - right_start;
-                let right_len = if right_remaining < run_width {
-                    right_remaining
-                } else {
-                    run_width
-                };
-                let rank = out_index - base;
-                let low_init = if rank > right_len { rank - right_len } else { 0usize };
-                let high_init = if rank < left_len { rank } else { left_len };
-                let low = RuntimeCell::<usize>::new(low_init);
-                let high = RuntimeCell::<usize>::new(high_init);
-                while low.read() < high.read() {
-                    let left_rank = (low.read() + high.read()) / 2usize;
-                    let right_rank = rank - left_rank;
-                    if left_rank < left_len
-                        && right_rank > 0usize
-                        && !Less::apply(
-                            Expr::$method(
-                                $( $slot, )+
-                                offsets,
-                                input[right_start + right_rank - 1usize] as usize,
-                            ),
-                            Expr::$method(
-                                $( $slot, )+
-                                offsets,
-                                input[base + left_rank] as usize,
-                            ),
-                        )
-                    {
-                        low.store(left_rank + 1usize);
+                let right_len = pair_len - left_len;
+                let tile_rank_start = tile * merge_tile_items;
+
+                if tile_rank_start < pair_len {
+                    let tile_rank_end = if tile_rank_start + merge_tile_items < pair_len {
+                        tile_rank_start + merge_tile_items
                     } else {
-                        high.store(left_rank);
-                    }
-                }
-                let left_rank = low.read();
-                let right_rank = rank - left_rank;
-                if left_rank < left_len {
-                    let left_index = input[base + left_rank];
-                    if right_rank >= right_len {
-                        output[out_index] = left_index;
-                    } else {
-                        let right_index = input[right_start + right_rank];
-                        if !Less::apply(
-                            Expr::$method($( $slot, )+ offsets, right_index as usize),
-                            Expr::$method($( $slot, )+ offsets, left_index as usize),
-                        ) {
-                            output[out_index] = left_index;
+                        pair_len
+                    };
+
+                    let mut partition = Shared::<[u32]>::new_slice(4usize);
+                    if UNIT_POS == 0u32 {
+                        let begin_low_init = if tile_rank_start > right_len {
+                            tile_rank_start - right_len
                         } else {
-                            output[out_index] = right_index;
+                            0usize
+                        };
+                        let begin_high_init = if tile_rank_start < left_len {
+                            tile_rank_start
+                        } else {
+                            left_len
+                        };
+                        let begin_low = RuntimeCell::<usize>::new(begin_low_init);
+                        let begin_high = RuntimeCell::<usize>::new(begin_high_init);
+                        while begin_low.read() < begin_high.read() {
+                            let left_rank = (begin_low.read() + begin_high.read()) / 2usize;
+                            let right_rank = tile_rank_start - left_rank;
+                            if left_rank < left_len && right_rank > 0usize {
+                                let left_index = input[base + left_rank];
+                                let right_index = input[right_start + right_rank - 1usize];
+                                if !Less::apply(
+                                    Expr::$method($( $slot, )+ offsets, right_index as usize),
+                                    Expr::$method($( $slot, )+ offsets, left_index as usize),
+                                ) {
+                                    begin_low.store(left_rank + 1usize);
+                                } else {
+                                    begin_high.store(left_rank);
+                                }
+                            } else {
+                                begin_high.store(left_rank);
+                            }
+                        }
+
+                        let end_low_init = if tile_rank_end > right_len {
+                            tile_rank_end - right_len
+                        } else {
+                            0usize
+                        };
+                        let end_high_init = if tile_rank_end < left_len {
+                            tile_rank_end
+                        } else {
+                            left_len
+                        };
+                        let end_low = RuntimeCell::<usize>::new(end_low_init);
+                        let end_high = RuntimeCell::<usize>::new(end_high_init);
+                        while end_low.read() < end_high.read() {
+                            let left_rank = (end_low.read() + end_high.read()) / 2usize;
+                            let right_rank = tile_rank_end - left_rank;
+                            if left_rank < left_len && right_rank > 0usize {
+                                let left_index = input[base + left_rank];
+                                let right_index = input[right_start + right_rank - 1usize];
+                                if !Less::apply(
+                                    Expr::$method($( $slot, )+ offsets, right_index as usize),
+                                    Expr::$method($( $slot, )+ offsets, left_index as usize),
+                                ) {
+                                    end_low.store(left_rank + 1usize);
+                                } else {
+                                    end_high.store(left_rank);
+                                }
+                            } else {
+                                end_high.store(left_rank);
+                            }
+                        }
+
+                        let left_begin = begin_low.read();
+                        let right_begin = tile_rank_start - left_begin;
+                        partition[0] = left_begin as u32;
+                        partition[1] = right_begin as u32;
+                        partition[2] = (end_low.read() - left_begin) as u32;
+                        partition[3] = ((tile_rank_end - end_low.read()) - right_begin) as u32;
+                    }
+                    sync_cube();
+
+                    let left_begin = partition[0] as usize;
+                    let right_begin = partition[1] as usize;
+                    let left_count = partition[2] as usize;
+                    let right_count = partition[3] as usize;
+                    let tile_len = left_count + right_count;
+                    let mut shared_indices =
+                        Shared::<[u32]>::new_slice(SORT_BLOCK_ITEMS * SORT_MERGE_ITEMS);
+                    let load_pos = RuntimeCell::<usize>::new(UNIT_POS as usize);
+                    while load_pos.read() < tile_len {
+                        let source = if load_pos.read() < left_count {
+                            base + left_begin + load_pos.read()
+                        } else {
+                            right_start + right_begin + load_pos.read() - left_count
+                        };
+                        shared_indices[load_pos.read()] = input[source];
+                        load_pos.store(load_pos.read() + SORT_BLOCK_ITEMS);
+                    }
+                    sync_cube();
+
+                    let local_start = (UNIT_POS as usize) * SORT_MERGE_ITEMS;
+                    if local_start < tile_len {
+                        let local_end = if local_start + SORT_MERGE_ITEMS < tile_len {
+                            local_start + SORT_MERGE_ITEMS
+                        } else {
+                            tile_len
+                        };
+                        let local_low_init = if local_start > right_count {
+                            local_start - right_count
+                        } else {
+                            0usize
+                        };
+                        let local_high_init = if local_start < left_count {
+                            local_start
+                        } else {
+                            left_count
+                        };
+                        let local_low = RuntimeCell::<usize>::new(local_low_init);
+                        let local_high = RuntimeCell::<usize>::new(local_high_init);
+                        while local_low.read() < local_high.read() {
+                            let left_rank = (local_low.read() + local_high.read()) / 2usize;
+                            let right_rank = local_start - left_rank;
+                            if left_rank < left_count && right_rank > 0usize {
+                                let left_index = shared_indices[left_rank];
+                                let right_index = shared_indices[left_count + right_rank - 1usize];
+                                if !Less::apply(
+                                    Expr::$method($( $slot, )+ offsets, right_index as usize),
+                                    Expr::$method($( $slot, )+ offsets, left_index as usize),
+                                ) {
+                                    local_low.store(left_rank + 1usize);
+                                } else {
+                                    local_high.store(left_rank);
+                                }
+                            } else {
+                                local_high.store(left_rank);
+                            }
+                        }
+
+                        let left_rank = RuntimeCell::<usize>::new(local_low.read());
+                        let right_rank = RuntimeCell::<usize>::new(local_start - local_low.read());
+                        let cursor = RuntimeCell::<usize>::new(local_start);
+                        while cursor.read() < local_end {
+                            let out_index = base + tile_rank_start + cursor.read();
+                            if left_rank.read() < left_count {
+                                let left_index = shared_indices[left_rank.read()];
+                                if right_rank.read() >= right_count {
+                                    output[out_index] = left_index;
+                                    left_rank.store(left_rank.read() + 1usize);
+                                } else {
+                                    let right_index =
+                                        shared_indices[left_count + right_rank.read()];
+                                    if !Less::apply(
+                                        Expr::$method($( $slot, )+ offsets, right_index as usize),
+                                        Expr::$method($( $slot, )+ offsets, left_index as usize),
+                                    ) {
+                                        output[out_index] = left_index;
+                                        left_rank.store(left_rank.read() + 1usize);
+                                    } else {
+                                        output[out_index] = right_index;
+                                        right_rank.store(right_rank.read() + 1usize);
+                                    }
+                                }
+                            } else {
+                                output[out_index] = shared_indices[left_count + right_rank.read()];
+                                right_rank.store(right_rank.read() + 1usize);
+                            }
+                            cursor.store(cursor.read() + 1usize);
                         }
                     }
-                } else {
-                    output[out_index] = input[right_start + right_rank];
                 }
-                out.store(out_index + stride);
             }
         }
     };
@@ -445,34 +712,46 @@ macro_rules! impl_sort_control_dispatch {
                 }
                 let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
                 let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len_u32]));
-                let count = cube_count_1d(len.div_ceil(BLOCK_SIZE as usize))?;
-                unsafe {
-                    iota_indices_kernel::launch_unchecked::<R>(
-                        exec.client(),
-                        count.clone(),
-                        CubeDim::new_1d(BLOCK_SIZE),
-                        BufferArg::from_raw_parts(len_handle.clone(), 1),
-                        BufferArg::from_raw_parts(current.handle.clone(), current.len()),
-                    );
-                }
-                if len == 1 {
-                    return Ok(current);
-                }
-                let mut next = exec.alloc_row::<u32>(len);
                 let mut reads = StagedBindings::new();
                 input.stage_at(exec.client(), exec.id(), &mut reads)?;
                 reads.pad_to_thirteen(exec.client());
                 let offsets = exec.client().create_from_slice(u32::as_bytes(&reads.offsets));
-                let mut width = 1usize;
+                unsafe {
+                    block_sort_permutation_a13::launch_unchecked::<
+                        Item,
+                        $( $leaf, )+
+                        Input::DeviceExpr,
+                        Less,
+                        R,
+                    >(
+                        exec.client(),
+                        cube_count_1d(len.div_ceil(SORT_BLOCK_ITEMS))?,
+                        CubeDim::new_1d(SORT_BLOCK_SIZE),
+                        $( BufferArg::from_raw_parts(reads.slots[$index].0.clone(), reads.slots[$index].1), )+
+                        BufferArg::from_raw_parts(offsets.clone(), reads.offsets.len()),
+                        BufferArg::from_raw_parts(len_handle.clone(), 1),
+                        BufferArg::from_raw_parts(current.handle.clone(), current.len()),
+                    );
+                }
+                if len <= SORT_BLOCK_ITEMS {
+                    return Ok(current);
+                }
+                let mut next = exec.alloc_row::<u32>(len);
+                let mut width = SORT_BLOCK_ITEMS;
                 while width < len {
                     let width_u32 = u32::try_from(width)
                         .map_err(|_| Error::LengthTooLarge { len: width })?;
                     let width_handle = exec.client().create_from_slice(u32::as_bytes(&[width_u32]));
+                    let pair_width = width.saturating_mul(2).min(len);
+                    let pairs = len.div_ceil(pair_width);
+                    let tiles_per_pair =
+                        pair_width.div_ceil(SORT_BLOCK_ITEMS * SORT_MERGE_ITEMS);
+                    let count = cube_count_1d(pairs.saturating_mul(tiles_per_pair).max(1))?;
                     unsafe {
                         $kernel::launch_unchecked::<Item, $( $leaf, )+ Input::DeviceExpr, Less, R>(
                             exec.client(),
                             count.clone(),
-                            CubeDim::new_1d(BLOCK_SIZE),
+                            CubeDim::new_1d(SORT_BLOCK_SIZE),
                             $( BufferArg::from_raw_parts(reads.slots[$index].0.clone(), reads.slots[$index].1), )+
                             BufferArg::from_raw_parts(offsets.clone(), reads.offsets.len()),
                             BufferArg::from_raw_parts(current.handle.clone(), current.len()),

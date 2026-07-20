@@ -3,7 +3,7 @@
 This ledger states exactly what the Lean development proves and what remains
 outside its theorem boundary.
 
-## Proved central theorem
+## Proved central theorems
 
 `InstructionNormalization.compileToCore_run_decode_correct` proves that, for
 every word width, finite processor count, finite nonempty shared memory,
@@ -17,12 +17,21 @@ the halted state), and every processor's recursive-product register value.
 The same `steps` argument occurs on both sides: one source instruction clock
 is represented by exactly one normalized PRAM round and one Core bulk round.
 
+`InstructionNormalization.compileToPublicAPI_run_decode_correct` strengthens
+the target side to an independent denotational model of a fixed public
+Massively API program.  For every finite instruction-machine run, the compiled
+program built from `transform`, `gather`, `copy_where`, stable `sort`, `unique`,
+`copy`, and collision-free `scatter` decodes to exactly the source execution.
+The public program is fixed by the source syntax and is not specialized to an
+input configuration or requested step count.
+
 The checked proof chain is:
 
 ```text
 InstructionPRAM.Program
   -- InstructionNormalization.normalize --> PriorityCRCW.Program
   -- Compilation.compile                --> MassivelyCore.Program
+  -- PublicAPICompilation.compile       --> PublicAPI.Program
 ```
 
 ### Instruction normalization
@@ -53,6 +62,26 @@ InstructionPRAM.Program
 - `InstructionNormalization.compileToCore_run_decode_correct`: composition of
   both layers, without treating either transition function as the other one's
   definition.
+
+### Core to public API basis
+
+- `PublicAPI.Program.step` independently specifies the routing pipeline at
+  public API boundaries.  It does not call `MassivelyCore.Program.winnerAt`.
+- `winningWriteRows_compile` proves that stable ordering by
+  `(destination, owner)` followed by first-per-destination selection returns
+  the least enabled owner for each destination.
+- `firstOwnerAt_eq_winner` proves that this public first-row observation equals
+  Core's commutative priority reduction.
+- `PublicAPICompilation.compile_step_correct` and `compile_run_correct` prove
+  one round and every finite run.
+- `InstructionNormalization.compileToPublicAPI_run_decode_correct` composes the
+  instruction normalizer, Core compiler, and public-API compiler.
+
+The Lean names `Basis.uniqueByDestination` and `Program.winningWriteRows` model
+the contract implemented by Rust's public `vector::unique`: after a stable
+`vector::sort` on `(destination, owner)`, consecutive equal destinations retain
+their first row.  They do not claim a separately exported Rust function named
+`unique_by_key`.
 
 `Example.instructionProgram_two_steps` is a concrete read-then-write
 instruction program compiled through both layers. The earlier collision
@@ -102,11 +131,27 @@ relative to the formal conventional priority-CRCW PRAM model. It does not
 formalize the informal set called "all parallel programs" independently of
 that external model.
 
-The mathematical Core is also not yet a refinement model of the Rust API,
-CubeCL IR, a device compiler, or GPU hardware. Therefore the theorem does not
-by itself establish that the current implementation realizes every formal
-Core primitive. That implementation-refinement layer is separate from
-Traversal Algebra and from the semantic completeness theorem above.
+The new public-API theorem removes the earlier semantic gap between the Core
+winner fold and a composition of public sequence-algorithm contracts.  It is
+still not a mechanized refinement proof of the Rust implementation, CubeCL IR,
+a device compiler, or GPU hardware.  In particular, the following remain
+outside Lean:
+
+- Rust `MIter`/`MVec` row layout, lifetimes, aliasing, allocation, and `Result`
+  behavior;
+- the correspondence between Lean finite indices and Rust `usize`/stored
+  `u32` indices, including size and bounds failures;
+- that the concrete sort kernel is stable for every backend and that concrete
+  `unique` retains the first row of every equal adjacent run;
+- that final `scatter` is invoked only after destination uniqueness, and its
+  concrete kernel implements the collision-free contract;
+- CubeCL lowering, synchronization, device memory, compiler, driver, and
+  hardware refinement;
+- a host-side loop or generated orchestration artifact that materializes the
+  theorem's fixed public call sequence with checked error propagation.
+
+These are now implementation-refinement obligations for named public
+operations rather than an uninstantiated claim about the abstract Core.
 
 Docker pins and checks the Lean artifact; it does not turn implementation
 conformance tests into formal premises.

@@ -6,4 +6,6 @@ import MassivelyProof.Example
 import MassivelyProof.InstructionPRAM
 import MassivelyProof.Normalization
 import MassivelyProof.PRAM
+import MassivelyProof.PublicAPI
+import MassivelyProof.PublicAPICompiler
 import MassivelyProof.Scalar

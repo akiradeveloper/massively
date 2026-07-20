@@ -16,6 +16,19 @@ impl BinaryPredicateOp<u32> for Less {
     }
 }
 
+fn sort_patterns(len: usize) -> [(&'static str, Vec<u32>); 5] {
+    [
+        ("shuffled", common::shuffled_u32(len)),
+        ("sorted", (0..len as u32).collect()),
+        ("reverse", common::reverse_u32(len)),
+        ("equal", vec![7_u32; len]),
+        (
+            "low_cardinality",
+            (0..len).map(|index| (index % 32) as u32).collect(),
+        ),
+    ]
+}
+
 fn bench_sort_by_key(c: &mut Criterion) {
     let exec = common::exec();
     let mut group = c.benchmark_group("sort_by_key");
@@ -42,18 +55,8 @@ fn bench_sort_by_key(c: &mut Criterion) {
     group.finish();
 
     let len = common::SORT_PATTERN_SIZE;
-    let patterns = [
-        ("shuffled", common::shuffled_u32(len)),
-        ("sorted", (0..len as u32).collect()),
-        ("reverse", common::reverse_u32(len)),
-        ("equal", vec![7_u32; len]),
-        (
-            "low_cardinality",
-            (0..len).map(|index| (index % 32) as u32).collect(),
-        ),
-    ];
     let mut pattern_group = c.benchmark_group("sort_by_key_patterns");
-    for (name, input) in patterns {
+    for (name, input) in sort_patterns(len) {
         let keys = exec.to_device(&input);
         let values = exec.to_device(&common::dense_f32(len));
         pattern_group.bench_function(name, |b| {
@@ -96,6 +99,26 @@ fn bench_radix_sort_by_key(c: &mut Criterion) {
         });
     }
     group.finish();
+
+    let len = common::SORT_PATTERN_SIZE;
+    let mut pattern_group = c.benchmark_group("radix_sort_by_key_patterns");
+    for (name, input) in sort_patterns(len) {
+        let keys = exec.to_device(&input);
+        let values = exec.to_device(&common::dense_f32(len));
+        pattern_group.bench_function(name, |b| {
+            b.iter(|| {
+                let output = radix_sort_by_key(
+                    &exec,
+                    black_box(keys.slice(..)),
+                    black_box(values.slice(..)),
+                )
+                .unwrap();
+                exec.sync().unwrap();
+                black_box(output);
+            })
+        });
+    }
+    pattern_group.finish();
 }
 
 criterion_group! {

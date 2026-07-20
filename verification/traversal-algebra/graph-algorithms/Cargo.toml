@@ -12,10 +12,11 @@ version = "0.1.0"
 
 [dependencies]
 cubecl.workspace = true
-massively = { path = "../../../massively", default-features = false }
+massively = { path = "../../../massively" }
 
 [dev-dependencies]
 criterion = "0.5"
+cubecl = { workspace = true, features = ["wgpu"] }
 proptest = "1"
 
 [[bench]]
@@ -25,9 +26,3 @@ harness = false
 [[test]]
 name = "oracle"
 path = "tests/oracle.rs"
-
-[features]
-default = ["wgpu"]
-cuda = ["cubecl/cuda", "massively/cuda"]
-hip = ["cubecl/hip", "massively/hip"]
-wgpu = ["cubecl/wgpu", "massively/wgpu"]

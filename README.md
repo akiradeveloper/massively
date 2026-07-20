@@ -47,17 +47,19 @@ The public API is built around a few ideas:
 
 ## Setup
 
-The default backend is WGPU. `cubecl` is also a direct dependency because its
-runtime types and `#[cubecl::cube]` macro are part of user-defined operations.
-Use the same CubeCL release as the one selected by `massively`.
+`massively` is runtime-agnostic: algorithms are generic over
+`R: cubecl::Runtime`, and the application selects a backend through its direct
+`cubecl` dependency. `cubecl` is also needed because its runtime types and
+`#[cubecl::cube]` macro are part of user-defined operations. Use the same CubeCL
+release as the one selected by `massively`.
 
 ```sh
 cargo add massively
 cargo add cubecl --no-default-features --features std,stdlib,wgpu
 ```
 
-For another backend, disable `massively`'s default features and enable `cuda`
-or `hip`, together with the matching CubeCL feature.
+For another backend, enable `cuda` or `hip` on `cubecl` instead of `wgpu` and
+construct `Executor` with the corresponding CubeCL runtime.
 
 ## Quick Example
 
@@ -106,11 +108,13 @@ frontier -> traverse -> pull values -> map -> push/reduce -> update -> next fron
 Traversal Algebra has a machine-checked mathematical foundation. For the
 precisely defined finite frontier/BSP fragment, Lean proves that the algebra
 and its reference BSP model can represent one another without changing program
-results. It also proves that normalization does not introduce an algorithmic
-blow-up under the stated language-level cost model. These claims concern the
-algebra, not the speed of a particular GPU or the formal correctness of every
-Rust graph algorithm. The Rust/CubeCL implementation is checked separately
-against an independent sequential CPU oracle with generated property tests.
+results. A second checked lowering carries typed BSP programs through Core TA
+to a denotational basis of the exported graph terminals and vector transform
+and filtering operations. The proof also gives a separate Rust-shaped grammar
+for the six edge-expression leaves, one map, and the public terminal contracts.
+It proves operation contracts, not that arbitrary Rust/CubeCL code or hardware
+refines the Lean model. The implementation is checked separately against an
+independent sequential CPU oracle with generated property tests.
 
 The non-specialist summary, exact proof boundary, Lean development, and oracle
 are collected in the

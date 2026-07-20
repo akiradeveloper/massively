@@ -7,7 +7,7 @@ license.workspace = true
 name = "massively"
 readme = "../README.md"
 repository.workspace = true
-version = "0.83.0"
+version = "0.84.0"
 
 [dependencies]
 cubecl.workspace = true
@@ -15,6 +15,7 @@ futures-lite = "2.6"
 
 [dev-dependencies]
 criterion = "0.5"
+cubecl = { workspace = true, features = ["wgpu"] }
 static_assertions = "1"
 
 [[test]]
@@ -128,9 +129,3 @@ harness = false
 [[bench]]
 name = "seg"
 harness = false
-
-[features]
-default = ["wgpu"]
-cuda = ["cubecl/cuda"]
-hip = ["cubecl/hip"]
-wgpu = ["cubecl/wgpu"]

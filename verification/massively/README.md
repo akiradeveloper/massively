@@ -29,7 +29,7 @@ kind of stages used by a GPU implementation:
 The machines and their transition functions are defined independently. The
 proof does not obtain equivalence by giving both machines the same evaluator.
 
-## Central result
+## Central results
 
 The verified compiler has two explicit steps:
 
@@ -52,6 +52,26 @@ The equality covers all observable machine state:
 One source instruction clock becomes exactly one normalized round and one Core
 bulk round. The theorem is therefore not merely an eventual-result simulation:
 the two executions agree after every requested finite number of clocks.
+
+The development now also proves a second lowering:
+
+```text
+instruction PRAM -> normalized PRAM -> Massively Core -> public API basis
+```
+
+The final target has an independent transition semantics consisting of the
+contracts of public `transform`, `gather`, `copy_where`, stable `sort`,
+`unique`, `copy`, and collision-free `scatter`.  In particular, conflicting
+writes are implemented by sorting write rows by `(destination, processor id)`,
+retaining the first row of each destination run, and scattering the resulting
+distinct destinations.  Lean proves that this is exactly the least-processor
+priority rule and that the resulting public program agrees after every finite
+number of source clocks.
+
+Here “public API basis” is a denotational model of those exported operation
+contracts.  The Rust API calls the adjacent-duplicate operation `unique`, not
+`unique_by_key`; equality on the destination field gives the required keyed
+behavior after sorting.
 
 The proof also checks the difficult parts of this translation separately.
 Encoding the program counter into the processor state preserves typed local
@@ -98,7 +118,13 @@ barrier, or atomic effects.
 It does not prove that:
 
 - the Rust implementation, generated CubeCL IR, compiler, driver, or GPU
-  implements the mathematical Core machine;
+  implements the modeled public-operation contracts;
+- Lean finite indices refine Rust `usize`/stored `u32` indices in all error and
+  overflow cases, or that concrete buffers satisfy the required layout,
+  length, ownership, and non-aliasing obligations;
+- the concrete backend sort is stable, concrete `unique` keeps the first row,
+  or concrete scatter receives distinct in-bounds destinations (these are now
+  explicit refinement obligations rather than assumptions hidden in Core);
 - arbitrary asynchronous programs or memory models reduce to this PRAM;
 - the symbolic launch and barrier counts imply a wall-clock speedup;
 - every public Massively algorithm is functionally correct.

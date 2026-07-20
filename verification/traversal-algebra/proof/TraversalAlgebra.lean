@@ -5,6 +5,8 @@ import TraversalAlgebra.FrontierBSP
 import TraversalAlgebra.Graph
 import TraversalAlgebra.Laws
 import TraversalAlgebra.PullMapPush
+import TraversalAlgebra.PublicAPI
+import TraversalAlgebra.PublicAPICompiler
 import TraversalAlgebra.Semantics
 import TraversalAlgebra.SignatureLowering
 import TraversalAlgebra.Simulation
