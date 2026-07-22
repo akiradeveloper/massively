@@ -118,7 +118,7 @@ where
     Item: CubeType + Send + Sync + 'static,
     Values: MIter<R, Item = Item>,
     Indices: MIter<R, Item = crate::MIndex>,
-    Stencil: MIter<R, Item = crate::MBool>,
+    Stencil: MIter<R, Item = bool>,
 {
     type Result = Result<(), Error>;
 
@@ -180,11 +180,9 @@ where
     Item: MAlloc<R>,
     Indices: MIter<R, Item = crate::MIndex>,
 {
-    let len = indices.capacity()? as usize;
-    let extent = indices.logical_extent()?;
-    let mut output = exec.alloc::<Item>(len);
+    let len = indices.len()? as usize;
+    let output = exec.alloc::<Item>(len);
     gather_into(exec, values, indices, output.slice_mut(..))?;
-    output.set_logical_extent(extent);
     Ok(output)
 }
 
@@ -217,19 +215,20 @@ where
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, vector::gather_where};
+/// use massively::{Executor, lazy, op, vector::gather_where};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let values = exec.to_device(&[10_u32, 20, 30]);
 /// let indices = exec.to_device(&[2_u32, 0, 1]);
 /// let stencil = exec.to_device(&[1_u32, 0, 1]);
 /// let output = exec.to_device(&[99_u32, 99, 99]);
+/// let stencil = lazy::map(stencil.slice(..), op::NonZero);
 ///
 /// gather_where(
 ///     &exec,
 ///     values.slice(..),
 ///     indices.slice(..),
-///     stencil.slice(..),
+///     stencil,
 ///     output.slice_mut(..),
 /// )
 /// .unwrap();
@@ -247,7 +246,7 @@ where
     R: Runtime,
     Values: MIter<R, Item = Output::Item>,
     Indices: MIter<R, Item = crate::MIndex>,
-    Stencil: MIter<R, Item = crate::MBool>,
+    Stencil: MIter<R, Item = bool>,
     Output: MIterMut<R>,
 {
     let indices_len = indices.capacity()?;
@@ -295,10 +294,8 @@ where
     crate::lazy::Reverse<Values>: MIter<R, Item = Item>,
     Item: MAlloc<R>,
 {
-    let len = values.capacity()? as usize;
-    let extent = values.logical_extent()?;
-    let mut output = exec.alloc::<Item>(len);
-    output.set_logical_extent(extent);
+    let len = values.len()? as usize;
+    let output = exec.alloc::<Item>(len);
     reverse_into(exec, values, output.slice_mut(..))?;
     Ok(output)
 }
@@ -341,7 +338,7 @@ mod tests {
             &exec,
             values.slice(..),
             encoded_indices.slice(..),
-            encoded_stencil.slice(..),
+            crate::lazy::map(encoded_stencil.slice(..), crate::op::NonZero),
             output.slice_mut(..),
         )
         .unwrap();

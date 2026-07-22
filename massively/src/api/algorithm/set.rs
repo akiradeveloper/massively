@@ -29,15 +29,14 @@ where
         Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
         Output: crate::api::iter::ConcreteOutput<R, Item>,
     {
-        let left = crate::allocation::normalize_lowered_scratch(
+        crate::core::set::set(
             self.exec,
             crate::api::iter::lower_fixed::<R, _>(self.left),
-        )?;
-        let right = crate::allocation::normalize_lowered_scratch(
-            self.exec,
             crate::api::iter::lower_fixed::<R, _>(self.right),
-        )?;
-        crate::core::set::set_storage(self.exec, &left, &right, self.less, output, MODE)
+            self.less,
+            output,
+            MODE,
+        )
     }
 }
 
@@ -57,12 +56,12 @@ macro_rules! set_api {
             Item: MAlloc<R>,
             Less: BinaryPredicateOp<Item>,
         {
-            let left_len = left.capacity()? as usize;
-            let right_len = right.capacity()? as usize;
+            let left_len = left.len()? as usize;
+            let right_len = right.len()? as usize;
             let capacity = ($capacity)(left_len, right_len)?;
             let mut output = exec.alloc::<Item>(capacity);
             let len = $into_name(exec, left, right, less, output.slice_mut(..))?;
-            output.set_logical_extent(len.logical_extent(capacity));
+            output.set_fixed_len(len.read(exec)?);
             Ok(output)
         }
 
@@ -114,8 +113,8 @@ struct Less;
 
 #[cubecl::cube]
 impl op::BinaryPredicateOp<u32> for Less {
-    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-        op::mbool(lhs < rhs)
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs < rhs
     }
 }
 
@@ -146,8 +145,8 @@ struct Less;
 
 #[cubecl::cube]
 impl op::BinaryPredicateOp<u32> for Less {
-    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-        op::mbool(lhs < rhs)
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs < rhs
     }
 }
 
@@ -178,8 +177,8 @@ struct Less;
 
 #[cubecl::cube]
 impl op::BinaryPredicateOp<u32> for Less {
-    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-        op::mbool(lhs < rhs)
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs < rhs
     }
 }
 

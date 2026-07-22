@@ -5,12 +5,11 @@ use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 use crate::{
-    A13, DeviceVec, Dispatch, Error, Executor, MBool, MIndex, MStorageElement, MVal,
-    ReadExpression,
+    A13, DeviceVec, Dispatch, Error, Executor, MIndex, MStorageElement, MVal, ReadExpression,
     arg_reduce::{ArgReduceDispatch, ArgReductionOp, arg_reduce},
     eval::Eval13,
     launch::cube_count_1d,
-    op::{IndexedBinaryOp, UnaryOp},
+    op::IndexedBinaryOp,
     output::{LowerOutputExpression, OutputExpression, StageOutput},
     read::{
         AdjacentIndexedTransform, Env0, Env13, KernelReadSlots, LowerReadExpression,
@@ -23,9 +22,10 @@ use crate::{
 pub(crate) mod sort;
 
 const BLOCK_SIZE: u32 = 256;
-const SORT_BLOCK_ITEMS: usize = 128;
+const SORT_BLOCK_ITEMS: usize = 256;
 const SORT_BLOCK_SIZE: u32 = SORT_BLOCK_ITEMS as u32;
-const SORT_MERGE_ITEMS: usize = 16;
+const SORT_MERGE_SIZE: usize = 64;
+const SORT_MERGE_ITEMS: usize = 64;
 
 /// Compile-time binary predicate over two semantic items.
 ///
@@ -40,8 +40,8 @@ const SORT_MERGE_ITEMS: usize = 16;
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Less {
-///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-///         op::mbool(lhs < rhs)
+///     fn apply(lhs: u32, rhs: u32) -> bool {
+///         lhs < rhs
 ///     }
 /// }
 ///
@@ -53,7 +53,7 @@ const SORT_MERGE_ITEMS: usize = 16;
 /// ```
 #[cubecl::cube]
 pub trait BinaryPredicateOp<Item: CubeType>: 'static + Send + Sync {
-    fn apply(lhs: Item, rhs: Item) -> MBool;
+    fn apply(lhs: Item, rhs: Item) -> bool;
 }
 
 #[cubecl::cube]
@@ -62,7 +62,7 @@ where
     Item: CubeType + 'static,
     Op: BinaryPredicateOp<Item>,
 {
-    crate::op::is_true(Op::apply(lhs, rhs))
+    Op::apply(lhs, rhs)
 }
 
 #[cubecl::cube]
@@ -114,54 +114,6 @@ struct MinU32;
 impl ReductionOp<u32> for MinU32 {
     fn apply(lhs: u32, rhs: u32) -> u32 {
         u32::min(lhs, rhs)
-    }
-}
-
-struct SentinelToOption;
-
-#[cubecl::cube]
-impl UnaryOp<u32> for SentinelToOption {
-    type Output = (MBool, MIndex);
-
-    fn apply(index: u32) -> Self::Output {
-        (crate::op::mbool(index != u32::MAX), index)
-    }
-}
-
-struct SentinelOrEnd;
-
-#[cubecl::cube]
-impl UnaryOp<(u32, u32)> for SentinelOrEnd {
-    type Output = MIndex;
-
-    fn apply(input: (u32, u32)) -> MIndex {
-        if input.0 == u32::MAX {
-            input.1
-        } else {
-            input.0
-        }
-    }
-}
-
-struct SentinelIsAbsent;
-
-#[cubecl::cube]
-impl UnaryOp<u32> for SentinelIsAbsent {
-    type Output = MBool;
-
-    fn apply(index: u32) -> MBool {
-        crate::op::mbool(index == u32::MAX)
-    }
-}
-
-struct SentinelsToOptionPair;
-
-#[cubecl::cube]
-impl UnaryOp<(u32, u32)> for SentinelsToOptionPair {
-    type Output = (MBool, MIndex, MIndex);
-
-    fn apply(input: (u32, u32)) -> Self::Output {
-        (crate::op::mbool(input.0 != u32::MAX), input.0, input.1)
     }
 }
 
@@ -549,7 +501,7 @@ macro_rules! define_merge_permutation_kernel {
             } else {
                 run_width * 2usize
             };
-            let merge_tile_items = SORT_BLOCK_ITEMS * SORT_MERGE_ITEMS;
+            let merge_tile_items = SORT_MERGE_SIZE * SORT_MERGE_ITEMS;
             let tiles_per_pair = (pair_width + merge_tile_items - 1usize) / merge_tile_items;
             let pair = (CUBE_POS as usize) / tiles_per_pair;
             let tile = (CUBE_POS as usize) % tiles_per_pair;
@@ -573,165 +525,219 @@ macro_rules! define_merge_permutation_kernel {
                         pair_len
                     };
 
-                    let mut partition = Shared::<[u32]>::new_slice(4usize);
+                    let mut partition = Shared::<[u32]>::new_slice(5usize);
                     if UNIT_POS == 0u32 {
-                        let begin_low_init = if tile_rank_start > right_len {
-                            tile_rank_start - right_len
-                        } else {
-                            0usize
-                        };
-                        let begin_high_init = if tile_rank_start < left_len {
-                            tile_rank_start
-                        } else {
-                            left_len
-                        };
-                        let begin_low = RuntimeCell::<usize>::new(begin_low_init);
-                        let begin_high = RuntimeCell::<usize>::new(begin_high_init);
-                        while begin_low.read() < begin_high.read() {
-                            let left_rank = (begin_low.read() + begin_high.read()) / 2usize;
-                            let right_rank = tile_rank_start - left_rank;
-                            if left_rank < left_len && right_rank > 0usize {
-                                let left_index = input[base + left_rank];
-                                let right_index = input[right_start + right_rank - 1usize];
-                                if !crate::ordering::binary_predicate::<Item, Less>(
-                                    Expr::$method($( $slot, )+ offsets, right_index as usize),
-                                    Expr::$method($( $slot, )+ offsets, left_index as usize),
-                                ) {
-                                    begin_low.store(left_rank + 1usize);
-                                } else {
-                                    begin_high.store(left_rank);
-                                }
+                        let pair_ordered = right_len == 0usize
+                            || !crate::ordering::binary_predicate::<Item, Less>(
+                                Expr::$method(
+                                    $( $slot, )+
+                                    offsets,
+                                    input[right_start] as usize,
+                                ),
+                                Expr::$method(
+                                    $( $slot, )+
+                                    offsets,
+                                    input[right_start - 1usize] as usize,
+                                ),
+                            );
+                        partition[4] = if pair_ordered { 1u32 } else { 0u32 };
+                        if !pair_ordered {
+                            let begin_low_init = if tile_rank_start > right_len {
+                                tile_rank_start - right_len
                             } else {
-                                begin_high.store(left_rank);
-                            }
-                        }
-
-                        let end_low_init = if tile_rank_end > right_len {
-                            tile_rank_end - right_len
-                        } else {
-                            0usize
-                        };
-                        let end_high_init = if tile_rank_end < left_len {
-                            tile_rank_end
-                        } else {
-                            left_len
-                        };
-                        let end_low = RuntimeCell::<usize>::new(end_low_init);
-                        let end_high = RuntimeCell::<usize>::new(end_high_init);
-                        while end_low.read() < end_high.read() {
-                            let left_rank = (end_low.read() + end_high.read()) / 2usize;
-                            let right_rank = tile_rank_end - left_rank;
-                            if left_rank < left_len && right_rank > 0usize {
-                                let left_index = input[base + left_rank];
-                                let right_index = input[right_start + right_rank - 1usize];
-                                if !crate::ordering::binary_predicate::<Item, Less>(
-                                    Expr::$method($( $slot, )+ offsets, right_index as usize),
-                                    Expr::$method($( $slot, )+ offsets, left_index as usize),
-                                ) {
-                                    end_low.store(left_rank + 1usize);
-                                } else {
-                                    end_high.store(left_rank);
-                                }
+                                0usize
+                            };
+                            let begin_high_init = if tile_rank_start < left_len {
+                                tile_rank_start
                             } else {
-                                end_high.store(left_rank);
-                            }
-                        }
-
-                        let left_begin = begin_low.read();
-                        let right_begin = tile_rank_start - left_begin;
-                        partition[0] = left_begin as u32;
-                        partition[1] = right_begin as u32;
-                        partition[2] = (end_low.read() - left_begin) as u32;
-                        partition[3] = ((tile_rank_end - end_low.read()) - right_begin) as u32;
-                    }
-                    sync_cube();
-
-                    let left_begin = partition[0] as usize;
-                    let right_begin = partition[1] as usize;
-                    let left_count = partition[2] as usize;
-                    let right_count = partition[3] as usize;
-                    let tile_len = left_count + right_count;
-                    let mut shared_indices =
-                        Shared::<[u32]>::new_slice(SORT_BLOCK_ITEMS * SORT_MERGE_ITEMS);
-                    let load_pos = RuntimeCell::<usize>::new(UNIT_POS as usize);
-                    while load_pos.read() < tile_len {
-                        let source = if load_pos.read() < left_count {
-                            base + left_begin + load_pos.read()
-                        } else {
-                            right_start + right_begin + load_pos.read() - left_count
-                        };
-                        shared_indices[load_pos.read()] = input[source];
-                        load_pos.store(load_pos.read() + SORT_BLOCK_ITEMS);
-                    }
-                    sync_cube();
-
-                    let local_start = (UNIT_POS as usize) * SORT_MERGE_ITEMS;
-                    if local_start < tile_len {
-                        let local_end = if local_start + SORT_MERGE_ITEMS < tile_len {
-                            local_start + SORT_MERGE_ITEMS
-                        } else {
-                            tile_len
-                        };
-                        let local_low_init = if local_start > right_count {
-                            local_start - right_count
-                        } else {
-                            0usize
-                        };
-                        let local_high_init = if local_start < left_count {
-                            local_start
-                        } else {
-                            left_count
-                        };
-                        let local_low = RuntimeCell::<usize>::new(local_low_init);
-                        let local_high = RuntimeCell::<usize>::new(local_high_init);
-                        while local_low.read() < local_high.read() {
-                            let left_rank = (local_low.read() + local_high.read()) / 2usize;
-                            let right_rank = local_start - left_rank;
-                            if left_rank < left_count && right_rank > 0usize {
-                                let left_index = shared_indices[left_rank];
-                                let right_index = shared_indices[left_count + right_rank - 1usize];
-                                if !crate::ordering::binary_predicate::<Item, Less>(
-                                    Expr::$method($( $slot, )+ offsets, right_index as usize),
-                                    Expr::$method($( $slot, )+ offsets, left_index as usize),
-                                ) {
-                                    local_low.store(left_rank + 1usize);
-                                } else {
-                                    local_high.store(left_rank);
-                                }
-                            } else {
-                                local_high.store(left_rank);
-                            }
-                        }
-
-                        let left_rank = RuntimeCell::<usize>::new(local_low.read());
-                        let right_rank = RuntimeCell::<usize>::new(local_start - local_low.read());
-                        let cursor = RuntimeCell::<usize>::new(local_start);
-                        while cursor.read() < local_end {
-                            let out_index = base + tile_rank_start + cursor.read();
-                            if left_rank.read() < left_count {
-                                let left_index = shared_indices[left_rank.read()];
-                                if right_rank.read() >= right_count {
-                                    output[out_index] = left_index;
-                                    left_rank.store(left_rank.read() + 1usize);
-                                } else {
-                                    let right_index =
-                                        shared_indices[left_count + right_rank.read()];
+                                left_len
+                            };
+                            let begin_low = RuntimeCell::<usize>::new(begin_low_init);
+                            let begin_high = RuntimeCell::<usize>::new(begin_high_init);
+                            while begin_low.read() < begin_high.read() {
+                                let left_rank = (begin_low.read() + begin_high.read()) / 2usize;
+                                let right_rank = tile_rank_start - left_rank;
+                                if left_rank < left_len && right_rank > 0usize {
+                                    let left_index = input[base + left_rank];
+                                    let right_index = input[right_start + right_rank - 1usize];
                                     if !crate::ordering::binary_predicate::<Item, Less>(
                                         Expr::$method($( $slot, )+ offsets, right_index as usize),
                                         Expr::$method($( $slot, )+ offsets, left_index as usize),
                                     ) {
+                                        begin_low.store(left_rank + 1usize);
+                                    } else {
+                                        begin_high.store(left_rank);
+                                    }
+                                } else {
+                                    begin_high.store(left_rank);
+                                }
+                            }
+
+                            let left_begin = begin_low.read();
+                            partition[0] = left_begin as u32;
+                            partition[1] = (tile_rank_start - left_begin) as u32;
+                        }
+                    }
+                    if UNIT_POS == 1u32 {
+                        let pair_ordered = right_len == 0usize
+                            || !crate::ordering::binary_predicate::<Item, Less>(
+                                Expr::$method(
+                                    $( $slot, )+
+                                    offsets,
+                                    input[right_start] as usize,
+                                ),
+                                Expr::$method(
+                                    $( $slot, )+
+                                    offsets,
+                                    input[right_start - 1usize] as usize,
+                                ),
+                            );
+                        if !pair_ordered {
+                            let end_low_init = if tile_rank_end > right_len {
+                                tile_rank_end - right_len
+                            } else {
+                                0usize
+                            };
+                            let end_high_init = if tile_rank_end < left_len {
+                                tile_rank_end
+                            } else {
+                                left_len
+                            };
+                            let end_low = RuntimeCell::<usize>::new(end_low_init);
+                            let end_high = RuntimeCell::<usize>::new(end_high_init);
+                            while end_low.read() < end_high.read() {
+                                let left_rank = (end_low.read() + end_high.read()) / 2usize;
+                                let right_rank = tile_rank_end - left_rank;
+                                if left_rank < left_len && right_rank > 0usize {
+                                    let left_index = input[base + left_rank];
+                                    let right_index = input[right_start + right_rank - 1usize];
+                                    if !crate::ordering::binary_predicate::<Item, Less>(
+                                        Expr::$method($( $slot, )+ offsets, right_index as usize),
+                                        Expr::$method($( $slot, )+ offsets, left_index as usize),
+                                    ) {
+                                        end_low.store(left_rank + 1usize);
+                                    } else {
+                                        end_high.store(left_rank);
+                                    }
+                                } else {
+                                    end_high.store(left_rank);
+                                }
+                            }
+
+                            let left_end = end_low.read();
+                            partition[2] = left_end as u32;
+                            partition[3] = (tile_rank_end - left_end) as u32;
+                        }
+                    }
+                    sync_cube();
+
+                    if partition[4] != 0u32 {
+                        let copy_position = RuntimeCell::<usize>::new(UNIT_POS as usize);
+                        let tile_len = tile_rank_end - tile_rank_start;
+                        while copy_position.read() < tile_len {
+                            let position = base + tile_rank_start + copy_position.read();
+                            output[position] = input[position];
+                            copy_position.store(copy_position.read() + SORT_MERGE_SIZE);
+                        }
+                    } else {
+                        let left_begin = partition[0] as usize;
+                        let right_begin = partition[1] as usize;
+                        let left_count = partition[2] as usize - left_begin;
+                        let right_count = partition[3] as usize - right_begin;
+                        let tile_len = left_count + right_count;
+                        let mut shared_indices =
+                            Shared::<[u32]>::new_slice(SORT_MERGE_SIZE * SORT_MERGE_ITEMS);
+                        let load_pos = RuntimeCell::<usize>::new(UNIT_POS as usize);
+                        while load_pos.read() < tile_len {
+                            let source = if load_pos.read() < left_count {
+                                base + left_begin + load_pos.read()
+                            } else {
+                                right_start + right_begin + load_pos.read() - left_count
+                            };
+                            shared_indices[load_pos.read()] = input[source];
+                            load_pos.store(load_pos.read() + SORT_MERGE_SIZE);
+                        }
+                        sync_cube();
+
+                        let local_start = (UNIT_POS as usize) * SORT_MERGE_ITEMS;
+                        if local_start < tile_len {
+                            let local_end = if local_start + SORT_MERGE_ITEMS < tile_len {
+                                local_start + SORT_MERGE_ITEMS
+                            } else {
+                                tile_len
+                            };
+                            let local_low_init = if local_start > right_count {
+                                local_start - right_count
+                            } else {
+                                0usize
+                            };
+                            let local_high_init = if local_start < left_count {
+                                local_start
+                            } else {
+                                left_count
+                            };
+                            let local_low = RuntimeCell::<usize>::new(local_low_init);
+                            let local_high = RuntimeCell::<usize>::new(local_high_init);
+                            while local_low.read() < local_high.read() {
+                                let left_rank = (local_low.read() + local_high.read()) / 2usize;
+                                let right_rank = local_start - left_rank;
+                                if left_rank < left_count && right_rank > 0usize {
+                                    let left_index = shared_indices[left_rank];
+                                    let right_index =
+                                        shared_indices[left_count + right_rank - 1usize];
+                                    if !crate::ordering::binary_predicate::<Item, Less>(
+                                        Expr::$method($( $slot, )+ offsets, right_index as usize),
+                                        Expr::$method($( $slot, )+ offsets, left_index as usize),
+                                    ) {
+                                        local_low.store(left_rank + 1usize);
+                                    } else {
+                                        local_high.store(left_rank);
+                                    }
+                                } else {
+                                    local_high.store(left_rank);
+                                }
+                            }
+
+                            let left_rank = RuntimeCell::<usize>::new(local_low.read());
+                            let right_rank =
+                                RuntimeCell::<usize>::new(local_start - local_low.read());
+                            let cursor = RuntimeCell::<usize>::new(local_start);
+                            while cursor.read() < local_end {
+                                let out_index = base + tile_rank_start + cursor.read();
+                                if left_rank.read() < left_count {
+                                    let left_index = shared_indices[left_rank.read()];
+                                    if right_rank.read() >= right_count {
                                         output[out_index] = left_index;
                                         left_rank.store(left_rank.read() + 1usize);
                                     } else {
-                                        output[out_index] = right_index;
-                                        right_rank.store(right_rank.read() + 1usize);
+                                        let right_index =
+                                            shared_indices[left_count + right_rank.read()];
+                                        if !crate::ordering::binary_predicate::<Item, Less>(
+                                            Expr::$method(
+                                                $( $slot, )+
+                                                offsets,
+                                                right_index as usize,
+                                            ),
+                                            Expr::$method(
+                                                $( $slot, )+
+                                                offsets,
+                                                left_index as usize,
+                                            ),
+                                        ) {
+                                            output[out_index] = left_index;
+                                            left_rank.store(left_rank.read() + 1usize);
+                                        } else {
+                                            output[out_index] = right_index;
+                                            right_rank.store(right_rank.read() + 1usize);
+                                        }
                                     }
+                                } else {
+                                    output[out_index] =
+                                        shared_indices[left_count + right_rank.read()];
+                                    right_rank.store(right_rank.read() + 1usize);
                                 }
-                            } else {
-                                output[out_index] = shared_indices[left_count + right_rank.read()];
-                                right_rank.store(right_rank.read() + 1usize);
+                                cursor.store(cursor.read() + 1usize);
                             }
-                            cursor.store(cursor.read() + 1usize);
                         }
                     }
                 }
@@ -808,13 +814,13 @@ macro_rules! impl_sort_control_dispatch {
                     let pair_width = width.saturating_mul(2).min(capacity);
                     let pairs = capacity.div_ceil(pair_width);
                     let tiles_per_pair =
-                        pair_width.div_ceil(SORT_BLOCK_ITEMS * SORT_MERGE_ITEMS);
+                        pair_width.div_ceil(SORT_MERGE_SIZE * SORT_MERGE_ITEMS);
                     let count = cube_count_1d(pairs.saturating_mul(tiles_per_pair).max(1))?;
                     unsafe {
                         $kernel::launch_unchecked::<Item, $( $leaf, )+ Input::DeviceExpr, Less, R>(
                             exec.client(),
                             count.clone(),
-                            CubeDim::new_1d(SORT_BLOCK_SIZE),
+                            CubeDim::new_1d(SORT_MERGE_SIZE as u32),
                             $( BufferArg::from_raw_parts(reads.slots[$index].0.clone(), reads.slots[$index].1), )+
                             BufferArg::from_raw_parts(offsets.clone(), reads.offsets.len()),
                             BufferArg::from_raw_parts(current.handle.clone(), current.capacity()),
@@ -881,55 +887,6 @@ where
     Input: SortControlInput<R, Less>,
 {
     input.sort_control(exec)
-}
-
-/// Public sort capability.  The blanket implementation first normalizes an
-/// arbitrary fixed-ABI expression into flat-row storage, then runs the
-/// storage-width sort and materializes it into the output.
-#[doc(hidden)]
-pub trait SortInput<R: Runtime, Less, Output>: ReadExpression + Sized {
-    fn sort_into(self, exec: &Executor<R>, output: Output) -> Result<(), Error>;
-}
-
-impl<R, Input, Less, Output> SortInput<R, Less, Output> for Input
-where
-    R: Runtime,
-    Input: crate::allocation::NormalizeOwnedInput<R>,
-    Less: BinaryPredicateOp<Input::Item>,
-    Output: OutputExpression<Item = Input::Item> + LowerOutputExpression + StageOutput<R, Env0>,
-    Input::Item:
-        crate::RowAlloc<R, RowStorage = Input::OwnedStorage> + crate::api::iter::SortAbi<R>,
-    Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
-            R,
-            Input::OwnedRead,
-            Output,
-            crate::read::KernelReadSlots<<Input::OwnedRead as LowerReadExpression>::Slots>,
-            crate::output::KernelOutputSlots<<Output as LowerOutputExpression>::Slots>,
-        >,
-    <Output as LowerOutputExpression>::Slots: crate::output::PaddedOutputSlots,
-{
-    fn sort_into(self, exec: &Executor<R>, output: Output) -> Result<(), Error> {
-        let temporary = self.normalize_owned(exec)?;
-        let result = <Input::Item as crate::api::iter::SortAbi<R>>::sort_storage::<Less>(
-            exec, temporary, false,
-        )?;
-        let semantic = Input::owned_read(&result.sorted_keys);
-        materialize(exec, semantic, output)
-    }
-}
-
-/// Stably sorts an input into preallocated output storage.
-pub(crate) fn sort<R, Input, Less, Output>(
-    exec: &Executor<R>,
-    input: Input,
-    _less: Less,
-    output: Output,
-) -> Result<(), Error>
-where
-    R: Runtime,
-    Input: SortInput<R, Less, Output>,
-{
-    input.sort_into(exec, output)
 }
 
 /// Key-sort capability that also retains the stable source permutation.
@@ -1083,28 +1040,23 @@ where
         reduce(
             exec,
             AdjacentIndexedTransform::new(self, FirstAdjacentMatch::<Equal>(PhantomData)),
-            exec.value(u32::MAX)?.into_scratch_storage(),
+            exec.to_device(&[u32::MAX]),
             MinU32,
         )
     }
 }
 
-/// Finds the first element of the first adjacent pair accepted by `equal`.
+/// Finds the first element of the first adjacent pair, or returns a sentinel.
 pub(crate) fn adjacent_find<R, Input, Equal>(
     exec: &Executor<R>,
     input: Input,
     _equal: Equal,
-) -> Result<MVal<R, (MBool, MIndex)>, Error>
+) -> Result<MVal<R, MIndex>, Error>
 where
     R: Runtime,
     Input: AdjacentFindInput<R, Equal>,
 {
-    let index = input.first_adjacent_match(exec)?;
-    MVal::from_storage(crate::vector::transform(
-        exec,
-        index.slice(..),
-        SentinelToOption,
-    )?)
+    MVal::from_storage(input.first_adjacent_match(exec)?)
 }
 
 /// Internal public-API capability for stable adjacent deduplication.
@@ -1147,7 +1099,6 @@ where
 /// dispatch from the function signature.
 #[doc(hidden)]
 pub trait SortedInput<R: Runtime, Less>: ReadExpression + Sized {
-    fn sorted_extent(&self) -> Result<crate::extent::LogicalExtent, Error>;
     fn first_sorted_break(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
 }
 
@@ -1169,22 +1120,17 @@ where
             Storage = DeviceVec<R, u32>,
         >,
 {
-    fn sorted_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
-        self.logical_extent()
-    }
-
     fn first_sorted_break(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
         reduce(
             exec,
             AdjacentIndexedTransform::new(self, FirstSortedBreak::<Less>(PhantomData)),
-            exec.value(u32::MAX)?.into_scratch_storage(),
+            exec.to_device(&[u32::MAX]),
             MinU32,
         )
     }
 }
 
-/// Returns the first index at which the input ceases to be sorted, or its
-/// length when the whole input is sorted.
+/// Returns the first index at which the input ceases to be sorted, or a sentinel.
 pub(crate) fn is_sorted_until<R, Input, Less>(
     exec: &Executor<R>,
     input: Input,
@@ -1194,37 +1140,25 @@ where
     R: Runtime,
     Input: SortedInput<R, Less>,
 {
-    let end = input.sorted_extent()?.materialize(exec)?;
-    let index = input.first_sorted_break(exec)?;
-    MVal::from_storage(crate::vector::transform(
-        exec,
-        crate::zip2(index.slice(..), end.slice(..)),
-        SentinelOrEnd,
-    )?)
+    MVal::from_storage(input.first_sorted_break(exec)?)
 }
 
-/// Returns whether the input is sorted according to `less`.
+/// Returns the first sorted break, or a sentinel when the input is sorted.
 pub(crate) fn is_sorted<R, Input, Less>(
     exec: &Executor<R>,
     input: Input,
     _less: Less,
-) -> Result<MVal<R, MBool>, Error>
+) -> Result<MVal<R, u32>, Error>
 where
     R: Runtime,
     Input: SortedInput<R, Less>,
 {
-    let index = input.first_sorted_break(exec)?;
-    MVal::from_storage(crate::vector::transform(
-        exec,
-        index.slice(..),
-        SentinelIsAbsent,
-    )?)
+    MVal::from_storage(input.first_sorted_break(exec)?)
 }
 
 /// Internal public-API capability for extremum queries.
 #[doc(hidden)]
 pub trait ExtremumInput<R: Runtime, Less>: ReadExpression + Sized {
-    fn extremum_len(&self) -> Result<usize, Error>;
     fn first_minimum(&self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
     fn last_minimum(&self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
     fn first_maximum(&self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
@@ -1239,10 +1173,6 @@ where
         + ArgReduceDispatch<R, Input, ArgMinLast<Less>, crate::read::KernelReadSlots<Input::Slots>>
         + ArgReduceDispatch<R, Input, ArgMaxFirst<Less>, crate::read::KernelReadSlots<Input::Slots>>,
 {
-    fn extremum_len(&self) -> Result<usize, Error> {
-        self.logical_len()
-    }
-
     fn first_minimum(&self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
         arg_reduce(exec, self.clone(), ArgMinFirst::<Less>(PhantomData))
     }
@@ -1261,16 +1191,12 @@ pub(crate) fn min_element<R, Input, Less>(
     exec: &Executor<R>,
     input: Input,
     _less: Less,
-) -> Result<MVal<R, (MBool, MIndex)>, Error>
+) -> Result<MVal<R, MIndex>, Error>
 where
     R: Runtime,
     Input: ExtremumInput<R, Less>,
 {
-    MVal::from_storage(crate::vector::transform(
-        exec,
-        input.first_minimum(exec)?.slice(..),
-        SentinelToOption,
-    )?)
+    MVal::from_storage(input.first_minimum(exec)?)
 }
 
 /// Returns the first maximum element index.
@@ -1278,16 +1204,12 @@ pub(crate) fn max_element<R, Input, Less>(
     exec: &Executor<R>,
     input: Input,
     _less: Less,
-) -> Result<MVal<R, (MBool, MIndex)>, Error>
+) -> Result<MVal<R, MIndex>, Error>
 where
     R: Runtime,
     Input: ExtremumInput<R, Less>,
 {
-    MVal::from_storage(crate::vector::transform(
-        exec,
-        input.first_maximum(exec)?.slice(..),
-        SentinelToOption,
-    )?)
+    MVal::from_storage(input.first_maximum(exec)?)
 }
 
 /// Returns the last minimum and first maximum indices.
@@ -1295,24 +1217,22 @@ pub(crate) fn minmax_element<R, Input, Less>(
     exec: &Executor<R>,
     input: Input,
     _less: Less,
-) -> Result<MVal<R, (MBool, MIndex, MIndex)>, Error>
+) -> Result<(MVal<R, MIndex>, MVal<R, MIndex>), Error>
 where
     R: Runtime,
     Input: ExtremumInput<R, Less>,
 {
-    let min = input.last_minimum(exec)?;
-    let max = input.first_maximum(exec)?;
-    MVal::from_storage(crate::vector::transform(
-        exec,
-        crate::zip2(min.slice(..), max.slice(..)),
-        SentinelsToOptionPair,
-    )?)
+    let min = MVal::from_storage(input.last_minimum(exec)?)?;
+    let max = MVal::from_storage(input.first_maximum(exec)?)?;
+    Ok((min, max))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Counting, Permute, RowStorage, Transform, Zip};
+    use crate::{
+        Counting, Permute, RowStorage, Zip, allocation::NormalizeOwnedInput, api::iter::SortAbi,
+    };
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     type Seven = (u32, u32, u32, u32, u32, u32, u32);
@@ -1320,8 +1240,8 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<Seven> for LexicographicLess {
-        fn apply(lhs: Seven, rhs: Seven) -> crate::MBool {
-            crate::op::mbool(lhs.0 < rhs.0)
+        fn apply(lhs: Seven, rhs: Seven) -> bool {
+            lhs.0 < rhs.0
         }
     }
 
@@ -1329,16 +1249,14 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<Seven> for EqualSeven {
-        fn apply(lhs: Seven, rhs: Seven) -> crate::MBool {
-            crate::op::mbool(
-                lhs.0 == rhs.0
-                    && lhs.1 == rhs.1
-                    && lhs.2 == rhs.2
-                    && lhs.3 == rhs.3
-                    && lhs.4 == rhs.4
-                    && lhs.5 == rhs.5
-                    && lhs.6 == rhs.6,
-            )
+        fn apply(lhs: Seven, rhs: Seven) -> bool {
+            lhs.0 == rhs.0
+                && lhs.1 == rhs.1
+                && lhs.2 == rhs.2
+                && lhs.3 == rhs.3
+                && lhs.4 == rhs.4
+                && lhs.5 == rhs.5
+                && lhs.6 == rhs.6
         }
     }
 
@@ -1346,8 +1264,8 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<u32> for LessU32 {
-        fn apply(lhs: u32, rhs: u32) -> crate::MBool {
-            crate::op::mbool(lhs < rhs)
+        fn apply(lhs: u32, rhs: u32) -> bool {
+            lhs < rhs
         }
     }
 
@@ -1381,7 +1299,7 @@ mod tests {
                 .unwrap()
                 .read(&exec)
                 .unwrap(),
-            1
+            u32::MAX
         );
 
         let bad_first = exec.to_device(&[1_u32, 2, 1, 3]);
@@ -1414,7 +1332,7 @@ mod tests {
     }
 
     #[test]
-    fn sort_normalizes_eval8_then_applies_one_stable_permutation_to_storage7() {
+    fn sort_normalizes_eval8_into_storage7() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let len = 513usize;
         let keys: Vec<u32> = (0..len).map(|index| (index as u32 * 37) % 23).collect();
@@ -1444,9 +1362,10 @@ mod tests {
             ),
         );
         let input = Permute::new(seven, Counting::new(0, len));
-        let output = exec.alloc_row::<Seven>(len);
-
-        sort(&exec, input, LexicographicLess, output.write()).unwrap();
+        let temporary = input.normalize_owned(&exec).unwrap();
+        let output = Seven::sort_storage::<LexicographicLess>(&exec, temporary, false)
+            .unwrap()
+            .sorted_keys;
 
         let (keys, rows, payload2, _, _, _, payload6) = crate::MStorage::into_columns(output);
         let sorted_keys = exec.to_host(&keys).unwrap();
@@ -1499,11 +1418,11 @@ mod tests {
                 .unwrap()
                 .read(&exec)
                 .unwrap(),
-            (1, 0)
+            0
         );
         let output = exec.alloc_row::<Seven>(5);
         let count = unique(&exec, make_input(), EqualSeven, output.write()).unwrap();
-        let count = exec.to_host(&count).unwrap()[0] as usize;
+        let count = exec.to_host(&count).unwrap()[0];
         let (first, _, _, _, _, _, _) = crate::MStorage::into_columns(output);
         assert_eq!(count, 3);
         assert_eq!(exec.to_host(&first.slice(..count)).unwrap(), vec![1, 2, 3]);
@@ -1518,21 +1437,17 @@ mod tests {
                 .unwrap()
                 .read(&exec)
                 .unwrap(),
-            (1, 1)
+            1
         );
         assert_eq!(
             max_element(&exec, input.column(), LessU32)
                 .unwrap()
                 .read(&exec)
                 .unwrap(),
-            (1, 2)
+            2
         );
-        assert_eq!(
-            minmax_element(&exec, input.column(), LessU32)
-                .unwrap()
-                .read(&exec)
-                .unwrap(),
-            (1, 3, 2)
-        );
+        let (minimum, maximum) = minmax_element(&exec, input.column(), LessU32).unwrap();
+        assert_eq!(minimum.read(&exec).unwrap(), 3);
+        assert_eq!(maximum.read(&exec).unwrap(), 2);
     }
 }

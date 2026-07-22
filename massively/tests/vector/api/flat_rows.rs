@@ -27,8 +27,8 @@ struct LessTriple;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<Triple> for LessTriple {
-    fn apply(lhs: Triple, rhs: Triple) -> MBool {
-        op::mbool(lhs.0 < rhs.0)
+    fn apply(lhs: Triple, rhs: Triple) -> bool {
+        lhs.0 < rhs.0
     }
 }
 
@@ -36,8 +36,8 @@ struct LessU32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for LessU32 {
-    fn apply(lhs: u32, rhs: u32) -> MBool {
-        op::mbool(lhs < rhs)
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs < rhs
     }
 }
 
@@ -50,6 +50,10 @@ impl UnaryOp<Triple> for AddOne {
     fn apply(input: Triple) -> Triple {
         (input.0 + 1, input.1 + 1, input.2 + 1)
     }
+}
+
+fn stencil<Input>(input: Input) -> lazy::Map<Input, NonZero> {
+    lazy::map(input, NonZero)
 }
 
 #[test]
@@ -87,7 +91,7 @@ fn copy_where_returns_flat_owned_columns() {
     let b = exec.to_device(&[10_u32, 20, 30, 40]);
     let c = exec.to_device(&[100_u32, 200, 300, 400]);
     let flags = exec.to_device(&[0_u32, 1, 1, 0]);
-    let output = copy_where(&exec, nested_input!(a, b, c), flags.slice(..)).unwrap();
+    let output = copy_where(&exec, nested_input!(a, b, c), stencil(flags.slice(..))).unwrap();
     let (a, b, c) = MStorage::into_columns(output);
 
     assert_eq!(exec.to_host(&a).unwrap(), vec![2, 3]);
@@ -134,6 +138,59 @@ fn merge_returns_flat_owned_columns() {
 }
 
 #[test]
+fn set_operations_preserve_flat_row_payloads() {
+    let exec = exec();
+    let la = exec.to_device(&[1_u32, 2, 2, 4]);
+    let lb = exec.to_device(&[10_u32, 20, 21, 40]);
+    let lc = exec.to_device(&[100_u32, 200, 210, 400]);
+    let ra = exec.to_device(&[2_u32, 2, 2, 3, 4, 4]);
+    let rb = exec.to_device(&[200_u32, 201, 202, 300, 400, 401]);
+    let rc = exec.to_device(&[2_000_u32, 2_010, 2_020, 3_000, 4_000, 4_010]);
+
+    let union = set_union(
+        &exec,
+        nested_input!(la, lb, lc),
+        nested_input!(ra, rb, rc),
+        LessTriple,
+    )
+    .unwrap();
+    let (a, b, c) = MStorage::into_columns(union);
+    assert_eq!(exec.to_host(&a).unwrap(), vec![1, 2, 2, 2, 3, 4, 4]);
+    assert_eq!(
+        exec.to_host(&b).unwrap(),
+        vec![10, 20, 21, 202, 300, 40, 401]
+    );
+    assert_eq!(
+        exec.to_host(&c).unwrap(),
+        vec![100, 200, 210, 2_020, 3_000, 400, 4_010]
+    );
+
+    let intersection = set_intersection(
+        &exec,
+        nested_input!(la, lb, lc),
+        nested_input!(ra, rb, rc),
+        LessTriple,
+    )
+    .unwrap();
+    let (a, b, c) = MStorage::into_columns(intersection);
+    assert_eq!(exec.to_host(&a).unwrap(), vec![2, 2, 4]);
+    assert_eq!(exec.to_host(&b).unwrap(), vec![20, 21, 40]);
+    assert_eq!(exec.to_host(&c).unwrap(), vec![200, 210, 400]);
+
+    let difference = set_difference(
+        &exec,
+        nested_input!(la, lb, lc),
+        nested_input!(ra, rb, rc),
+        LessTriple,
+    )
+    .unwrap();
+    let (a, b, c) = MStorage::into_columns(difference);
+    assert_eq!(exec.to_host(&a).unwrap(), vec![1]);
+    assert_eq!(exec.to_host(&b).unwrap(), vec![10]);
+    assert_eq!(exec.to_host(&c).unwrap(), vec![100]);
+}
+
+#[test]
 fn sort_by_key_returns_flat_value_columns() {
     let exec = exec();
     let keys = exec.to_device(&[3_u32, 1, 2]);
@@ -162,7 +219,7 @@ fn transform_where_writes_a_flat_operation_result() {
         &exec,
         nested_input!(a, b, c),
         AddOne,
-        flags.slice(..),
+        stencil(flags.slice(..)),
         zip3(oa.slice_mut(..), ob.slice_mut(..), oc.slice_mut(..)),
     )
     .unwrap();

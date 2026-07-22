@@ -63,17 +63,6 @@ impl UnaryOp<(MIndex, MIndex)> for MinIndex {
     }
 }
 
-struct FitsCapacity;
-
-#[cubecl::cube]
-impl UnaryOp<(MIndex, MIndex)> for FitsCapacity {
-    type Output = crate::MBool;
-
-    fn apply(input: (MIndex, MIndex)) -> crate::MBool {
-        crate::op::mbool(input.0 <= input.1)
-    }
-}
-
 pub(crate) struct TraversalControl<R: Runtime> {
     pub(super) output_offsets: DeviceVec<R, u32>,
     pub(super) sources: DeviceVec<R, u32>,
@@ -83,7 +72,6 @@ pub(crate) struct TraversalControl<R: Runtime> {
     pub(super) output_len: MVal<R, MIndex>,
     /// Unclamped number of edges selected by the frontier.
     pub(super) required_len: MVal<R, MIndex>,
-    pub(super) fits: MVal<R, crate::MBool>,
     pub(super) capacity: MIndex,
     pub(super) source_count: MIndex,
     pub(super) vertex_count: MIndex,
@@ -135,22 +123,17 @@ impl<R: Runtime> TraversalControl<R> {
         let positions = crate::core::scan::inclusive_scan_u32(exec, &lengths)?;
         let required_len = MVal::from_storage(crate::core::scan::last_u32(exec, &positions)?)?;
         let capacity = exec.value(max_edges)?;
-        let output_len = MVal::from_storage(crate::vector::transform(
+        let output_len = MVal::from_storage(crate::vector::map(
             exec,
             crate::zip2(required_len.as_iter(), capacity.as_iter()),
             MinIndex,
-        )?)?;
-        let fits = MVal::from_storage(crate::vector::transform(
-            exec,
-            crate::zip2(required_len.as_iter(), capacity.as_iter()),
-            FitsCapacity,
         )?)?;
         let output_offset_count = source_count
             .checked_add(1)
             .ok_or(Error::LengthTooLarge { len: source_count })?;
         let output_offsets = if source_count == 0 {
             let zero = exec.value(0u32)?;
-            exec.full(1, &zero)?
+            exec.full_value(1, &zero)?
         } else {
             let output_offsets = exec.alloc::<u32>(output_offset_count);
             unsafe {
@@ -169,9 +152,9 @@ impl<R: Runtime> TraversalControl<R> {
         };
 
         let zero = exec.value(0u32)?;
-        let sources = exec.full(max_edges as usize, &zero)?;
-        let output_destinations = exec.full(max_edges as usize, &zero)?;
-        let edges = exec.full(max_edges as usize, &zero)?;
+        let sources = exec.full_value(max_edges as usize, &zero)?;
+        let output_destinations = exec.full_value(max_edges as usize, &zero)?;
+        let edges = exec.full_value(max_edges as usize, &zero)?;
         if max_edges != 0 {
             let output_len_storage: &DeviceVec<R, u32> = output_len.scratch_storage();
             let output_control = SegmentControl::from_materialized(
@@ -179,6 +162,7 @@ impl<R: Runtime> TraversalControl<R> {
                 output_offsets.clone(),
                 max_edges as usize,
             )?;
+            let output_ids = output_control.ids(exec)?;
             unsafe {
                 traversal_context_kernel::launch_unchecked::<R>(
                     exec.client(),
@@ -196,10 +180,7 @@ impl<R: Runtime> TraversalControl<R> {
                         output_offsets.handle.clone(),
                         output_offsets.capacity(),
                     ),
-                    BufferArg::from_raw_parts(
-                        output_control.ids.handle.clone(),
-                        output_control.ids.capacity(),
-                    ),
+                    BufferArg::from_raw_parts(output_ids.handle.clone(), output_ids.capacity()),
                     BufferArg::from_raw_parts(output_len_storage.handle.clone(), 1),
                     BufferArg::from_raw_parts(sources.handle.clone(), sources.capacity()),
                     BufferArg::from_raw_parts(
@@ -218,7 +199,6 @@ impl<R: Runtime> TraversalControl<R> {
             edges,
             output_len,
             required_len,
-            fits,
             capacity: max_edges,
             source_count: source_count_index,
             vertex_count: vertex_count_index,

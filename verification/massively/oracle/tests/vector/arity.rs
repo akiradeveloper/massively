@@ -394,7 +394,7 @@ macro_rules! assert_project_columns {
     }};
 }
 
-macro_rules! transform_arity_case {
+macro_rules! map_arity_case {
     ($name:ident, $input_arity:tt, $output_arity:tt, $op:ident) => {
         proptest! {
             #![proptest_config(ProptestConfig { cases: CASES, .. ProptestConfig::default() })]
@@ -406,7 +406,7 @@ macro_rules! transform_arity_case {
                     .iter()
                     .map(|column| exec.to_device(column))
                     .collect();
-                let output = massively::vector::transform(
+                let output = massively::vector::map(
                     &exec,
                     input_expr!($input_arity, device),
                     $op,
@@ -421,74 +421,74 @@ macro_rules! transform_arity_case {
     };
 }
 
-macro_rules! transform_arity_row {
+macro_rules! map_arity_row {
     ($input:tt; $($name:ident, $output:tt, $op:ident);+ $(;)?) => {
-        $(transform_arity_case!($name, $input, $output, $op);)+
+        $(map_arity_case!($name, $input, $output, $op);)+
     };
 }
 
-transform_arity_row!(1;
-    transform_1_to_1, 1, Project1;
-    transform_1_to_2, 2, Project2;
-    transform_1_to_3, 3, Project3;
-    transform_1_to_4, 4, Project4;
-    transform_1_to_5, 5, Project5;
-    transform_1_to_6, 6, Project6;
-    transform_1_to_7, 7, Project7;
+map_arity_row!(1;
+    map_1_to_1, 1, Project1;
+    map_1_to_2, 2, Project2;
+    map_1_to_3, 3, Project3;
+    map_1_to_4, 4, Project4;
+    map_1_to_5, 5, Project5;
+    map_1_to_6, 6, Project6;
+    map_1_to_7, 7, Project7;
 );
-transform_arity_row!(2;
-    transform_2_to_1, 1, Project1;
-    transform_2_to_2, 2, Project2;
-    transform_2_to_3, 3, Project3;
-    transform_2_to_4, 4, Project4;
-    transform_2_to_5, 5, Project5;
-    transform_2_to_6, 6, Project6;
-    transform_2_to_7, 7, Project7;
+map_arity_row!(2;
+    map_2_to_1, 1, Project1;
+    map_2_to_2, 2, Project2;
+    map_2_to_3, 3, Project3;
+    map_2_to_4, 4, Project4;
+    map_2_to_5, 5, Project5;
+    map_2_to_6, 6, Project6;
+    map_2_to_7, 7, Project7;
 );
-transform_arity_row!(3;
-    transform_3_to_1, 1, Project1;
-    transform_3_to_2, 2, Project2;
-    transform_3_to_3, 3, Project3;
-    transform_3_to_4, 4, Project4;
-    transform_3_to_5, 5, Project5;
-    transform_3_to_6, 6, Project6;
-    transform_3_to_7, 7, Project7;
+map_arity_row!(3;
+    map_3_to_1, 1, Project1;
+    map_3_to_2, 2, Project2;
+    map_3_to_3, 3, Project3;
+    map_3_to_4, 4, Project4;
+    map_3_to_5, 5, Project5;
+    map_3_to_6, 6, Project6;
+    map_3_to_7, 7, Project7;
 );
-transform_arity_row!(4;
-    transform_4_to_1, 1, Project1;
-    transform_4_to_2, 2, Project2;
-    transform_4_to_3, 3, Project3;
-    transform_4_to_4, 4, Project4;
-    transform_4_to_5, 5, Project5;
-    transform_4_to_6, 6, Project6;
-    transform_4_to_7, 7, Project7;
+map_arity_row!(4;
+    map_4_to_1, 1, Project1;
+    map_4_to_2, 2, Project2;
+    map_4_to_3, 3, Project3;
+    map_4_to_4, 4, Project4;
+    map_4_to_5, 5, Project5;
+    map_4_to_6, 6, Project6;
+    map_4_to_7, 7, Project7;
 );
-transform_arity_row!(5;
-    transform_5_to_1, 1, Project1;
-    transform_5_to_2, 2, Project2;
-    transform_5_to_3, 3, Project3;
-    transform_5_to_4, 4, Project4;
-    transform_5_to_5, 5, Project5;
-    transform_5_to_6, 6, Project6;
-    transform_5_to_7, 7, Project7;
+map_arity_row!(5;
+    map_5_to_1, 1, Project1;
+    map_5_to_2, 2, Project2;
+    map_5_to_3, 3, Project3;
+    map_5_to_4, 4, Project4;
+    map_5_to_5, 5, Project5;
+    map_5_to_6, 6, Project6;
+    map_5_to_7, 7, Project7;
 );
-transform_arity_row!(6;
-    transform_6_to_1, 1, Project1;
-    transform_6_to_2, 2, Project2;
-    transform_6_to_3, 3, Project3;
-    transform_6_to_4, 4, Project4;
-    transform_6_to_5, 5, Project5;
-    transform_6_to_6, 6, Project6;
-    transform_6_to_7, 7, Project7;
+map_arity_row!(6;
+    map_6_to_1, 1, Project1;
+    map_6_to_2, 2, Project2;
+    map_6_to_3, 3, Project3;
+    map_6_to_4, 4, Project4;
+    map_6_to_5, 5, Project5;
+    map_6_to_6, 6, Project6;
+    map_6_to_7, 7, Project7;
 );
-transform_arity_row!(7;
-    transform_7_to_1, 1, Project1;
-    transform_7_to_2, 2, Project2;
-    transform_7_to_3, 3, Project3;
-    transform_7_to_4, 4, Project4;
-    transform_7_to_5, 5, Project5;
-    transform_7_to_6, 6, Project6;
-    transform_7_to_7, 7, Project7;
+map_arity_row!(7;
+    map_7_to_1, 1, Project1;
+    map_7_to_2, 2, Project2;
+    map_7_to_3, 3, Project3;
+    map_7_to_4, 4, Project4;
+    map_7_to_5, 5, Project5;
+    map_7_to_6, 6, Project6;
+    map_7_to_7, 7, Project7;
 );
 
 macro_rules! transform_where_arity_case {
@@ -630,7 +630,7 @@ proptest! {
             ))
         };
 
-        let output = massively::vector::transform(&exec, input(), IdentitySeven).unwrap();
+        let output = massively::vector::map(&exec, input(), IdentitySeven).unwrap();
         let output = MStorage::into_columns(output);
         let output = [&output.0, &output.1, &output.2, &output.3, &output.4, &output.5, &output.6];
         for (actual, expected) in output.into_iter().zip(&columns) {
@@ -639,9 +639,7 @@ proptest! {
 
         let zero: Seven = (0, 0, 0, 0, 0, 0, 0);
         prop_assert_eq!(
-            massively::vector::reduce(&exec, input(), exec.value(zero).unwrap(), MaxSeven)
-                .unwrap()
-                .read(&exec)
+            massively::vector::reduce(&exec, input(), zero, MaxSeven)
                 .unwrap(),
             reference::reduce(&seven_aos(&columns), zero, MaxSeven),
         );

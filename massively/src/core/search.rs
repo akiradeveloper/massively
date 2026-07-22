@@ -5,57 +5,14 @@ use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 use crate::{
-    A13, DeviceVec, Error, Executor, MBool, MIndex, MStorageElement, MVal, ReadExpression,
+    A13, DeviceVec, Error, Executor, MStorageElement, MVal, ReadExpression,
     eval::Eval13,
-    op::UnaryOp,
     ordering::BinaryPredicateOp,
     read::{Env0, Env13, LowerReadExpression},
     reduce::{StageRead, StagedBindings},
 };
 
 const BLOCK_SIZE: u32 = 256;
-
-struct SentinelToOption;
-
-#[cubecl::cube]
-impl UnaryOp<u32> for SentinelToOption {
-    type Output = (MBool, MIndex);
-
-    fn apply(index: u32) -> Self::Output {
-        (crate::op::mbool(index != u32::MAX), index)
-    }
-}
-
-struct EqualityResult;
-
-#[cubecl::cube]
-impl UnaryOp<(u32, u32, u32)> for EqualityResult {
-    type Output = MBool;
-
-    fn apply(input: (u32, u32, u32)) -> MBool {
-        crate::op::mbool(input.2 != 0u32 && input.0 >= input.1)
-    }
-}
-
-struct MismatchResult;
-
-#[cubecl::cube]
-impl UnaryOp<(u32, u32, u32)> for MismatchResult {
-    type Output = (MBool, MIndex);
-
-    fn apply(input: (u32, u32, u32)) -> Self::Output {
-        let within_shared_range = input.0 < input.1;
-        let lengths_differ = input.2 == 0u32;
-        (
-            crate::op::mbool(within_shared_range || lengths_differ),
-            if within_shared_range {
-                input.0
-            } else {
-                input.1
-            },
-        )
-    }
-}
 
 #[cubecl::cube]
 trait PairCodeOp<Item: CubeType>: 'static + Send + Sync {
@@ -154,9 +111,9 @@ fn lexicographical_result_kernel(
     if ABSOLUTE_POS == 0 {
         let index = best[0];
         output[0] = if index < shared_len[0] {
-            crate::op::mbool(codes[index as usize] == 1u32)
+            crate::op::bool_flag(codes[index as usize] == 1u32)
         } else {
-            crate::op::mbool(left_is_shorter[0] != 0u32)
+            crate::op::bool_flag(left_is_shorter[0] != 0u32)
         };
     }
 }
@@ -623,16 +580,12 @@ pub(crate) fn find_first_of<R, Source, Needles, Equal>(
     source: Source,
     needles: Needles,
     _equal: Equal,
-) -> Result<MVal<R, (MBool, MIndex)>, Error>
+) -> Result<MVal<R, u32>, Error>
 where
     R: Runtime,
     Source: FindFirstOfInput<R, Needles, Equal>,
 {
-    MVal::from_storage(crate::vector::transform(
-        exec,
-        source.find_first(exec, needles)?.slice(..),
-        SentinelToOption,
-    )?)
+    MVal::from_storage(source.find_first(exec, needles)?)
 }
 
 /// Internal public-API capability for batched sorted bounds.
@@ -851,20 +804,13 @@ pub(crate) fn equal<R, Left, Right, Equal>(
     left: Left,
     right: Right,
     _equal: Equal,
-) -> Result<MVal<R, MBool>, Error>
+) -> Result<MVal<R, u32>, Error>
 where
     R: Runtime,
     Left: EqualityInput<R, Right, Equal>,
 {
-    let (_codes, mismatch, left_extent, right_extent) = left.mismatch_control(exec, right)?;
-    let end =
-        crate::extent::LogicalExtent::min(exec, &left_extent, &right_extent)?.materialize(exec)?;
-    let same_length = crate::extent::LogicalExtent::equal_value(exec, &left_extent, &right_extent)?;
-    MVal::from_storage(crate::vector::transform(
-        exec,
-        crate::zip3(mismatch.slice(..), end.slice(..), same_length.slice(..)),
-        EqualityResult,
-    )?)
+    let (_codes, mismatch, _left_extent, _right_extent) = left.mismatch_control(exec, right)?;
+    MVal::from_storage(mismatch)
 }
 
 /// Returns the first mismatch, including the shared end when lengths differ.
@@ -873,20 +819,13 @@ pub(crate) fn mismatch<R, Left, Right, Equal>(
     left: Left,
     right: Right,
     _equal: Equal,
-) -> Result<MVal<R, (MBool, MIndex)>, Error>
+) -> Result<MVal<R, u32>, Error>
 where
     R: Runtime,
     Left: EqualityInput<R, Right, Equal>,
 {
-    let (_codes, mismatch, left_extent, right_extent) = left.mismatch_control(exec, right)?;
-    let end =
-        crate::extent::LogicalExtent::min(exec, &left_extent, &right_extent)?.materialize(exec)?;
-    let same_length = crate::extent::LogicalExtent::equal_value(exec, &left_extent, &right_extent)?;
-    MVal::from_storage(crate::vector::transform(
-        exec,
-        crate::zip3(mismatch.slice(..), end.slice(..), same_length.slice(..)),
-        MismatchResult,
-    )?)
+    let (_codes, mismatch, _left_extent, _right_extent) = left.mismatch_control(exec, right)?;
+    MVal::from_storage(mismatch)
 }
 
 /// Internal capability hiding fixed-ABI lexicographical dispatch.
@@ -935,7 +874,7 @@ pub(crate) fn lexicographical_compare<R, Left, Right, Less>(
     left: Left,
     right: Right,
     _less: Less,
-) -> Result<MVal<R, MBool>, Error>
+) -> Result<MVal<R, u32>, Error>
 where
     R: Runtime,
     Left: LexicographicalInput<R, Right, Less>,
@@ -973,16 +912,14 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<Seven> for EqualSeven {
-        fn apply(lhs: Seven, rhs: Seven) -> crate::MBool {
-            crate::op::mbool(
-                lhs.0 == rhs.0
-                    && lhs.1 == rhs.1
-                    && lhs.2 == rhs.2
-                    && lhs.3 == rhs.3
-                    && lhs.4 == rhs.4
-                    && lhs.5 == rhs.5
-                    && lhs.6 == rhs.6,
-            )
+        fn apply(lhs: Seven, rhs: Seven) -> bool {
+            lhs.0 == rhs.0
+                && lhs.1 == rhs.1
+                && lhs.2 == rhs.2
+                && lhs.3 == rhs.3
+                && lhs.4 == rhs.4
+                && lhs.5 == rhs.5
+                && lhs.6 == rhs.6
         }
     }
 
@@ -990,8 +927,8 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<Seven> for LessSeven {
-        fn apply(lhs: Seven, rhs: Seven) -> crate::MBool {
-            crate::op::mbool(lhs.0 < rhs.0)
+        fn apply(lhs: Seven, rhs: Seven) -> bool {
+            lhs.0 < rhs.0
         }
     }
 
@@ -999,8 +936,8 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<u32> for EqualU32 {
-        fn apply(lhs: u32, rhs: u32) -> crate::MBool {
-            crate::op::mbool(lhs == rhs)
+        fn apply(lhs: u32, rhs: u32) -> bool {
+            lhs == rhs
         }
     }
 
@@ -1008,8 +945,8 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<u32> for LessU32 {
-        fn apply(lhs: u32, rhs: u32) -> crate::MBool {
-            crate::op::mbool(lhs < rhs)
+        fn apply(lhs: u32, rhs: u32) -> bool {
+            lhs < rhs
         }
     }
 
@@ -1067,21 +1004,14 @@ mod tests {
             )
         };
 
-        assert_eq!(
-            crate::api::algorithm::equal(&exec, make_left(), make_right(), EqualSeven)
-                .unwrap()
-                .read(&exec)
-                .unwrap(),
-            0,
+        assert!(
+            !crate::api::algorithm::equal(&exec, make_left(), make_right(), EqualSeven).unwrap()
         );
         assert_eq!(
-            crate::api::algorithm::mismatch(&exec, make_left(), make_right(), EqualSeven)
-                .unwrap()
-                .read(&exec)
-                .unwrap(),
-            (1, 1)
+            crate::api::algorithm::mismatch(&exec, make_left(), make_right(), EqualSeven).unwrap(),
+            Some(1)
         );
-        assert_eq!(
+        assert!(
             crate::api::algorithm::lexicographical_compare(
                 &exec,
                 make_left(),
@@ -1089,9 +1019,6 @@ mod tests {
                 LessSeven,
             )
             .unwrap()
-            .read(&exec)
-            .unwrap(),
-            1,
         );
     }
 
@@ -1108,17 +1035,13 @@ mod tests {
                 needles.column(),
                 EqualU32,
             )
-            .unwrap()
-            .read(&exec)
             .unwrap(),
-            (1, 1)
+            Some(1)
         );
         assert_eq!(
             crate::api::algorithm::find_first_of(&exec, source.column(), empty.column(), EqualU32,)
-                .unwrap()
-                .read(&exec)
                 .unwrap(),
-            (0, u32::MAX)
+            None
         );
 
         let values = exec.to_device(&[0_u32, 2, 3, 5]);
@@ -1158,17 +1081,14 @@ mod tests {
             .unwrap();
 
         assert_eq!(exec.to_host(&codes).unwrap(), vec![2]);
-        assert_eq!(
-            crate::api::algorithm::lexicographical_compare(
+        assert!(
+            !crate::api::algorithm::lexicographical_compare(
                 &exec,
                 left.column(),
                 right.column(),
                 LessU32,
             )
             .unwrap()
-            .read(&exec)
-            .unwrap(),
-            0,
         );
     }
 }

@@ -24,7 +24,7 @@ impl ReductionOp<u32> for CountHit {
 }
 
 #[test]
-fn reduce_estimates_pi_from_lazy_random_transform() {
+fn reduce_estimates_pi_from_lazy_random_map() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let samples = 100_000_usize;
     let x = massively::util::random::uniform_f32(0.0, 1.0, 0)
@@ -33,12 +33,9 @@ fn reduce_estimates_pi_from_lazy_random_transform() {
     let y = massively::util::random::uniform_f32(0.0, 1.0, 1)
         .unwrap()
         .take(samples as massively::MIndex);
-    let hits = lazy::transform(zip2(x, y), DetectHit);
+    let hits = lazy::map(zip2(x, y), DetectHit);
 
-    let count = reduce(&exec, hits, exec.value(0_u32).unwrap(), CountHit)
-        .unwrap()
-        .read(&exec)
-        .unwrap();
+    let count = reduce(&exec, hits, 0_u32, CountHit).unwrap();
     let pi = (count as f64 / samples as f64) * 4.0;
 
     assert!((3.0..3.3).contains(&pi), "pi={pi}, count={count}");
@@ -46,7 +43,7 @@ fn reduce_estimates_pi_from_lazy_random_transform() {
 
 #[test]
 #[ignore = "4G-scale regression test; run explicitly on a GPU-capable machine"]
-fn reduce_estimates_pi_from_lazy_random_transform_4g() {
+fn reduce_estimates_pi_from_lazy_random_map_4g() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let samples = 4_000_000_000_usize;
     let x = massively::util::random::uniform_f32(0.0, 1.0, 0)
@@ -55,12 +52,9 @@ fn reduce_estimates_pi_from_lazy_random_transform_4g() {
     let y = massively::util::random::uniform_f32(0.0, 1.0, 1)
         .unwrap()
         .take(samples as massively::MIndex);
-    let hits = lazy::transform(zip2(x, y), DetectHit);
+    let hits = lazy::map(zip2(x, y), DetectHit);
 
-    let count = reduce(&exec, hits, exec.value(0_u32).unwrap(), CountHit)
-        .unwrap()
-        .read(&exec)
-        .unwrap();
+    let count = reduce(&exec, hits, 0_u32, CountHit).unwrap();
     let pi = (count as f64 / samples as f64) * 4.0;
 
     assert!((3.10..3.18).contains(&pi), "pi={pi}, count={count}");
@@ -75,11 +69,9 @@ fn reduce_counts_four_billion_lazy_constants() {
     let count = reduce(
         &exec,
         lazy::constant(1_u32).take(len as massively::MIndex),
-        exec.value(0_u32).unwrap(),
+        0_u32,
         CountHit,
     )
-    .unwrap()
-    .read(&exec)
     .unwrap();
 
     assert_eq!(count, len as u32);

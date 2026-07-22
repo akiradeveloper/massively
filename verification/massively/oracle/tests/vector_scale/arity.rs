@@ -107,10 +107,7 @@ fn lazify_reduce_at_read_arity_13() {
     let zero = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
     assert_eq!(
-        massively::vector::reduce(&exec, lazified, exec.value(zero).unwrap(), MaxTwelve)
-            .unwrap()
-            .read(&exec)
-            .unwrap(),
+        massively::vector::reduce(&exec, lazified, zero, MaxTwelve).unwrap(),
         reference::reduce(&aos, zero, MaxTwelve),
     );
 }

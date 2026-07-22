@@ -66,7 +66,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Counting, Permute, Transform, Zip};
+    use crate::{Counting, Permute, Zip};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     #[test]
@@ -121,7 +121,7 @@ mod tests {
             &exec,
             values.column(),
             encoded_indices.column(),
-            encoded_stencil.column(),
+            crate::read::Transform::new(encoded_stencil.column(), crate::op::NonZero),
             output.slice_mut(..),
         )
         .unwrap();

@@ -27,21 +27,13 @@ where
         Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
         Output: crate::api::iter::ConcreteOutput<R, Item>,
     {
-        let left = crate::allocation::normalize_lowered_scratch(
+        crate::merge::merge_direct(
             self.exec,
             crate::api::iter::lower_fixed::<R, _>(self.left),
-        )?;
-        let right = crate::allocation::normalize_lowered_scratch(
-            self.exec,
             crate::api::iter::lower_fixed::<R, _>(self.right),
-        )?;
-        let control = crate::merge::merge_control_fixed(
-            self.exec,
-            crate::read::FixedRead::new(crate::RowStorage::read(&left)),
-            crate::read::FixedRead::new(crate::RowStorage::read(&right)),
             self.less,
-        )?;
-        crate::merge::apply_storage(self.exec, &left, &right, &control, output)
+            output,
+        )
     }
 }
 
@@ -79,15 +71,13 @@ where
             crate::api::iter::lower_fixed::<R, _>(self.right_keys),
             self.less,
         )?;
-        let left_values = crate::allocation::normalize_lowered_scratch(
+        crate::merge::apply_fixed(
             self.exec,
             crate::api::iter::lower_fixed::<R, _>(self.left_values),
-        )?;
-        let right_values = crate::allocation::normalize_lowered_scratch(
-            self.exec,
             crate::api::iter::lower_fixed::<R, _>(self.right_values),
-        )?;
-        crate::merge::apply_storage(self.exec, &left_values, &right_values, &control, output)
+            &control,
+            output,
+        )
     }
 }
 
@@ -104,8 +94,8 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Less {
-///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-///         op::mbool(lhs < rhs)
+///     fn apply(lhs: u32, rhs: u32) -> bool {
+///         lhs < rhs
 ///     }
 /// }
 ///
@@ -129,19 +119,14 @@ where
     Item: MAlloc<R>,
     Less: BinaryPredicateOp<Item>,
 {
-    let left_len = left.capacity()? as usize;
-    let right_len = right.capacity()? as usize;
+    let left_len = left.len()?;
+    let right_len = right.len()?;
     let len = left_len
         .checked_add(right_len)
-        .ok_or(Error::LengthTooLarge { len: usize::MAX })?;
-    let extent = crate::extent::LogicalExtent::add(
-        exec,
-        &left.logical_extent()?,
-        &right.logical_extent()?,
-        len,
-    )?;
-    let mut output = exec.alloc::<Item>(len);
-    output.set_logical_extent(extent);
+        .ok_or(Error::LengthTooLarge {
+            len: left_len as usize + right_len as usize,
+        })?;
+    let output = exec.alloc::<Item>(len as usize);
     merge_into(exec, left, right, less, output.slice_mut(..))?;
     Ok(output)
 }
@@ -185,8 +170,8 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Less {
-///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-///         op::mbool(lhs < rhs)
+///     fn apply(lhs: u32, rhs: u32) -> bool {
+///         lhs < rhs
 ///     }
 /// }
 ///
@@ -224,19 +209,28 @@ where
     LeftValues::Item: MAlloc<R>,
     Less: BinaryPredicateOp<LeftKeys::Item>,
 {
-    let left_len = left_keys.capacity()? as usize;
-    let right_len = right_keys.capacity()? as usize;
+    let left_len = left_keys.len()?;
+    let left_value_len = left_values.len()?;
+    if left_len != left_value_len {
+        return Err(Error::LengthMismatch {
+            left: left_len as usize,
+            right: left_value_len as usize,
+        });
+    }
+    let right_len = right_keys.len()?;
+    let right_value_len = right_values.len()?;
+    if right_len != right_value_len {
+        return Err(Error::LengthMismatch {
+            left: right_len as usize,
+            right: right_value_len as usize,
+        });
+    }
     let len = left_len
         .checked_add(right_len)
-        .ok_or(Error::LengthTooLarge { len: usize::MAX })?;
-    let extent = crate::extent::LogicalExtent::add(
-        exec,
-        &left_keys.logical_extent()?,
-        &right_keys.logical_extent()?,
-        len,
-    )?;
-    let mut value_output = exec.alloc::<LeftValues::Item>(len);
-    value_output.set_logical_extent(extent);
+        .ok_or(Error::LengthTooLarge {
+            len: left_len as usize + right_len as usize,
+        })?;
+    let value_output = exec.alloc::<LeftValues::Item>(len as usize);
     merge_by_key_into(
         exec,
         left_keys,

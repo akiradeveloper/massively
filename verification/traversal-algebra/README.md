@@ -58,7 +58,7 @@ giving the source and reference languages the same implementation.
 | Schedule-independent destination reduction | Every permutation of the logical edge-message schedule produces the same destination inbox when the declared reduction laws hold. |
 | Public terminal preservation | Translation preserves emission order, repeated source/frontier occurrences, and the complete destination-reduced store. |
 | Rust-shaped API correspondence | The six public edge-expression leaves, recursive zip, one map, and the three general terminals have independent denotations equal to the type-safe TA terminals. Stateful destination update and minimum relaxation have explicit public contracts. |
-| Public API compilation | Every typed Monoidal Frontier BSP program compiles through Core TA to a finite host schedule of public graph destination reduction, destination-ID emission, dense vector transform, and stable vector filtering, preserving the complete store and ordered frontier. |
+| Public API compilation | Every typed Monoidal Frontier BSP program compiles through Core TA to a finite host schedule of public graph destination reduction, destination-ID emission, dense vector map, and stable vector filtering, preserving the complete store and ordered frontier. |
 | Sharing-aware normalization | Normalization preserves scalar work, dependency depth, and local temporary bounds exactly, with factor-one syntax growth. It does not increase full-stream temporary volume or materialization passes relative to the defined unfused schedule. |
 | Exact sparse-frontier semantics | Stable filtering preserves candidate order and duplicate multiplicity. Its work is characterized exactly, including the condition under which it is no more expensive than a dense scan. |
 | Meaning-preserving resource plans | Backend-neutral CubeCL plans have the same Traversal Algebra observation as the source terminal while exposing symbolic work, span, traffic, synchronization, launch, allocation, and materialization counts. |
@@ -131,7 +131,7 @@ design decisions:
   merely because they consume the same traversal;
 - closed Core TA supersteps need no imaginary Rust graph-program object: they
   can be expressed by composing the current graph terminals with public dense
-  vector transform and stable filtering contracts;
+  vector map and stable filtering contracts;
 - lowering typed primitives or choosing atomic versus sort/reduce execution
   requires explicit semantic evidence rather than an unchecked optimization;
 - cost discussions must include topology, frontier, and materialization terms

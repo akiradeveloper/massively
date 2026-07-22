@@ -96,7 +96,7 @@ macro_rules! define_sort_kernels {
             $( $slot: &[$leaf], )+
             read_offsets: &[u32],
             logical_len_buffer: &[u32],
-            params: &[u32],
+            #[comptime] carry_indices: bool,
             zero_offsets: &[u32],
             $( $out: &mut [$leaf], )+
             write_offsets: &[u32],
@@ -107,7 +107,6 @@ macro_rules! define_sort_kernels {
             let global = (CUBE_POS as usize) * cube_dim + local;
             let tile_start = (CUBE_POS as usize) * cube_dim;
             let logical_len = logical_len_buffer[0] as usize;
-            let carry_indices = params[0] != 0u32;
             let tile_len = if logical_len > tile_start {
                 let remaining = logical_len - tile_start;
                 if remaining < cube_dim { remaining } else { cube_dim }
@@ -291,6 +290,7 @@ macro_rules! define_sort_kernels {
             input_indices: &[u32],
             logical_len_buffer: &[u32],
             params: &[u32],
+            #[comptime] carry_indices: bool,
             zero_offsets: &[u32],
             $( $out: &mut [$leaf], )+
             write_offsets: &[u32],
@@ -298,7 +298,6 @@ macro_rules! define_sort_kernels {
         ) {
             let logical_len = logical_len_buffer[0] as usize;
             let run_width = params[0] as usize;
-            let carry_indices = params[1] != 0u32;
             let pair_width = if logical_len == 0usize {
                 1usize
             } else if logical_len <= run_width
@@ -601,9 +600,6 @@ macro_rules! impl_sort_pass_dispatch {
                 let zero_offsets = vec![$( { let _ = stringify!($leaf); 0u32 } ),+];
                 let zero_offsets_handle =
                     exec.client().create_from_slice(u32::as_bytes(&zero_offsets));
-                let params = exec
-                    .client()
-                    .create_from_slice(u32::as_bytes(&[carry_indices as u32]));
                 unsafe {
                     $block::launch_unchecked::<
                         Item,
@@ -620,7 +616,7 @@ macro_rules! impl_sort_pass_dispatch {
                         $( BufferArg::from_raw_parts(reads.slots[$index].0.clone(), reads.slots[$index].1), )+
                         BufferArg::from_raw_parts(read_offsets, reads.offsets.len()),
                         BufferArg::from_raw_parts(logical_len.handle.clone(), 1),
-                        BufferArg::from_raw_parts(params, 1),
+                        carry_indices,
                         BufferArg::from_raw_parts(zero_offsets_handle, zero_offsets.len()),
                         $( BufferArg::from_raw_parts(writes.slots[$index].0.clone(), writes.slots[$index].1), )+
                         BufferArg::from_raw_parts(write_offsets, writes.offsets.len()),
@@ -652,10 +648,9 @@ macro_rules! impl_sort_pass_dispatch {
                 output.stage_output(exec.id(), &mut writes)?;
                 let read_offsets = exec.client().create_from_slice(u32::as_bytes(&reads.offsets));
                 let write_offsets = exec.client().create_from_slice(u32::as_bytes(&writes.offsets));
-                let params = exec.client().create_from_slice(u32::as_bytes(&[
-                    width_u32,
-                    carry_indices as u32,
-                ]));
+                let params = exec
+                    .client()
+                    .create_from_slice(u32::as_bytes(&[width_u32]));
                 let zero_offsets = vec![$( { let _ = stringify!($leaf); 0u32 } ),+];
                 let zero_offsets_handle =
                     exec.client().create_from_slice(u32::as_bytes(&zero_offsets));
@@ -683,7 +678,8 @@ macro_rules! impl_sort_pass_dispatch {
                             input_indices.capacity(),
                         ),
                         BufferArg::from_raw_parts(logical_len.handle.clone(), 1),
-                        BufferArg::from_raw_parts(params, 2),
+                        BufferArg::from_raw_parts(params, 1),
+                        carry_indices,
                         BufferArg::from_raw_parts(zero_offsets_handle, zero_offsets.len()),
                         $( BufferArg::from_raw_parts(writes.slots[$index].0.clone(), writes.slots[$index].1), )+
                         BufferArg::from_raw_parts(write_offsets, writes.offsets.len()),

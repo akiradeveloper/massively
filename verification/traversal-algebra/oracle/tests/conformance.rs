@@ -327,8 +327,7 @@ fn compare_core(
         .map_err(|error| gpu_failure("traverse", error))?;
     prop_assert_eq!(
         traversal
-            .edge_count()
-            .read(exec)
+            .edge_count(exec)
             .map_err(|error| gpu_failure("edge-count readback", error))? as usize,
         expected_edges.len()
     );
@@ -344,7 +343,7 @@ fn compare_core(
         .map_err(|error| gpu_failure("context emit", error))?;
     prop_assert_eq!(
         emitted
-            .read_len(exec)
+            .len()
             .map_err(|error| gpu_failure("emitted-length readback", error))?,
         edge_capacity
     );
@@ -369,13 +368,11 @@ fn compare_core(
         .collect::<Vec<_>>();
     prop_assert_eq!(actual_edges, expected_edges);
 
-    let zero = exec
-        .value(0u32)
-        .map_err(|error| gpu_failure("zero upload", error))?;
+    let zero = 0u32;
     let source_counts = gpu_graph::traverse(exec, csr(), frontier.slice(..), edge_capacity)
         .map_err(|error| gpu_failure("source traverse", error))?
         .map(gpu_graph::edge_id(), One)
-        .reduce_by_source(exec, zero.clone(), Add)
+        .reduce_by_source(exec, zero, Add)
         .map_err(|error| gpu_failure("source reduction", error))?;
     prop_assert_eq!(
         exec.to_host(&source_counts)
@@ -565,11 +562,9 @@ fn compare_fine_semantics(
         expected_mapped
     );
 
-    let zero = exec
-        .value(0u32)
-        .map_err(|error| gpu_failure("zero upload", error))?;
+    let zero = 0u32;
     let actual_source_reduced = mapped()?
-        .reduce_by_source(exec, zero.clone(), Add)
+        .reduce_by_source(exec, zero, Add)
         .map_err(|error| gpu_failure("mapped source reduction", error))?;
     prop_assert_eq!(
         exec.to_host(&actual_source_reduced)

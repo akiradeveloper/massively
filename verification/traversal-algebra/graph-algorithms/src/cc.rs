@@ -14,11 +14,11 @@ pub fn solve<R: Runtime>(
     graph: &DeviceCsr<R>,
 ) -> common::Result<DeviceVec<R, u32>> {
     let n = graph.vertex_count();
-    let labels = vector::transform(exec, common::counting_u32(0, n as usize), Identity)?;
-    let mut frontier = vector::transform(exec, common::counting_u32(0, n as usize), Identity)?;
-    let infinity = exec.value(u32::MAX)?;
+    let labels = vector::map(exec, common::counting_u32(0, n as usize), Identity)?;
+    let mut frontier = vector::map(exec, common::counting_u32(0, n as usize), Identity)?;
+    let infinity = u32::MAX;
 
-    while frontier.capacity() != 0 {
+    while frontier.len() != 0 {
         frontier = common::materialize_exact(
             exec,
             graph::traverse(
@@ -30,7 +30,7 @@ pub fn solve<R: Runtime>(
             .map(graph::source(labels.slice(..)), Identity)
             .relax_min_by_destination(
                 exec,
-                infinity.clone(),
+                infinity,
                 labels.slice(..),
                 labels.slice_mut(..),
             )?,

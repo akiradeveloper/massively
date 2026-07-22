@@ -19,7 +19,7 @@ can run on WGPU, CUDA, or HIP through the corresponding CubeCL runtime.
 
 The algorithms are organized into three complementary families:
 
-- vector algorithms for transform, scan, reduction, sorting, selection, and
+- vector algorithms for map, scan, reduction, sorting, selection, and
   indexed movement
 - segment algorithms that apply map, scan, reduction, ordering, and selection
   independently to offset-delimited regions
@@ -28,7 +28,7 @@ The algorithms are organized into three complementary families:
   operations
 
 Memory movement is explicit, outputs are preallocated, and user-defined
-operations are compiled into GPU kernels. Lazy transforms, permutations, and
+operations are compiled into GPU kernels. Lazy maps, permutations, and
 reversed views can be consumed without first materializing an intermediate
 buffer.
 
@@ -39,9 +39,10 @@ The public API is built around a few ideas:
   `DeviceSlice` and `DeviceSliceMut`
 - logical row values assembled with `zip2` through `zip7`
 - CubeCL-backed operations under `massively::op`, such as `UnaryOp`,
-  `PredicateOp`, and `ReductionOp`
-- parallel algorithms under `massively::vector`, such as `transform`, `reduce`,
-  `inclusive_scan`, `sort`, `gather`, `copy_where`, and by-key variants
+  `ExpandOp`, `PredicateOp`, and `ReductionOp`
+- parallel algorithms under `massively::vector`, such as `map`, `reduce`,
+  `flat_map`, `inclusive_scan`, `sort`, `gather`, `copy_where`, and by-key
+  variants
 - CSR graph traversal through source, destination, and edge expressions followed
   by explicit emit, reduction, or state-update terminals
 
@@ -68,7 +69,7 @@ This example doubles a device vector and returns owned device storage.
 ```rust
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, op::UnaryOp, vector::transform};
+use massively::{Executor, op::UnaryOp, vector::map};
 
 struct Double;
 
@@ -84,7 +85,7 @@ impl UnaryOp<u32> for Double {
 fn main() -> Result<(), massively::Error> {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let input = exec.to_device(&[1_u32, 2, 3, 4]);
-    let output = transform(&exec, input.slice(..), Double)?;
+    let output = map(&exec, input.slice(..), Double)?;
 
     assert_eq!(exec.to_host(&output)?, vec![2, 4, 6, 8]);
     Ok(())
@@ -109,7 +110,7 @@ Traversal Algebra has a machine-checked mathematical foundation. For the
 precisely defined finite frontier/BSP fragment, Lean proves that the algebra
 and its reference BSP model can represent one another without changing program
 results. A second checked lowering carries typed BSP programs through Core TA
-to a denotational basis of the exported graph terminals and vector transform
+to a denotational basis of the exported graph terminals and vector map
 and filtering operations. The proof also gives a separate Rust-shaped grammar
 for the six edge-expression leaves, one map, and the public terminal contracts.
 It proves operation contracts, not that arbitrary Rust/CubeCL code or hardware
@@ -175,11 +176,11 @@ impl ReductionOp<f32> for Sum {
 }
 
 // destinations and offsets form a CSR topology; frontier contains its rows.
-let output = exec.alloc::<f32>(frontier.len());
 graph::traverse(
     &exec,
     graph::Csr::new(destinations.slice(..), offsets.slice(..)),
     frontier.slice(..),
+    destinations.len(),
 )?
 .map(
     zip2(
@@ -188,11 +189,11 @@ graph::traverse(
     ),
     Multiply,
 )
-.reduce_by_source(&exec, 0.0, Sum, output.slice_mut(..))?;
+.reduce_by_source(&exec, 0.0, Sum)?;
 ```
 
 Traversal planning and temporary expansion data are private. The current
-lowering composes GPU gather, transform, segmented reduction, sorting, and
+lowering composes GPU gather, map, segmented reduction, sorting, and
 scatter-reduce primitives. Because programs expose semantics rather than that
 lowering, future implementations can fuse edge expressions into terminals and
 choose atomic, sort-reduce, hierarchical, push/pull, or degree-aware
@@ -243,19 +244,39 @@ an `MVec`. Algorithms whose semantics require an existing destination, such as
 `scatter`, take that destination as an argument.
 
 ```rust
-let output = transform(&exec, input, op)?;
+let output = map(&exec, input, op)?;
 let sum = reduce(&exec, input, zero, sum_op)?;
 ```
 
 Host/device movement is explicit. Algorithms take an `Executor`, so launches,
 transfers, and ownership checks remain visible at the call site.
 
+### Scalar And Length Boundaries
+
+The public API returns scalar results as ordinary host-visible values:
+`reduce` returns its item, predicates return `bool`, and indices and lengths
+use `MIndex` (an alias of `u32`). Algorithms with data-dependent output
+lengths, such as `copy_where` and `reduce_by_key`, return storage whose exact
+length is already available through `len()`.
+
+These calls are synchronous at the return boundary when a GPU-produced scalar
+or exact output length must be observed. Length-preserving algorithms and
+algorithms writing into caller-provided fixed storage do not need that scalar
+readback. Internally, device scalars and logical extents are propagated between
+GPU stages without intermediate CPU transfers, so a public operation performs
+at most the synchronization required by its return contract. `Executor::to_host`
+remains the explicit boundary for copying result data.
+
+CubeCL booleans are register values rather than storage elements. Device-resident
+boolean summaries therefore use `seg::BoolVec`: its backing flags are private,
+while its iterator item and `Executor::to_host` result are ordinary `bool` values.
+
 ### Device Storage And Slices
 
 `DeviceVec<R, T>` owns one contiguous device allocation. Algorithms read a
 `DeviceSlice<T>` returned by `DeviceVec::slice`, and write a `DeviceSliceMut<T>`
 returned by `DeviceVec::slice_mut`. Slices are zero-copy views and can be sliced
-again.
+again. Slice bounds use `MIndex`.
 
 ### Multi-column Values
 
@@ -281,7 +302,7 @@ zip2(zip2(a, b), c)                    = MIter<Item = (A, B, C)>
 zip2(a, zip2(b, c))                    = MIter<Item = (A, B, C)>
 zip2(out_a, out_b)                     = MIterMut<Item = (A, B)>
 MStorage::into_columns(output3)        = (DeviceVec<A>, DeviceVec<B>, DeviceVec<C>)
-lazy::transform(input, op)             = fused lazy computation
+lazy::map(input, op)                   = fused lazy computation
 lazy::permute(values, indices)         = lazy indexed view
 lazy::reverse(input)                    = lazy reversed view
 ```
@@ -290,11 +311,11 @@ Input and output items support up to twelve columns. Keys passed to by-key
 algorithms are limited to three columns; their value items retain the full
 twelve-column limit. Output iterators are always created before an algorithm
 runs. An operation that intentionally changes a row schema expresses that
-conversion explicitly with `transform`.
+conversion explicitly with `map`.
 
 ### Lazy Iterators
 
-`lazy::constant`, `lazy::counting`, `lazy::transform`, `lazy::permute`, and
+`lazy::constant`, `lazy::counting`, `lazy::map`, `lazy::permute`, and
 `lazy::reverse` produce `MIter` values without allocating result storage. Their
 expressions are evaluated by the consuming algorithm, allowing operations to be
 composed while keeping intermediate values off device memory.
@@ -306,6 +327,7 @@ that connection visible: CubeCL is the kernel DSL, while `massively` supplies
 the algorithm and iterator layer.
 
 - `UnaryOp<Input>` maps one item to another.
+- `ExpandOp<Input>` expands one item into zero or more items.
 - `PredicateOp<Item>` tests one item.
 - `BinaryPredicateOp<Item>` compares two items.
 - `ReductionOp<Item>` combines two items.
@@ -336,7 +358,7 @@ Every public algorithm has a runnable, single-column example in the
 under `massively/tests/vector` and `massively/tests/seg`.
 Their
 oracle tests compare public functions against CPU AoS references and cover the
-full transform input/output arity matrix. Complete graph algorithm oracles live
+full map input/output arity matrix. Complete graph algorithm oracles live
 under `verification/traversal-algebra/graph-algorithms/tests` and compare every algorithm with
 independent CPU implementations on generated CSR graphs. Tests in `massively`
 itself cover the graph traversal primitives.

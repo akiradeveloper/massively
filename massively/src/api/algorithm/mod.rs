@@ -1,4 +1,5 @@
 mod by_key;
+pub(crate) mod flat_map;
 mod indexed;
 mod merge;
 mod ordering;
@@ -12,6 +13,7 @@ mod set;
 pub(crate) mod transform;
 
 pub use by_key::*;
+pub use flat_map::*;
 pub use indexed::*;
 pub use merge::*;
 pub use ordering::*;

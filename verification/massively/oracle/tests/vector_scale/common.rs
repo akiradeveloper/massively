@@ -1,8 +1,8 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
-    Executor, MBool, MIndex, MStorage, MVal, op::BinaryPredicateOp, op::PredicateOp,
-    op::ReductionOp, op::UnaryOp,
+    Executor, MIndex, MStorage, op::BinaryPredicateOp, op::PredicateOp, op::ReductionOp,
+    op::UnaryOp,
 };
 use oracle::op;
 
@@ -29,8 +29,8 @@ impl op::ReductionOp<u32> for MaxU32 {
 
 #[cubecl::cube]
 impl PredicateOp<u32> for NonZero {
-    fn apply(input: u32) -> massively::MBool {
-        massively::op::mbool(input != 0u32)
+    fn apply(input: u32) -> bool {
+        input != 0u32
     }
 }
 
@@ -59,8 +59,8 @@ impl op::UnaryOp<u32> for IdentityU32 {
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for EqualU32 {
-    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-        massively::op::mbool(lhs == rhs)
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs == rhs
     }
 }
 
@@ -72,8 +72,8 @@ impl op::BinaryPredicateOp<u32> for EqualU32 {
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for LessU32 {
-    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-        massively::op::mbool(lhs < rhs)
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs < rhs
     }
 }
 
@@ -83,8 +83,8 @@ impl op::BinaryPredicateOp<u32> for LessU32 {
     }
 }
 
-pub fn as_stencil<Input>(input: Input) -> Input {
-    input
+pub fn as_stencil<Input>(input: Input) -> massively::lazy::Map<Input, massively::op::NonZero> {
+    massively::lazy::map(input, massively::op::NonZero)
 }
 
 pub fn as_indices<Input>(input: Input) -> Input {
@@ -95,44 +95,36 @@ pub fn exec() -> Executor<WgpuRuntime> {
     Executor::new(WgpuDevice::DefaultDevice)
 }
 
-pub fn exact<Storage>(exec: &Executor<WgpuRuntime>, mut storage: Storage) -> Storage
+pub fn exact<Storage>(_exec: &Executor<WgpuRuntime>, storage: Storage) -> Storage
 where
     Storage: MStorage<WgpuRuntime>,
 {
-    let len = storage.read_len(exec).unwrap();
-    storage.set_fixed_len(len);
+    storage.len().unwrap();
     storage
 }
 
 pub fn exact_pair<Left, Right>(
-    exec: &Executor<WgpuRuntime>,
-    (mut left, mut right): (Left, Right),
+    _exec: &Executor<WgpuRuntime>,
+    (left, right): (Left, Right),
 ) -> (Left, Right)
 where
     Left: MStorage<WgpuRuntime>,
     Right: MStorage<WgpuRuntime>,
 {
-    let len = left.read_len(exec).unwrap();
-    assert_eq!(right.read_len(exec).unwrap(), len);
-    left.set_fixed_len(len);
-    right.set_fixed_len(len);
+    let len = left.len().unwrap();
+    assert_eq!(right.len().unwrap(), len);
     (left, right)
 }
 
-pub fn read_optional_index(
-    exec: &Executor<WgpuRuntime>,
-    value: MVal<WgpuRuntime, (MBool, MIndex)>,
-) -> Option<usize> {
-    let (present, index) = value.read(exec).unwrap();
-    (present != 0).then_some(index as usize)
+pub fn read_optional_index(_exec: &Executor<WgpuRuntime>, value: Option<MIndex>) -> Option<usize> {
+    value.map(|index| index as usize)
 }
 
 pub fn read_optional_index_pair(
-    exec: &Executor<WgpuRuntime>,
-    value: MVal<WgpuRuntime, (MBool, MIndex, MIndex)>,
+    _exec: &Executor<WgpuRuntime>,
+    value: Option<(MIndex, MIndex)>,
 ) -> Option<(usize, usize)> {
-    let (present, first, second) = value.read(exec).unwrap();
-    (present != 0).then_some((first as usize, second as usize))
+    value.map(|(first, second)| (first as usize, second as usize))
 }
 
 pub fn lazify<Input>(input: Input) -> Input

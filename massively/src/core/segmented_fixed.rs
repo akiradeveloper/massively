@@ -3,13 +3,17 @@
 use cubecl::prelude::*;
 
 use crate::allocation::ScratchStorage;
-use crate::output::{OutputBindings, StageOutput};
+use crate::eval::Eval13;
+use crate::output::{
+    LowerOutputExpression, OutputBindings, OutputExpression, PaddedOutputSlots, StageOutput,
+};
+use crate::read::{Env0, LowerReadExpression, PaddedReadSlots};
 use crate::reduce::{ReductionOp, StageRead, StagedBindings};
 use crate::storage::{
     Decompose, LoadMutPadded12, LoadPadded12, MutableLeaves, PlaneShuffleLeaves, Recompose,
     SharedLeaves, SharedLeavesExpand, StorePadded12, StorePadded12Expand,
 };
-use crate::{DeviceVec, Error, Executor, RowStorage};
+use crate::{DeviceVec, Error, Executor, ReadExpression, RowStorage};
 
 const BLOCK_SIZE: u32 = 256;
 
@@ -17,8 +21,21 @@ type FixedStorage<R, Item> = <Item as ScratchStorage<R>>::Storage;
 
 #[cubecl::cube(launch_unchecked, explicit_define)]
 #[allow(clippy::too_many_arguments)]
-fn segmented_scan_padded12<
+fn segmented_scan_a13<
     Item: CubeType + Send + Sync + 'static,
+    L0: CubePrimitive,
+    L1: CubePrimitive,
+    L2: CubePrimitive,
+    L3: CubePrimitive,
+    L4: CubePrimitive,
+    L5: CubePrimitive,
+    L6: CubePrimitive,
+    L7: CubePrimitive,
+    L8: CubePrimitive,
+    L9: CubePrimitive,
+    L10: CubePrimitive,
+    L11: CubePrimitive,
+    L12: CubePrimitive,
     O0: CubePrimitive,
     O1: CubePrimitive,
     O2: CubePrimitive,
@@ -31,7 +48,10 @@ fn segmented_scan_padded12<
     O9: CubePrimitive,
     O10: CubePrimitive,
     O11: CubePrimitive,
-    Leaves: LoadPadded12<
+    Leaves: SharedLeaves
+        + MutableLeaves
+        + PlaneShuffleLeaves
+        + StorePadded12<
             O0 = O0,
             O1 = O1,
             O2 = O2,
@@ -44,27 +64,26 @@ fn segmented_scan_padded12<
             O9 = O9,
             O10 = O10,
             O11 = O11,
-        > + SharedLeaves
-        + MutableLeaves
-        + PlaneShuffleLeaves
-        + Send
+        > + Send
         + Sync
         + 'static,
+    Expr: Eval13<Item, L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12>,
     Layout: Decompose<Item, Leaves = Leaves> + Recompose<Item, Leaves = Leaves>,
     Op: ReductionOp<Item>,
 >(
-    input0: &[O0],
-    input1: &[O1],
-    input2: &[O2],
-    input3: &[O3],
-    input4: &[O4],
-    input5: &[O5],
-    input6: &[O6],
-    input7: &[O7],
-    input8: &[O8],
-    input9: &[O9],
-    input10: &[O10],
-    input11: &[O11],
+    input0: &[L0],
+    input1: &[L1],
+    input2: &[L2],
+    input3: &[L3],
+    input4: &[L4],
+    input5: &[L5],
+    input6: &[L6],
+    input7: &[L7],
+    input8: &[L8],
+    input9: &[L9],
+    input10: &[L10],
+    input11: &[L11],
+    input12: &[L12],
     flags: &[u32],
     len: &[u32],
     input_offsets: &[u32],
@@ -103,7 +122,7 @@ fn segmented_scan_padded12<
     let global = block * cube_dim + unit;
     let logical_len = len[0] as usize;
     let safe_global = if global < logical_len { global } else { 0usize };
-    let cells = Leaves::into_cells(Leaves::load_padded(
+    let cells = Leaves::into_cells(Layout::decompose(Expr::eval13(
         input0,
         input1,
         input2,
@@ -116,9 +135,10 @@ fn segmented_scan_padded12<
         input9,
         input10,
         input11,
+        input12,
         input_offsets,
         safe_global,
-    ));
+    )));
     let segment = RuntimeCell::<u32>::new(if global < logical_len {
         flags[global]
     } else {
@@ -538,7 +558,7 @@ fn segmented_exclusive_padded12<
 
 #[cubecl::cube(launch_unchecked, explicit_define)]
 #[allow(clippy::too_many_arguments)]
-fn apply_init_padded12<
+fn segmented_reduce_selected_padded12<
     Item: CubeType + Send + Sync + 'static,
     O0: CubePrimitive,
     O1: CubePrimitive,
@@ -553,6 +573,19 @@ fn apply_init_padded12<
     O10: CubePrimitive,
     O11: CubePrimitive,
     Leaves: LoadPadded12<
+            O0 = O0,
+            O1 = O1,
+            O2 = O2,
+            O3 = O3,
+            O4 = O4,
+            O5 = O5,
+            O6 = O6,
+            O7 = O7,
+            O8 = O8,
+            O9 = O9,
+            O10 = O10,
+            O11 = O11,
+        > + StorePadded12<
             O0 = O0,
             O1 = O1,
             O2 = O2,
@@ -595,7 +628,9 @@ fn apply_init_padded12<
     init9: &[O9],
     init10: &[O10],
     init11: &[O11],
-    len: &[u32],
+    head_indices: &[u32],
+    count: &[u32],
+    source_len: &[u32],
     inclusive_offsets: &[u32],
     init_offsets: &[u32],
     output_offsets: &[u32],
@@ -612,8 +647,14 @@ fn apply_init_padded12<
     output10: &mut [O10],
     output11: &mut [O11],
 ) {
-    let index = ABSOLUTE_POS as usize;
-    if index < len[0] as usize {
+    let rank = ABSOLUTE_POS as usize;
+    let segment_count = count[0] as usize;
+    if rank < segment_count {
+        let tail = if rank + 1usize < segment_count {
+            head_indices[rank + 1usize] as usize - 1usize
+        } else {
+            source_len[0] as usize - 1usize
+        };
         let initial = Layout::recompose(Leaves::load_padded(
             init0,
             init1,
@@ -644,7 +685,7 @@ fn apply_init_padded12<
             inclusive10,
             inclusive11,
             inclusive_offsets,
-            index,
+            tail,
         ));
         Layout::decompose(Op::apply(initial, value)).store_padded(
             output0,
@@ -660,7 +701,7 @@ fn apply_init_padded12<
             output10,
             output11,
             output_offsets,
-            index,
+            rank,
         );
     }
 }
@@ -687,19 +728,41 @@ where
     Ok(bindings)
 }
 
-fn segmented_inclusive_fixed<R, Item, Op>(
+pub(crate) fn segmented_inclusive<R, Input, Output, Item, Op>(
     exec: &Executor<R>,
-    input: &FixedStorage<R, Item>,
+    input: &Input,
     flags: &DeviceVec<R, u32>,
-    output: &FixedStorage<R, Item>,
+    output: &Output,
 ) -> Result<(), Error>
 where
     R: Runtime,
     Item: ScratchStorage<R>,
     Op: ReductionOp<Item>,
+    Input: ReadExpression<Item = Item>
+        + LowerReadExpression<Slots: PaddedReadSlots>
+        + StageRead<R, Env0>,
+    Input::DeviceExpr: Eval13<
+            Item,
+            <Input::Slots as PaddedReadSlots>::L0,
+            <Input::Slots as PaddedReadSlots>::L1,
+            <Input::Slots as PaddedReadSlots>::L2,
+            <Input::Slots as PaddedReadSlots>::L3,
+            <Input::Slots as PaddedReadSlots>::L4,
+            <Input::Slots as PaddedReadSlots>::L5,
+            <Input::Slots as PaddedReadSlots>::L6,
+            <Input::Slots as PaddedReadSlots>::L7,
+            <Input::Slots as PaddedReadSlots>::L8,
+            <Input::Slots as PaddedReadSlots>::L9,
+            <Input::Slots as PaddedReadSlots>::L10,
+            <Input::Slots as PaddedReadSlots>::L11,
+            <Input::Slots as PaddedReadSlots>::L12,
+        >,
+    Output: OutputExpression<Item = Item>
+        + LowerOutputExpression<Slots: PaddedOutputSlots<Leaves = Item::StorageLeaves>>
+        + StageOutput<R, Env0>,
 {
-    let len = input.len()?;
-    let output_len = output.len()?;
+    let len = input.logical_len()?;
+    let output_len = output.logical_len()?;
     if flags.capacity() != len || output_len != len {
         return Err(Error::LengthMismatch {
             left: len,
@@ -709,10 +772,7 @@ where
     if len == 0 {
         return Ok(());
     }
-    let extent = input
-        .logical_extent()
-        .zipped(&flags.logical_extent())?
-        .zipped(&output.logical_extent())?;
+    let extent = input.logical_extent()?.zipped(&flags.logical_extent())?;
 
     let blocks = len.div_ceil(BLOCK_SIZE as usize);
     let block_extent = extent.ceil_div(exec, BLOCK_SIZE as usize, blocks)?;
@@ -722,11 +782,9 @@ where
     block_sums.set_logical_extent(block_extent.clone());
     let mut block_flags = exec.alloc_column::<u32>(blocks);
     block_flags.set_logical_extent(block_extent);
-    let input_read = input.read();
-    let output_write = output.write();
     let sum_write = block_sums.write();
-    let input_bindings = stage_read(exec, &input_read)?;
-    let output_bindings = stage_write(exec, &output_write)?;
+    let input_bindings = stage_read(exec, input)?;
+    let output_bindings = stage_write(exec, output)?;
     let sum_bindings = stage_write(exec, &sum_write)?;
     let input_offsets = exec
         .client()
@@ -740,8 +798,21 @@ where
     let len_handle = extent.materialize(exec)?;
 
     unsafe {
-        segmented_scan_padded12::launch_unchecked::<
+        segmented_scan_a13::launch_unchecked::<
             Item,
+            <Input::Slots as PaddedReadSlots>::L0,
+            <Input::Slots as PaddedReadSlots>::L1,
+            <Input::Slots as PaddedReadSlots>::L2,
+            <Input::Slots as PaddedReadSlots>::L3,
+            <Input::Slots as PaddedReadSlots>::L4,
+            <Input::Slots as PaddedReadSlots>::L5,
+            <Input::Slots as PaddedReadSlots>::L6,
+            <Input::Slots as PaddedReadSlots>::L7,
+            <Input::Slots as PaddedReadSlots>::L8,
+            <Input::Slots as PaddedReadSlots>::L9,
+            <Input::Slots as PaddedReadSlots>::L10,
+            <Input::Slots as PaddedReadSlots>::L11,
+            <Input::Slots as PaddedReadSlots>::L12,
             <Item::StorageLeaves as StorePadded12>::O0,
             <Item::StorageLeaves as StorePadded12>::O1,
             <Item::StorageLeaves as StorePadded12>::O2,
@@ -755,6 +826,7 @@ where
             <Item::StorageLeaves as StorePadded12>::O10,
             <Item::StorageLeaves as StorePadded12>::O11,
             Item::StorageLeaves,
+            Input::DeviceExpr,
             Item::DeviceLayout,
             Op,
             R,
@@ -779,6 +851,10 @@ where
             BufferArg::from_raw_parts(
                 input_bindings.slots[11].0.clone(),
                 input_bindings.slots[11].1,
+            ),
+            BufferArg::from_raw_parts(
+                input_bindings.slots[12].0.clone(),
+                input_bindings.slots[12].1,
             ),
             BufferArg::from_raw_parts(flags.handle.clone(), len),
             BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
@@ -853,7 +929,9 @@ where
     if blocks > 1 {
         let mut prefixes = Item::alloc_scratch(exec, blocks);
         prefixes.set_logical_extent(block_sums.logical_extent());
-        segmented_inclusive_fixed::<R, Item, Op>(exec, &block_sums, &block_flags, &prefixes)?;
+        let block_read = crate::read::FixedRead::new(block_sums.read());
+        let prefix_write = prefixes.write();
+        segmented_inclusive::<R, _, _, Item, Op>(exec, &block_read, &block_flags, &prefix_write)?;
         let prefix_read = prefixes.read();
         let prefix_bindings = stage_read(exec, &prefix_read)?;
         let prefix_offsets = exec
@@ -988,30 +1066,67 @@ where
     Ok(())
 }
 
-fn launch_exclusive<R, Item, Op>(
+pub(crate) fn segmented_exclusive<R, Input, Output, Item, Op>(
     exec: &Executor<R>,
-    inclusive: &FixedStorage<R, Item>,
+    input: &Input,
     flags: &DeviceVec<R, u32>,
-    init: &FixedStorage<R, Item>,
-    output: &FixedStorage<R, Item>,
+    init: FixedStorage<R, Item>,
+    output: &Output,
 ) -> Result<(), Error>
 where
     R: Runtime,
     Item: ScratchStorage<R>,
     Op: ReductionOp<Item>,
+    Input: ReadExpression<Item = Item>
+        + LowerReadExpression<Slots: PaddedReadSlots>
+        + StageRead<R, Env0>,
+    Input::DeviceExpr: Eval13<
+            Item,
+            <Input::Slots as PaddedReadSlots>::L0,
+            <Input::Slots as PaddedReadSlots>::L1,
+            <Input::Slots as PaddedReadSlots>::L2,
+            <Input::Slots as PaddedReadSlots>::L3,
+            <Input::Slots as PaddedReadSlots>::L4,
+            <Input::Slots as PaddedReadSlots>::L5,
+            <Input::Slots as PaddedReadSlots>::L6,
+            <Input::Slots as PaddedReadSlots>::L7,
+            <Input::Slots as PaddedReadSlots>::L8,
+            <Input::Slots as PaddedReadSlots>::L9,
+            <Input::Slots as PaddedReadSlots>::L10,
+            <Input::Slots as PaddedReadSlots>::L11,
+            <Input::Slots as PaddedReadSlots>::L12,
+        >,
+    Output: OutputExpression<Item = Item>
+        + LowerOutputExpression<Slots: PaddedOutputSlots<Leaves = Item::StorageLeaves>>
+        + StageOutput<R, Env0>,
 {
-    let len = inclusive.len()?;
-    let extent = inclusive
-        .logical_extent()
-        .zipped(&flags.logical_extent())?
-        .zipped(&output.logical_extent())?;
+    let len = input.logical_len()?;
+    if flags.capacity() != len || output.logical_len()? != len {
+        return Err(Error::LengthMismatch {
+            left: len,
+            right: flags.capacity().min(output.logical_len()?),
+        });
+    }
+    if len == 0 {
+        return Ok(());
+    }
+    if init.len()? != 1 {
+        return Err(Error::LengthMismatch {
+            left: init.len()?,
+            right: 1,
+        });
+    }
+    let extent = input.logical_extent()?.zipped(&flags.logical_extent())?;
+    let mut inclusive = Item::alloc_scratch(exec, len);
+    inclusive.set_logical_extent(extent.clone());
+    let inclusive_write = inclusive.write();
+    segmented_inclusive::<R, _, _, Item, Op>(exec, input, flags, &inclusive_write)?;
     let len_handle = extent.materialize(exec)?;
     let inclusive_read = inclusive.read();
     let init_read = init.read();
-    let output_write = output.write();
     let inclusive_bindings = stage_read(exec, &inclusive_read)?;
     let init_bindings = stage_read(exec, &init_read)?;
-    let output_bindings = stage_write(exec, &output_write)?;
+    let output_bindings = stage_write(exec, output)?;
     let inclusive_offsets = exec
         .client()
         .create_from_slice(u32::as_bytes(&inclusive_bindings.offsets));
@@ -1162,28 +1277,37 @@ where
     Ok(())
 }
 
-fn launch_apply_init<R, Item, Op>(
+fn launch_reduce_selected<R, Item, Op, Output>(
     exec: &Executor<R>,
     inclusive: &FixedStorage<R, Item>,
     init: &FixedStorage<R, Item>,
-    output: &FixedStorage<R, Item>,
+    head_indices: &DeviceVec<R, u32>,
+    count: &DeviceVec<R, u32>,
+    source_extent: &crate::extent::LogicalExtent,
+    output: &Output,
 ) -> Result<(), Error>
 where
     R: Runtime,
     Item: ScratchStorage<R>,
     Op: ReductionOp<Item>,
+    Output: OutputExpression<Item = Item>
+        + LowerOutputExpression<Slots: PaddedOutputSlots<Leaves = Item::StorageLeaves>>
+        + StageOutput<R, Env0>,
 {
-    let len = inclusive.len()?;
-    let extent = inclusive
-        .logical_extent()
-        .zipped(&output.logical_extent())?;
-    let len_handle = extent.materialize(exec)?;
+    // The caller may provide one output slot per possible key rather than one
+    // per input item (segment reductions commonly do this).  The selected
+    // count is device-resident, so cap the dispatch by the physical output
+    // bound just as the previous selected-copy path did.
+    let len = head_indices.capacity().min(output.logical_len()?);
+    if len == 0 {
+        return Ok(());
+    }
+    let source_len = source_extent.materialize(exec)?;
     let inclusive_read = inclusive.read();
     let init_read = init.read();
-    let output_write = output.write();
     let inclusive_bindings = stage_read(exec, &inclusive_read)?;
     let init_bindings = stage_read(exec, &init_read)?;
-    let output_bindings = stage_write(exec, &output_write)?;
+    let output_bindings = stage_write(exec, output)?;
     let inclusive_offsets = exec
         .client()
         .create_from_slice(u32::as_bytes(&inclusive_bindings.offsets));
@@ -1194,7 +1318,7 @@ where
         .client()
         .create_from_slice(u32::as_bytes(&output_bindings.offsets));
     unsafe {
-        apply_init_padded12::launch_unchecked::<
+        segmented_reduce_selected_padded12::launch_unchecked::<
             Item,
             <Item::StorageLeaves as StorePadded12>::O0,
             <Item::StorageLeaves as StorePadded12>::O1,
@@ -1276,7 +1400,9 @@ where
             BufferArg::from_raw_parts(init_bindings.slots[9].0.clone(), init_bindings.slots[9].1),
             BufferArg::from_raw_parts(init_bindings.slots[10].0.clone(), init_bindings.slots[10].1),
             BufferArg::from_raw_parts(init_bindings.slots[11].0.clone(), init_bindings.slots[11].1),
-            BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
+            BufferArg::from_raw_parts(head_indices.handle.clone(), head_indices.capacity()),
+            BufferArg::from_raw_parts(count.handle.clone(), 1),
+            BufferArg::from_raw_parts(source_len.handle.clone(), 1),
             BufferArg::from_raw_parts(inclusive_offsets, inclusive_bindings.offsets.len()),
             BufferArg::from_raw_parts(init_offsets, init_bindings.offsets.len()),
             BufferArg::from_raw_parts(output_offsets, output_bindings.offsets.len()),
@@ -1333,64 +1459,71 @@ where
     Ok(())
 }
 
-pub(crate) fn segmented_fixed<R, Item, Op>(
+pub(crate) fn segmented_reduce<R, Input, Output, Item, Op>(
     exec: &Executor<R>,
-    input: &FixedStorage<R, Item>,
+    input: &Input,
     heads: &DeviceVec<R, u32>,
-    init: Option<FixedStorage<R, Item>>,
+    head_indices: &DeviceVec<R, u32>,
+    count: &DeviceVec<R, u32>,
+    init: FixedStorage<R, Item>,
     _op: Op,
-    mode: u8,
-) -> Result<FixedStorage<R, Item>, Error>
+    output: &Output,
+) -> Result<(), Error>
 where
     R: Runtime,
     Item: ScratchStorage<R>,
     Op: ReductionOp<Item>,
+    Input: ReadExpression<Item = Item>
+        + LowerReadExpression<Slots: PaddedReadSlots>
+        + StageRead<R, Env0>,
+    Input::DeviceExpr: Eval13<
+            Item,
+            <Input::Slots as PaddedReadSlots>::L0,
+            <Input::Slots as PaddedReadSlots>::L1,
+            <Input::Slots as PaddedReadSlots>::L2,
+            <Input::Slots as PaddedReadSlots>::L3,
+            <Input::Slots as PaddedReadSlots>::L4,
+            <Input::Slots as PaddedReadSlots>::L5,
+            <Input::Slots as PaddedReadSlots>::L6,
+            <Input::Slots as PaddedReadSlots>::L7,
+            <Input::Slots as PaddedReadSlots>::L8,
+            <Input::Slots as PaddedReadSlots>::L9,
+            <Input::Slots as PaddedReadSlots>::L10,
+            <Input::Slots as PaddedReadSlots>::L11,
+            <Input::Slots as PaddedReadSlots>::L12,
+        >,
+    Output: OutputExpression<Item = Item>
+        + LowerOutputExpression<Slots: PaddedOutputSlots<Leaves = Item::StorageLeaves>>
+        + StageOutput<R, Env0>,
 {
-    let len = input.len()?;
-    if heads.capacity() != len {
+    let len = input.logical_len()?;
+    if heads.capacity() != len || head_indices.capacity() != len {
         return Err(Error::LengthMismatch {
             left: len,
-            right: heads.capacity(),
+            right: heads.capacity().min(head_indices.capacity()),
         });
     }
-    let extent = input.logical_extent().zipped(&heads.logical_extent())?;
-    let mut output = Item::alloc_scratch(exec, len);
-    output.set_logical_extent(extent.clone());
-    match mode {
-        0 => segmented_inclusive_fixed::<R, Item, Op>(exec, input, heads, &output)?,
-        1 => {
-            if len == 0 {
-                return Ok(output);
-            }
-            let mut inclusive = Item::alloc_scratch(exec, len);
-            inclusive.set_logical_extent(extent.clone());
-            segmented_inclusive_fixed::<R, Item, Op>(exec, input, heads, &inclusive)?;
-            let initial = init.expect("exclusive segmented scan requires init");
-            if initial.len()? != 1 {
-                return Err(Error::LengthMismatch {
-                    left: initial.len()?,
-                    right: 1,
-                });
-            }
-            launch_exclusive::<R, Item, Op>(exec, &inclusive, heads, &initial, &output)?;
-        }
-        2 => {
-            if len == 0 {
-                return Ok(output);
-            }
-            let mut inclusive = Item::alloc_scratch(exec, len);
-            inclusive.set_logical_extent(extent);
-            segmented_inclusive_fixed::<R, Item, Op>(exec, input, heads, &inclusive)?;
-            let initial = init.expect("segmented reduction requires init");
-            if initial.len()? != 1 {
-                return Err(Error::LengthMismatch {
-                    left: initial.len()?,
-                    right: 1,
-                });
-            }
-            launch_apply_init::<R, Item, Op>(exec, &inclusive, &initial, &output)?;
-        }
-        _ => unreachable!("invalid segmented operation"),
+    let extent = input.logical_extent()?.zipped(&heads.logical_extent())?;
+    if len == 0 {
+        return Ok(());
     }
-    Ok(output)
+    if init.len()? != 1 {
+        return Err(Error::LengthMismatch {
+            left: init.len()?,
+            right: 1,
+        });
+    }
+    let mut inclusive = Item::alloc_scratch(exec, len);
+    inclusive.set_logical_extent(extent.clone());
+    let inclusive_write = inclusive.write();
+    segmented_inclusive::<R, _, _, Item, Op>(exec, input, heads, &inclusive_write)?;
+    launch_reduce_selected::<R, Item, Op, _>(
+        exec,
+        &inclusive,
+        &init,
+        head_indices,
+        count,
+        &extent,
+        output,
+    )
 }

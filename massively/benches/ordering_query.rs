@@ -17,15 +17,15 @@ struct FirstLeafLess;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for LessU32 {
-    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-        massively::op::mbool(lhs < rhs)
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs < rhs
     }
 }
 
 #[cubecl::cube]
 impl BinaryPredicateOp<Seven> for FirstLeafLess {
-    fn apply(lhs: Seven, rhs: Seven) -> massively::MBool {
-        massively::op::mbool(lhs.0 < rhs.0)
+    fn apply(lhs: Seven, rhs: Seven) -> bool {
+        lhs.0 < rhs.0
     }
 }
 

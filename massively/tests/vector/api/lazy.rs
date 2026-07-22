@@ -1,8 +1,8 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
-    Executor, MIter, MStorage, lazy, op::ReductionOp, op::UnaryOp, vector::gather, vector::reduce,
-    vector::transform, zip2, zip7,
+    Executor, MIter, MStorage, lazy, op::ReductionOp, op::UnaryOp, vector::gather, vector::map,
+    vector::reduce, zip2, zip7,
 };
 
 struct Double;
@@ -29,19 +29,13 @@ fn public_lazy_constructors_compose_as_miter() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 
     let constant: lazy::Taken<lazy::Constant<u32>> = lazy::constant(3_u32).take(4);
-    assert_eq!(MIter::<WgpuRuntime>::capacity(&constant).unwrap(), 4);
-    assert_eq!(
-        reduce(&exec, constant, exec.value(0).unwrap(), Sum)
-            .unwrap()
-            .read(&exec)
-            .unwrap(),
-        12
-    );
+    assert_eq!(MIter::<WgpuRuntime>::len(&constant).unwrap(), 4);
+    assert_eq!(reduce(&exec, constant, 0, Sum).unwrap(), 12);
 
     let counting: lazy::Taken<lazy::Counting> = lazy::counting(1).take(4);
-    let output = transform(
+    let output = map(
         &exec,
-        lazy::identity(lazy::transform(counting, Double)),
+        lazy::identity(lazy::map(counting, Double)),
         massively::op::Identity,
     )
     .unwrap();
@@ -49,14 +43,8 @@ fn public_lazy_constructors_compose_as_miter() {
 
     let values = exec.to_device(&[10_u32, 20, 30, 40]);
     let permuted = lazy::permute(values.slice(..), lazy::counting(0).take(4));
-    assert_eq!(MIter::<WgpuRuntime>::capacity(&permuted).unwrap(), 4);
-    assert_eq!(
-        reduce(&exec, permuted, exec.value(0).unwrap(), Sum)
-            .unwrap()
-            .read(&exec)
-            .unwrap(),
-        100
-    );
+    assert_eq!(MIter::<WgpuRuntime>::len(&permuted).unwrap(), 4);
+    assert_eq!(reduce(&exec, permuted, 0, Sum).unwrap(), 100);
 }
 
 #[test]
@@ -65,7 +53,7 @@ fn taken_tracks_nested_slice_offsets() {
     let taken: lazy::Taken<lazy::Counting> = lazy::counting(10).take(8);
     let sliced = taken.slice(2..6).slice(1..3);
 
-    assert_eq!(MIter::<WgpuRuntime>::capacity(&sliced).unwrap(), 2);
+    assert_eq!(MIter::<WgpuRuntime>::len(&sliced).unwrap(), 2);
     let values = exec.to_device(&(0_u32..20).collect::<Vec<_>>());
     let output = gather(&exec, values.slice(..), sliced).unwrap();
 
@@ -81,9 +69,9 @@ fn slicing_a_lazy_permutation_slices_its_logical_rows() {
     let sliced = lazy::permute(values.slice(..), indices.slice(..))
         .slice(1..5)
         .slice(1..3);
-    assert_eq!(MIter::<WgpuRuntime>::capacity(&sliced).unwrap(), 2);
+    assert_eq!(MIter::<WgpuRuntime>::len(&sliced).unwrap(), 2);
 
-    let output = transform(&exec, sliced, massively::op::Identity).unwrap();
+    let output = map(&exec, sliced, massively::op::Identity).unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![60, 10]);
 }
 
@@ -111,7 +99,7 @@ fn slicing_does_not_increase_read_arity_eight() {
     )
     .slice(1..3);
 
-    let outputs = transform(&exec, sliced, massively::op::Identity).unwrap();
+    let outputs = map(&exec, sliced, massively::op::Identity).unwrap();
 
     let (a, b, c, d, e, f, g) = MStorage::into_columns(outputs);
     let outputs = [&a, &b, &c, &d, &e, &f, &g];
@@ -126,22 +114,22 @@ fn reverse_composes_with_slicing_and_multi_column_inputs() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let empty = exec.alloc::<u32>(0);
     let reversed_empty = lazy::reverse(empty.slice(..));
-    assert_eq!(MIter::<WgpuRuntime>::capacity(&reversed_empty).unwrap(), 0);
-    let empty_output = transform(&exec, reversed_empty, massively::op::Identity).unwrap();
-    assert_eq!(empty_output.capacity(), 0);
+    assert_eq!(MIter::<WgpuRuntime>::len(&reversed_empty).unwrap(), 0);
+    let empty_output = map(&exec, reversed_empty, massively::op::Identity).unwrap();
+    assert_eq!(empty_output.len(), 0);
 
     let values = exec.to_device(&[10_u32, 20, 30, 40, 50]);
     let middle = lazy::reverse(values.slice(..)).slice(1..4).slice(1..2);
 
-    let output = transform(&exec, middle, massively::op::Identity).unwrap();
+    let output = map(&exec, middle, massively::op::Identity).unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![30]);
 
     let first = exec.to_device(&[1_u32, 2, 3]);
     let second = exec.to_device(&[10_u32, 20, 30]);
     let reversed = lazy::reverse(zip2(first.slice(..), second.slice(..)));
 
-    assert_eq!(MIter::<WgpuRuntime>::capacity(&reversed).unwrap(), 3);
-    let output = transform(&exec, reversed, massively::op::Identity).unwrap();
+    assert_eq!(MIter::<WgpuRuntime>::len(&reversed).unwrap(), 3);
+    let output = map(&exec, reversed, massively::op::Identity).unwrap();
     let (output_first, output_second) = MStorage::into_columns(output);
     assert_eq!(exec.to_host(&output_first).unwrap(), vec![3, 2, 1]);
     assert_eq!(exec.to_host(&output_second).unwrap(), vec![30, 20, 10]);

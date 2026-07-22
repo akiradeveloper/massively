@@ -178,40 +178,40 @@ where
         .collect()
 }
 
-pub fn all_of<T, Pred>(segments: &[Vec<T>], _pred: Pred) -> Vec<u32>
+pub fn all_of<T, Pred>(segments: &[Vec<T>], _pred: Pred) -> Vec<bool>
 where
     T: Copy,
     Pred: PredicateOp<T>,
 {
     segments
         .iter()
-        .map(|segment| segment.iter().copied().all(Pred::apply) as u32)
+        .map(|segment| segment.iter().copied().all(Pred::apply))
         .collect()
 }
 
-pub fn any_of<T, Pred>(segments: &[Vec<T>], _pred: Pred) -> Vec<u32>
+pub fn any_of<T, Pred>(segments: &[Vec<T>], _pred: Pred) -> Vec<bool>
 where
     T: Copy,
     Pred: PredicateOp<T>,
 {
     segments
         .iter()
-        .map(|segment| segment.iter().copied().any(Pred::apply) as u32)
+        .map(|segment| segment.iter().copied().any(Pred::apply))
         .collect()
 }
 
-pub fn none_of<T, Pred>(segments: &[Vec<T>], _pred: Pred) -> Vec<u32>
+pub fn none_of<T, Pred>(segments: &[Vec<T>], _pred: Pred) -> Vec<bool>
 where
     T: Copy,
     Pred: PredicateOp<T>,
 {
     segments
         .iter()
-        .map(|segment| (!segment.iter().copied().any(Pred::apply)) as u32)
+        .map(|segment| !segment.iter().copied().any(Pred::apply))
         .collect()
 }
 
-pub fn is_sorted<T, Less>(segments: &[Vec<T>], _less: Less) -> Vec<u32>
+pub fn is_sorted<T, Less>(segments: &[Vec<T>], _less: Less) -> Vec<bool>
 where
     T: Copy,
     Less: BinaryPredicateOp<T>,
@@ -221,7 +221,7 @@ where
         .map(|segment| {
             segment
                 .windows(2)
-                .all(|pair| !Less::apply(pair[1], pair[0])) as u32
+                .all(|pair| !Less::apply(pair[1], pair[0]))
         })
         .collect()
 }

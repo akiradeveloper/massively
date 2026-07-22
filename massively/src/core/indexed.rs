@@ -465,7 +465,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Counting, Permute, ReverseCounting, RowStorage, Transform, Zip, read::FixedRead};
+    use crate::{Counting, Permute, ReverseCounting, RowStorage, Zip, read::FixedRead};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     #[test]

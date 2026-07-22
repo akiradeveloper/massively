@@ -78,8 +78,8 @@ behind each plain-language claim.
   public graph terminal fold. `emitDestinations` specifies
   `map(destination_id, Identity).emit`, and `emitDestinations_correct` proves
   that it produces the exact Core candidate stream.
-- `Typed.PublicAPI.VectorBasis.transformStore` and `copyWhere` specify the
-  public dense transform and stable filter contracts used around graph
+- `Typed.PublicAPI.VectorBasis.mapStore` and `copyWhere` specify the
+  public dense map and stable filter contracts used around graph
   terminals. `Typed.PublicAPI.Program.step` is a host schedule made only from
   these graph and vector contracts; it is not a fictitious exported Rust
   program object.
@@ -272,7 +272,7 @@ signature, and well-typed syntax. They are proofs, not bounded tests.
   contention time, and peak allocation liveness;
 - coverage of the full intended algorithm surface, such as the Gunrock suite;
 - universal correspondence with Rust, CubeCL, a device compiler, or hardware.
-- extraction of the current materialize/gather/transform/reduce Rust terminal
+- extraction of the current materialize/gather/map/reduce Rust terminal
   trace and its exact cost from emitted CubeCL IR;
 
 Consequently, `Expression.Program.toBSP_run_correct` and

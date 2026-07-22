@@ -35,12 +35,12 @@ struct SweepOrder;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<(f32, u32)> for SweepOrder {
-    fn apply(lhs: (f32, u32), rhs: (f32, u32)) -> massively::MBool {
-        massively::op::mbool(if lhs.0 != rhs.0 {
+    fn apply(lhs: (f32, u32), rhs: (f32, u32)) -> bool {
+        if lhs.0 != rhs.0 {
             lhs.0 > rhs.0
         } else {
             lhs.1 < rhs.1
-        })
+        }
     }
 }
 
@@ -116,12 +116,12 @@ struct BestPrefix;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<(f32, u32)> for BestPrefix {
-    fn apply(lhs: (f32, u32), rhs: (f32, u32)) -> massively::MBool {
-        massively::op::mbool(if lhs.0 != rhs.0 {
+    fn apply(lhs: (f32, u32), rhs: (f32, u32)) -> bool {
+        if lhs.0 != rhs.0 {
             lhs.0 < rhs.0
         } else {
             lhs.1 < rhs.1
-        })
+        }
     }
 }
 
@@ -137,13 +137,13 @@ pub fn solve<R: Runtime>(
     assert!(source < n);
 
     let degree = common::resident_degrees(exec, graph)?;
-    let source_degree = exec.to_host(&degree.slice(source as usize..source as usize + 1))?[0];
+    let source_degree = exec.to_host(&degree.slice(source..source + 1))?[0];
     if source_degree == 0 {
         return common::filled(exec, 1, source);
     }
 
     let rank = ppr::solve(exec, graph, source, damping, iterations)?;
-    let score = vector::transform(exec, zip2(rank.slice(..), degree.slice(..)), RankPerDegree)?;
+    let score = vector::map(exec, zip2(rank.slice(..), degree.slice(..)), RankPerDegree)?;
     let order = vector::sort_by_key(
         exec,
         zip2(score.slice(..), common::counting_u32(0, n as usize)),
@@ -172,20 +172,20 @@ pub fn solve<R: Runtime>(
         ),
         EarlierNeighbor,
     )
-    .reduce_by_source(exec, exec.value(0)?, SumU32)?;
+    .reduce_by_source(exec, 0, SumU32)?;
     let ordered_degree = vector::gather(exec, degree.slice(..), common::indices(order.slice(..)))?;
     let ordered_earlier =
         vector::gather(exec, earlier.slice(..), common::indices(order.slice(..)))?;
-    let cut_delta = vector::transform(
+    let cut_delta = vector::map(
         exec,
         zip2(ordered_degree.slice(..), ordered_earlier.slice(..)),
         CutDelta,
     )?;
     let cut = vector::inclusive_scan(exec, cut_delta.slice(..), SumF32)?;
-    let ordered_volume = vector::transform(exec, ordered_degree.slice(..), DegreeAsF32)?;
+    let ordered_volume = vector::map(exec, ordered_degree.slice(..), DegreeAsF32)?;
     let volume = vector::inclusive_scan(exec, ordered_volume.slice(..), SumF32)?;
     let total_volume = graph.edge_count() as f32;
-    let conductance = vector::transform(
+    let conductance = vector::map(
         exec,
         zip3(
             cut.slice(..),
@@ -194,19 +194,14 @@ pub fn solve<R: Runtime>(
         ),
         Conductance,
     )?;
-    let (present, best) = vector::min_element(
+    let best = vector::min_element(
         exec,
         zip2(conductance.slice(..), common::counting_u32(0, n as usize)),
         BestPrefix,
     )?
-    .read(exec)?;
-    assert_ne!(present, 0, "a nonempty graph has a nonempty sweep order");
+    .expect("a nonempty graph has a nonempty sweep order");
 
-    vector::transform(
-        exec,
-        order.slice(..best as usize + 1),
-        massively::op::Identity,
-    )
+    vector::map(exec, order.slice(..best + 1), massively::op::Identity)
 }
 
 #[cfg(test)]

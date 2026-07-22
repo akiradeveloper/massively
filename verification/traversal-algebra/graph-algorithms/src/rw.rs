@@ -138,7 +138,7 @@ pub fn solve<R: Runtime>(
     let choice_count = walker_count
         .checked_mul(walk_length.saturating_sub(1))
         .expect("random-choice count exceeds u32");
-    let choices = vector::transform(
+    let choices = vector::map(
         exec,
         random::uniform_u32(0, u32::MAX, seed)?.take(choice_count),
         Identity,
@@ -169,12 +169,12 @@ pub fn solve_with_choices<R: Runtime>(
     let choice_count = walker_count
         .checked_mul(transitions)
         .expect("random-choice count exceeds u32");
-    assert_eq!(choices.capacity(), choice_count as usize);
+    assert_eq!(choices.len(), choice_count);
     let path_count = walker_count
         .checked_mul(walk_length)
         .expect("walk output exceeds u32");
 
-    let mut current = vector::transform(
+    let mut current = vector::map(
         exec,
         zip2(
             common::counting_u32(0, walker_count as usize),
@@ -185,7 +185,7 @@ pub fn solve_with_choices<R: Runtime>(
     let paths = common::filled(exec, path_count as usize, u32::MAX)?;
 
     for step in 0..walk_length {
-        let path_indices = lazy::transform(
+        let path_indices = lazy::map(
             zip3(
                 common::counting_u32(0, walker_count as usize),
                 lazy::constant(walk_length).take(walker_count),
@@ -203,7 +203,7 @@ pub fn solve_with_choices<R: Runtime>(
             break;
         }
 
-        let active_stencil = vector::transform(exec, current.slice(..), Valid)?;
+        let active_stencil = vector::map(exec, current.slice(..), Valid)?;
         let active_positions = common::materialize_exact(
             exec,
             vector::copy_where(
@@ -212,7 +212,7 @@ pub fn solve_with_choices<R: Runtime>(
                 common::stencil(active_stencil.slice(..)),
             )?,
         )?;
-        if active_positions.capacity() == 0 {
+        if active_positions.len() == 0 {
             break;
         }
         let active_vertices = vector::gather(
@@ -224,16 +224,12 @@ pub fn solve_with_choices<R: Runtime>(
             exec,
             graph.csr(),
             active_vertices.slice(..),
-            graph.repeated_edge_capacity(active_vertices.capacity())?,
+            graph.repeated_edge_capacity(active_vertices.len())?,
         )?
         .map(graph::edge_id(), One)
-        .reduce_by_source(exec, exec.value(0)?, SumU32)?;
-        let live_stencil = vector::transform(exec, degree.slice(..), Positive)?;
-        let active_count = u32::try_from(active_positions.capacity()).map_err(|_| {
-            massively::Error::LengthTooLarge {
-                len: active_positions.capacity(),
-            }
-        })?;
+        .reduce_by_source(exec, 0, SumU32)?;
+        let live_stencil = vector::map(exec, degree.slice(..), Positive)?;
+        let active_count = active_positions.len();
         let live_indices = common::materialize_exact(
             exec,
             vector::copy_where(
@@ -243,7 +239,7 @@ pub fn solve_with_choices<R: Runtime>(
             )?,
         )?;
         let next = common::filled(exec, walker_count as usize, u32::MAX)?;
-        if live_indices.capacity() != 0 {
+        if live_indices.len() != 0 {
             let live_positions = vector::gather(
                 exec,
                 active_positions.slice(..),
@@ -264,12 +260,8 @@ pub fn solve_with_choices<R: Runtime>(
                 graph.offsets().slice(..),
                 common::indices(live_vertices.slice(..)),
             )?;
-            let live_count = u32::try_from(live_positions.capacity()).map_err(|_| {
-                massively::Error::LengthTooLarge {
-                    len: live_positions.capacity(),
-                }
-            })?;
-            let choice_indices = vector::transform(
+            let live_count = live_positions.len();
+            let choice_indices = vector::map(
                 exec,
                 zip3(
                     live_positions.slice(..),
@@ -283,7 +275,7 @@ pub fn solve_with_choices<R: Runtime>(
                 choices.slice(..),
                 common::indices(choice_indices.slice(..)),
             )?;
-            let edge_indices = vector::transform(
+            let edge_indices = vector::map(
                 exec,
                 zip3(
                     offsets.slice(..),

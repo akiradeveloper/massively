@@ -37,10 +37,9 @@ macro_rules! pair_case {
     };
 }
 
-unary_case!(transform, |exec, input, gpu| {
-    let output = massively::vector::transform(&exec, lazify(gpu.slice(..)), AddOne).unwrap();
-    let mut expected = vec![0; input.len()];
-    reference::transform(&input, AddOne, &mut expected);
+unary_case!(map, |exec, input, gpu| {
+    let output = massively::vector::map(&exec, lazify(gpu.slice(..)), AddOne).unwrap();
+    let expected = reference::map(&input, AddOne);
     prop_assert_eq!(exec.to_host(&output).unwrap(), expected);
 });
 
@@ -63,10 +62,7 @@ unary_case!(transform_where, |exec, input, gpu| {
 
 unary_case!(reduce, |exec, input, gpu| {
     prop_assert_eq!(
-        massively::vector::reduce(&exec, lazify(gpu.slice(..)), exec.value(7).unwrap(), Sum)
-            .unwrap()
-            .read(&exec)
-            .unwrap(),
+        massively::vector::reduce(&exec, lazify(gpu.slice(..)), 7, Sum).unwrap(),
         reference::reduce(&input, 7, Sum),
     );
 });
@@ -80,13 +76,7 @@ unary_case!(inclusive_scan, |exec, input, gpu| {
 });
 
 unary_case!(exclusive_scan, |exec, input, gpu| {
-    let output = massively::vector::exclusive_scan(
-        &exec,
-        lazify(gpu.slice(..)),
-        exec.value(7).unwrap(),
-        Sum,
-    )
-    .unwrap();
+    let output = massively::vector::exclusive_scan(&exec, lazify(gpu.slice(..)), 7, Sum).unwrap();
     prop_assert_eq!(
         exec.to_host(&output).unwrap(),
         reference::exclusive_scan(&input, 7, Sum)
@@ -103,41 +93,29 @@ unary_case!(adjacent_difference, |exec, input, gpu| {
 
 unary_case!(count_if, |exec, input, gpu| {
     prop_assert_eq!(
-        massively::vector::count_if(&exec, lazify(gpu.slice(..)), Even)
-            .unwrap()
-            .read(&exec)
-            .unwrap() as usize,
+        massively::vector::count_if(&exec, lazify(gpu.slice(..)), Even).unwrap() as usize,
         reference::count_if(&input, Even),
     );
 });
 
 unary_case!(all_of, |exec, input, gpu| {
     prop_assert_eq!(
-        massively::vector::all_of(&exec, lazify(gpu.slice(..)), Even)
-            .unwrap()
-            .read(&exec)
-            .unwrap(),
-        u32::from(reference::all_of(&input, Even))
+        massively::vector::all_of(&exec, lazify(gpu.slice(..)), Even).unwrap(),
+        reference::all_of(&input, Even)
     );
 });
 
 unary_case!(any_of, |exec, input, gpu| {
     prop_assert_eq!(
-        massively::vector::any_of(&exec, lazify(gpu.slice(..)), Even)
-            .unwrap()
-            .read(&exec)
-            .unwrap(),
-        u32::from(reference::any_of(&input, Even))
+        massively::vector::any_of(&exec, lazify(gpu.slice(..)), Even).unwrap(),
+        reference::any_of(&input, Even)
     );
 });
 
 unary_case!(none_of, |exec, input, gpu| {
     prop_assert_eq!(
-        massively::vector::none_of(&exec, lazify(gpu.slice(..)), Even)
-            .unwrap()
-            .read(&exec)
-            .unwrap(),
-        u32::from(reference::none_of(&input, Even))
+        massively::vector::none_of(&exec, lazify(gpu.slice(..)), Even).unwrap(),
+        reference::none_of(&input, Even)
     );
 });
 
@@ -153,11 +131,8 @@ unary_case!(find_if, |exec, input, gpu| {
 
 unary_case!(is_partitioned, |exec, input, gpu| {
     prop_assert_eq!(
-        massively::vector::is_partitioned(&exec, lazify(gpu.slice(..)), Even)
-            .unwrap()
-            .read(&exec)
-            .unwrap(),
-        u32::from(reference::is_partitioned(&input, Even)),
+        massively::vector::is_partitioned(&exec, lazify(gpu.slice(..)), Even).unwrap(),
+        reference::is_partitioned(&input, Even),
     );
 });
 
@@ -174,7 +149,7 @@ unary_case!(copy_where, |exec, input, gpu| {
         .unwrap(),
     );
     let expected = reference::copy_where(&input, &flags);
-    prop_assert_eq!(output.capacity(), expected.len());
+    prop_assert_eq!(output.len() as usize, expected.len());
     prop_assert_eq!(exec.to_host(&output).unwrap(), expected);
 });
 
@@ -191,7 +166,7 @@ unary_case!(remove_where, |exec, input, gpu| {
         .unwrap(),
     );
     let expected = reference::remove_where(&input, &flags);
-    prop_assert_eq!(output.capacity(), expected.len());
+    prop_assert_eq!(output.len() as usize, expected.len());
     prop_assert_eq!(exec.to_host(&output).unwrap(), expected);
 });
 
@@ -201,14 +176,14 @@ unary_case!(partition, |exec, input, gpu| {
     let (mut passing, failing) = reference::partition(&input, Even);
     let expected_boundary = passing.len();
     passing.extend(failing);
-    prop_assert_eq!(boundary.read(&exec).unwrap() as usize, expected_boundary);
+    prop_assert_eq!(boundary as usize, expected_boundary);
     prop_assert_eq!(exec.to_host(&output).unwrap(), passing);
 });
 
 unary_case!(fill, |exec, input, _gpu| {
     let output = exec.alloc::<u32>(input.len());
-    let value = exec.value(42_u32).unwrap();
-    massively::vector::fill(&exec, &value, output.slice_mut(..)).unwrap();
+    let value = 42_u32;
+    massively::vector::fill(&exec, value, output.slice_mut(..)).unwrap();
     let mut expected = vec![0; input.len()];
     reference::fill(42, &mut expected);
     prop_assert_eq!(exec.to_host(&output).unwrap(), expected);
@@ -218,10 +193,10 @@ unary_case!(replace_where, |exec, input, _gpu| {
     let flags = flags_for(&input);
     let flags_gpu = exec.to_device(&flags);
     let output = exec.to_device(&input);
-    let value = exec.value(42_u32).unwrap();
+    let value = 42_u32;
     massively::vector::replace_where(
         &exec,
-        &value,
+        value,
         as_stencil(lazify(flags_gpu.slice(..))),
         output.slice_mut(..),
     )
@@ -312,10 +287,8 @@ pair_case!(equal, |exec, left, right, left_gpu, right_gpu| {
             lazify(right_gpu.slice(..)),
             Equal
         )
-        .unwrap()
-        .read(&exec)
         .unwrap(),
-        u32::from(reference::equal(&left, &right, Equal)),
+        reference::equal(&left, &right, Equal),
     );
 });
 
@@ -371,10 +344,8 @@ pair_case!(
                 lazify(right_gpu.slice(..)),
                 Less
             )
-            .unwrap()
-            .read(&exec)
             .unwrap(),
-            u32::from(reference::lexicographical_compare(&left, &right, Less)),
+            reference::lexicographical_compare(&left, &right, Less),
         );
     }
 );
@@ -411,20 +382,14 @@ unary_case!(minmax_element, |exec, input, gpu| {
 
 unary_case!(is_sorted, |exec, input, gpu| {
     prop_assert_eq!(
-        massively::vector::is_sorted(&exec, lazify(gpu.slice(..)), Less)
-            .unwrap()
-            .read(&exec)
-            .unwrap(),
-        u32::from(reference::is_sorted(&input, Less))
+        massively::vector::is_sorted(&exec, lazify(gpu.slice(..)), Less).unwrap(),
+        reference::is_sorted(&input, Less)
     );
 });
 
 unary_case!(is_sorted_until, |exec, input, gpu| {
     prop_assert_eq!(
-        massively::vector::is_sorted_until(&exec, lazify(gpu.slice(..)), Less)
-            .unwrap()
-            .read(&exec)
-            .unwrap() as usize,
+        massively::vector::is_sorted_until(&exec, lazify(gpu.slice(..)), Less).unwrap() as usize,
         reference::is_sorted_until(&input, Less),
     );
 });
@@ -443,7 +408,7 @@ unary_case!(unique, |exec, input, gpu| {
         massively::vector::unique(&exec, lazify(gpu.slice(..)), Equal).unwrap(),
     );
     let expected = reference::unique(&input, Equal);
-    prop_assert_eq!(output.capacity(), expected.len());
+    prop_assert_eq!(output.len() as usize, expected.len());
     prop_assert_eq!(exec.to_host(&output).unwrap(), expected);
 });
 
@@ -485,7 +450,7 @@ pair_case!(set_union, |exec, left, right, _left_gpu, _right_gpu| {
         .unwrap(),
     );
     let expected = reference::set_union(&left, &right, Less);
-    prop_assert_eq!(output.capacity(), expected.len());
+    prop_assert_eq!(output.len() as usize, expected.len());
     prop_assert_eq!(exec.to_host(&output).unwrap(), expected);
 });
 
@@ -511,7 +476,7 @@ pair_case!(set_intersection, |exec,
         .unwrap(),
     );
     let expected = reference::set_intersection(&left, &right, Less);
-    prop_assert_eq!(output.capacity(), expected.len());
+    prop_assert_eq!(output.len() as usize, expected.len());
     prop_assert_eq!(exec.to_host(&output).unwrap(), expected);
 });
 
@@ -537,7 +502,7 @@ pair_case!(set_difference, |exec,
         .unwrap(),
     );
     let expected = reference::set_difference(&left, &right, Less);
-    prop_assert_eq!(output.capacity(), expected.len());
+    prop_assert_eq!(output.len() as usize, expected.len());
     prop_assert_eq!(exec.to_host(&output).unwrap(), expected);
 });
 

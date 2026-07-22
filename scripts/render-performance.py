@@ -49,6 +49,8 @@ def duration(nanoseconds: float) -> str:
 def main() -> None:
     adapter = os.environ.get("MASSIVELY_BENCH_DEVICE", "wgpu default adapter")
     revision = command_output("git", "rev-parse", "--short", "HEAD")
+    if command_output("git", "status", "--short"):
+        revision = f"{revision}-dirty"
     rust = command_output("rustc", "--version")
     rows = [(api, duration(estimate)) for api, estimate in benchmark_results()]
 
@@ -83,9 +85,11 @@ def main() -> None:
             "",
             "N is the length of each input range, so binary range algorithms process two inputs of N elements. The "
             "default element type is `f32` for value algorithms and `u32` for ordering, index, and key algorithms. "
-            "Predicate and extremum queries use `lazy::counting<usize>`. Selection uses a 50% stencil, indexed "
-            "operations use reverse indices, by-key algorithms use runs of eight equal keys, `scatter_reduce` maps "
-            "four inputs to each output, and sorting uses deterministic shuffled keys.",
+            "Predicate and extremum queries use `lazy::counting`, whose item type is `MIndex`. Each "
+            "`lower_bound` and `upper_bound` measurement performs N batched searches over an N-element source. "
+            "Selection uses 50% u32 backing flags converted lazily to a bool stencil with `op::NonZero`, indexed "
+            "operations use reverse indices, by-key algorithms use runs of eight equal keys, `scatter_reduce` "
+            "maps four inputs to each output, and sorting uses deterministic shuffled keys.",
             "",
             "Regenerate this file with:",
             "",

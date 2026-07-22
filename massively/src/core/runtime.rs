@@ -69,7 +69,7 @@ impl<R: Runtime> Executor<R> {
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     /// let values = exec.to_device(&[10_u32, 20, 30]);
     ///
-    /// assert_eq!(values.capacity(), 3);
+    /// assert_eq!(values.len(), 3);
     /// assert_eq!(exec.to_host(&values).unwrap(), vec![10, 20, 30]);
     /// ```
     pub fn to_device<T>(&self, input: &[T]) -> DeviceVec<R, T>
@@ -136,7 +136,7 @@ impl<R: Runtime> Executor<R> {
     ///
     /// assert_eq!(exec.to_host(&values.slice(1..3)).unwrap(), vec![20, 30]);
     /// ```
-    pub fn to_host<Input>(&self, input: &Input) -> Result<Vec<Input::Element>, Error>
+    pub fn to_host<Input>(&self, input: &Input) -> Result<Vec<Input::HostElement>, Error>
     where
         Input: DeviceRange,
     {
@@ -162,7 +162,11 @@ impl<R: Runtime> Executor<R> {
         let values = Input::Element::from_bytes(&bytes);
         let start = input.offset();
         let end = start + logical_len;
-        Ok(values[start..end].to_vec())
+        Ok(values[start..end]
+            .iter()
+            .copied()
+            .map(Input::to_host_element)
+            .collect())
     }
 
     /// Waits for all work submitted through this executor to complete.
@@ -175,8 +179,7 @@ impl<R: Runtime> Executor<R> {
     ///
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     /// let output = exec.alloc::<u32>(4);
-    /// let value = exec.value(7_u32).unwrap();
-    /// fill(&exec, &value, output.slice_mut(..)).unwrap();
+    /// fill(&exec, 7_u32, output.slice_mut(..)).unwrap();
     /// exec.sync().unwrap();
     /// ```
     pub fn sync(&self) -> Result<(), Error> {
@@ -208,18 +211,22 @@ impl<R: Runtime, T> Clone for DeviceVec<R, T> {
 }
 
 impl<R: Runtime, T> DeviceVec<R, T> {
-    /// Returns the physical allocation bound without synchronizing.
-    pub fn capacity(&self) -> usize {
-        self.len
+    /// Returns the host-visible logical item count.
+    pub fn len(&self) -> crate::MIndex {
+        let len = self
+            .extent
+            .host_len()
+            .expect("device-produced length escaped the synchronous API boundary");
+        crate::MIndex::try_from(len).expect("device vector length does not fit in MIndex")
     }
 
-    /// Explicitly reads the logical item count.
-    ///
-    /// Fixed-size vectors return immediately. A length produced by GPU work is
-    /// copied to the host and synchronizes the producing queue.
-    pub fn read_len(&self, exec: &Executor<R>) -> Result<crate::MIndex, Error> {
-        let len = self.extent.read(exec)?;
-        crate::MIndex::try_from(len).map_err(|_| Error::LengthTooLarge { len })
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Returns the physical allocation bound without synchronizing.
+    pub(crate) fn capacity(&self) -> usize {
+        self.len
     }
 
     pub(crate) fn logical_extent(&self) -> LogicalExtent {
@@ -235,7 +242,11 @@ impl<R: Runtime, T> DeviceVec<R, T> {
     ///
     /// The underlying allocation remains unchanged and returns to the runtime's
     /// memory pool at its original size when the final handle is dropped.
-    pub fn truncate(&mut self, len: usize) {
+    pub fn truncate(&mut self, len: crate::MIndex) {
+        self.truncate_usize(len as usize);
+    }
+
+    pub(crate) fn truncate_usize(&mut self, len: usize) {
         assert!(
             len <= self.len,
             "cannot truncate a DeviceVec of length {} to {len}",
@@ -273,9 +284,16 @@ impl<R: Runtime, T> DeviceVec<R, T> {
     /// ```
     pub fn slice<Range>(&self, range: Range) -> DeviceSlice<T>
     where
-        Range: RangeBounds<usize>,
+        Range: RangeBounds<crate::MIndex>,
     {
         self.column().slice(range)
+    }
+
+    pub(crate) fn slice_usize<Range>(&self, range: Range) -> DeviceSlice<T>
+    where
+        Range: RangeBounds<usize>,
+    {
+        self.column().slice_usize(range)
     }
 
     /// Returns a mutable view into this allocation.
@@ -284,16 +302,24 @@ impl<R: Runtime, T> DeviceVec<R, T> {
     ///
     /// ```
     /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-    /// use massively::{Executor, lazy, vector::replace_where};
+    /// use massively::{Executor, lazy, op, vector::replace_where};
     ///
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     /// let values = exec.to_device(&[1_u32, 2, 3, 4]);
-    /// let value = exec.value(9_u32).unwrap();
-    /// replace_where(&exec, &value, lazy::constant(1_u32).take(2), values.slice_mut(1..3)).unwrap();
+    /// let stencil = lazy::map(lazy::constant(1_u32).take(2), op::NonZero);
+    /// replace_where(&exec, 9_u32, stencil, values.slice_mut(1..3)).unwrap();
     ///
     /// assert_eq!(exec.to_host(&values).unwrap(), vec![1, 9, 9, 4]);
     /// ```
     pub fn slice_mut<Range>(&self, range: Range) -> DeviceSliceMut<T>
+    where
+        Range: RangeBounds<crate::MIndex>,
+    {
+        let (offset, len) = crate::read::resolve_mindex_slice_range(self.len, range);
+        self.slice_mut_usize(offset..offset + len)
+    }
+
+    pub(crate) fn slice_mut_usize<Range>(&self, range: Range) -> DeviceSliceMut<T>
     where
         Range: RangeBounds<usize>,
     {
@@ -313,16 +339,20 @@ impl<R: Runtime, T> DeviceVec<R, T> {
 #[doc(hidden)]
 pub trait DeviceRange {
     type Element: MStorageElement;
+    type HostElement;
     fn handle(&self) -> cubecl::server::Handle;
     fn capacity(&self) -> usize;
     fn offset(&self) -> usize;
     fn owner(&self) -> u64;
     #[doc(hidden)]
     fn extent(&self) -> LogicalExtent;
+    #[doc(hidden)]
+    fn to_host_element(value: Self::Element) -> Self::HostElement;
 }
 
 impl<R: Runtime, T: MStorageElement> DeviceRange for DeviceVec<R, T> {
     type Element = T;
+    type HostElement = T;
     fn handle(&self) -> cubecl::server::Handle {
         self.handle.clone()
     }
@@ -338,10 +368,14 @@ impl<R: Runtime, T: MStorageElement> DeviceRange for DeviceVec<R, T> {
     fn extent(&self) -> LogicalExtent {
         self.extent.clone()
     }
+    fn to_host_element(value: T) -> T {
+        value
+    }
 }
 
 impl<T: MStorageElement> DeviceRange for DeviceSlice<T> {
     type Element = T;
+    type HostElement = T;
     fn handle(&self) -> cubecl::server::Handle {
         self.handle.clone().expect("bound device slice")
     }
@@ -356,6 +390,9 @@ impl<T: MStorageElement> DeviceRange for DeviceSlice<T> {
     }
     fn extent(&self) -> LogicalExtent {
         self.extent.clone()
+    }
+    fn to_host_element(value: T) -> T {
+        value
     }
 }
 
@@ -372,8 +409,15 @@ pub struct DeviceSliceMut<T> {
 }
 
 impl<T> DeviceSliceMut<T> {
-    /// Returns the physical view bound without synchronizing.
-    pub fn capacity(&self) -> usize {
+    pub fn len(&self) -> crate::MIndex {
+        crate::MIndex::try_from(self.len).expect("device slice length does not fit in MIndex")
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub(crate) fn capacity(&self) -> usize {
         self.len
     }
 
@@ -394,6 +438,14 @@ impl<T> DeviceSliceMut<T> {
     /// ```
     pub fn slice<Range>(&self, range: Range) -> DeviceSlice<T>
     where
+        Range: RangeBounds<crate::MIndex>,
+    {
+        let (offset, len) = crate::read::resolve_mindex_slice_range(self.len, range);
+        self.slice_usize(offset..offset + len)
+    }
+
+    pub(crate) fn slice_usize<Range>(&self, range: Range) -> DeviceSlice<T>
+    where
         Range: RangeBounds<usize>,
     {
         let (offset, len) = crate::read::resolve_slice_range(self.len, range);
@@ -413,17 +465,25 @@ impl<T> DeviceSliceMut<T> {
     ///
     /// ```
     /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-    /// use massively::{Executor, lazy, vector::replace_where};
+    /// use massively::{Executor, lazy, op, vector::replace_where};
     ///
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     /// let values = exec.to_device(&[1_u32, 2, 3, 4, 5]);
     /// let writable = values.slice_mut(1..5);
-    /// let value = exec.value(9_u32).unwrap();
-    /// replace_where(&exec, &value, lazy::constant(1_u32).take(2), writable.slice_mut(1..3)).unwrap();
+    /// let stencil = lazy::map(lazy::constant(1_u32).take(2), op::NonZero);
+    /// replace_where(&exec, 9_u32, stencil, writable.slice_mut(1..3)).unwrap();
     ///
     /// assert_eq!(exec.to_host(&values).unwrap(), vec![1, 2, 9, 9, 5]);
     /// ```
     pub fn slice_mut<Range>(&self, range: Range) -> Self
+    where
+        Range: RangeBounds<crate::MIndex>,
+    {
+        let (offset, len) = crate::read::resolve_mindex_slice_range(self.len, range);
+        self.slice_mut_usize(offset..offset + len)
+    }
+
+    pub(crate) fn slice_mut_usize<Range>(&self, range: Range) -> Self
     where
         Range: RangeBounds<usize>,
     {
@@ -442,6 +502,7 @@ impl<T> DeviceSliceMut<T> {
 
 impl<T: MStorageElement> DeviceRange for DeviceSliceMut<T> {
     type Element = T;
+    type HostElement = T;
     fn handle(&self) -> cubecl::server::Handle {
         self.handle.clone()
     }
@@ -456,5 +517,8 @@ impl<T: MStorageElement> DeviceRange for DeviceSliceMut<T> {
     }
     fn extent(&self) -> LogicalExtent {
         self.extent.clone()
+    }
+    fn to_host_element(value: T) -> T {
+        value
     }
 }

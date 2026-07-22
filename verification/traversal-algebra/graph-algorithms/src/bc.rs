@@ -83,10 +83,8 @@ fn vertices_at_depth<R: Runtime>(
     distance: &DeviceVec<R, u32>,
     depth: u32,
 ) -> common::Result<DeviceVec<R, u32>> {
-    let n = u32::try_from(distance.capacity()).map_err(|_| massively::Error::LengthTooLarge {
-        len: distance.capacity(),
-    })?;
-    let stencil = vector::transform(
+    let n = distance.len();
+    let stencil = vector::map(
         exec,
         zip2(distance.slice(..), lazy::constant(depth).take(n)),
         IsDepth,
@@ -119,10 +117,10 @@ pub fn solve<R: Runtime>(
         )?;
 
         let mut max_depth = 0u32;
-        let zero = exec.value(0.0f32)?;
+        let zero = 0.0f32;
         for depth in 0..n {
             let frontier = vertices_at_depth(exec, &distance, depth)?;
-            if frontier.capacity() == 0 {
+            if frontier.len() == 0 {
                 break;
             }
             max_depth = depth;
@@ -140,7 +138,7 @@ pub fn solve<R: Runtime>(
                 ),
                 PathContribution,
             )
-            .update_by_destination(exec, zero.clone(), SumF32, paths.slice_mut(..))?;
+            .update_by_destination(exec, zero, SumF32, paths.slice_mut(..))?;
         }
 
         let dependency = common::filled(exec, n as usize, 0.0f32)?;
@@ -162,7 +160,7 @@ pub fn solve<R: Runtime>(
                 ),
                 DependencyContribution,
             )
-            .reduce_by_source(exec, zero.clone(), SumF32)?;
+            .reduce_by_source(exec, zero, SumF32)?;
             vector::scatter(
                 exec,
                 values.slice(..),
@@ -171,7 +169,7 @@ pub fn solve<R: Runtime>(
             )?;
         }
 
-        let next = vector::transform(
+        let next = vector::map(
             exec,
             zip2(
                 zip2(centrality.slice(..), dependency.slice(..)),

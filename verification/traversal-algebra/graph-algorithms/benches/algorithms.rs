@@ -64,7 +64,7 @@ fn bench_iterative(c: &mut Criterion, exec: &Executor<WgpuRuntime>) {
                 .map(|coordinate| coordinate.1)
                 .collect::<Vec<_>>(),
         );
-        let coordinates = vector::transform(
+        let coordinates = vector::map(
             exec,
             zip2(latitude.slice(..), longitude.slice(..)),
             Identity,

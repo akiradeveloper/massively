@@ -31,9 +31,9 @@ pub fn solve<R: Runtime>(
         common::indices(frontier.slice(..)),
         distance.slice_mut(..),
     )?;
-    let infinity = exec.value(u32::MAX)?;
+    let infinity = u32::MAX;
 
-    while frontier.capacity() != 0 {
+    while frontier.len() != 0 {
         frontier = common::materialize_exact(
             exec,
             graph::traverse(
@@ -45,7 +45,7 @@ pub fn solve<R: Runtime>(
             .map(graph::source(distance.slice(..)), AddOne)
             .relax_min_by_destination(
                 exec,
-                infinity.clone(),
+                infinity,
                 distance.slice(..),
                 distance.slice_mut(..),
             )?,

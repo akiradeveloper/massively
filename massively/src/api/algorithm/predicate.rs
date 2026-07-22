@@ -1,28 +1,38 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MBool, MIndex, MIter, MVal, op::PredicateOp};
+use crate::{Error, Executor, MIndex, MIter, op::PredicateOp};
 
 macro_rules! predicate_api {
-    ($name:ident, $output:ty, $doc:literal) => {
+    ($name:ident, $core_name:ident, $device_output:ty, $output:ty, $map:expr, $doc:literal) => {
         #[doc = $doc]
         pub fn $name<R, Input, Pred>(
             exec: &Executor<R>,
             input: Input,
             pred: Pred,
-        ) -> Result<MVal<R, $output>, Error>
+        ) -> Result<$output, Error>
         where
             R: Runtime,
             Input: MIter<R>,
             Pred: PredicateOp<Input::Item>,
         {
-            crate::predicate::$name(exec, crate::api::iter::lower_fixed::<R, _>(input), pred)
+            let len = input.len()?;
+            let value = crate::predicate::$core_name(
+                exec,
+                crate::api::iter::lower_fixed::<R, _>(input),
+                pred,
+            )?;
+            let value: $device_output = value.read(exec)?;
+            Ok(($map)(value, len))
         }
     };
 }
 
 predicate_api!(
     count_if,
+    count_if,
     MIndex,
+    MIndex,
+    |value, _len| value,
     r#"Counts items satisfying a predicate.
 
 # Examples
@@ -36,21 +46,24 @@ struct Even;
 
 #[cubecl::cube]
 impl op::PredicateOp<u32> for Even {
-    fn apply(value: u32) -> massively::MBool {
-        op::mbool(value % 2 == 0)
+    fn apply(value: u32) -> bool {
+        value % 2 == 0
     }
 }
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let input = exec.to_device(&[1_u32, 2, 3, 4]);
 
-assert_eq!(count_if(&exec, input.slice(..), Even).unwrap().read(&exec).unwrap(), 2);
+assert_eq!(count_if(&exec, input.slice(..), Even).unwrap(), 2);
 ```
 "#
 );
 predicate_api!(
     all_of,
-    MBool,
+    count_if,
+    u32,
+    bool,
+    |value, len| value == len,
     r#"Returns whether every item satisfies a predicate.
 
 # Examples
@@ -64,21 +77,24 @@ struct Even;
 
 #[cubecl::cube]
 impl op::PredicateOp<u32> for Even {
-    fn apply(value: u32) -> massively::MBool {
-        op::mbool(value % 2 == 0)
+    fn apply(value: u32) -> bool {
+        value % 2 == 0
     }
 }
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let input = exec.to_device(&[2_u32, 4, 6]);
 
-assert_eq!(all_of(&exec, input.slice(..), Even).unwrap().read(&exec).unwrap(), 1);
+assert!(all_of(&exec, input.slice(..), Even).unwrap());
 ```
 "#
 );
 predicate_api!(
     any_of,
-    MBool,
+    count_if,
+    u32,
+    bool,
+    |value, _len| value != 0,
     r#"Returns whether any item satisfies a predicate.
 
 # Examples
@@ -92,21 +108,24 @@ struct Even;
 
 #[cubecl::cube]
 impl op::PredicateOp<u32> for Even {
-    fn apply(value: u32) -> massively::MBool {
-        op::mbool(value % 2 == 0)
+    fn apply(value: u32) -> bool {
+        value % 2 == 0
     }
 }
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let input = exec.to_device(&[1_u32, 3, 4]);
 
-assert_eq!(any_of(&exec, input.slice(..), Even).unwrap().read(&exec).unwrap(), 1);
+assert!(any_of(&exec, input.slice(..), Even).unwrap());
 ```
 "#
 );
 predicate_api!(
     none_of,
-    MBool,
+    count_if,
+    u32,
+    bool,
+    |value, _len| value == 0,
     r#"Returns whether no item satisfies a predicate.
 
 # Examples
@@ -120,21 +139,24 @@ struct Even;
 
 #[cubecl::cube]
 impl op::PredicateOp<u32> for Even {
-    fn apply(value: u32) -> massively::MBool {
-        op::mbool(value % 2 == 0)
+    fn apply(value: u32) -> bool {
+        value % 2 == 0
     }
 }
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let input = exec.to_device(&[1_u32, 3, 5]);
 
-assert_eq!(none_of(&exec, input.slice(..), Even).unwrap().read(&exec).unwrap(), 1);
+assert!(none_of(&exec, input.slice(..), Even).unwrap());
 ```
 "#
 );
 predicate_api!(
     find_if,
-    (MBool, MIndex),
+    find_if,
+    MIndex,
+    Option<MIndex>,
+    |index, _len| (index != u32::MAX).then_some(index),
     r#"Returns the first index satisfying a predicate.
 
 # Examples
@@ -148,21 +170,24 @@ struct Even;
 
 #[cubecl::cube]
 impl op::PredicateOp<u32> for Even {
-    fn apply(value: u32) -> massively::MBool {
-        op::mbool(value % 2 == 0)
+    fn apply(value: u32) -> bool {
+        value % 2 == 0
     }
 }
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let input = exec.to_device(&[1_u32, 3, 4, 6]);
 
-assert_eq!(find_if(&exec, input.slice(..), Even).unwrap().read(&exec).unwrap(), (1, 2));
+assert_eq!(find_if(&exec, input.slice(..), Even).unwrap(), Some(2));
 ```
 "#
 );
 predicate_api!(
     is_partitioned,
-    MBool,
+    is_partitioned,
+    u32,
+    bool,
+    |index, _len| index == u32::MAX,
     r#"Returns whether passing items precede failing items.
 
 # Examples
@@ -176,15 +201,15 @@ struct Even;
 
 #[cubecl::cube]
 impl op::PredicateOp<u32> for Even {
-    fn apply(value: u32) -> massively::MBool {
-        op::mbool(value % 2 == 0)
+    fn apply(value: u32) -> bool {
+        value % 2 == 0
     }
 }
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let input = exec.to_device(&[2_u32, 4, 1, 3]);
 
-assert_eq!(is_partitioned(&exec, input.slice(..), Even).unwrap().read(&exec).unwrap(), 1);
+assert!(is_partitioned(&exec, input.slice(..), Even).unwrap());
 ```
 "#
 );

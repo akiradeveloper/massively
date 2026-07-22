@@ -8,48 +8,48 @@ use massively::{
     vector::{
         all_of, any_of, copy_where, count_if, exclusive_scan, exclusive_scan_by_key, find_if,
         gather, gather_where, inclusive_scan, inclusive_scan_by_key, is_partitioned, lower_bound,
-        max_element, merge, min_element, minmax_element, none_of, partition, radix_sort_by_key,
-        reduce, reduce_by_key, remove_where, scatter, scatter_reduce, scatter_where,
-        set_difference, set_intersection, set_union, sort, sort_by_key, transform, unique_by_key,
-        upper_bound,
+        map, max_element, merge, merge_by_key, min_element, minmax_element, none_of, partition,
+        radix_sort_by_key, reduce, reduce_by_key, remove_where, scatter, scatter_reduce,
+        scatter_where, set_difference, set_intersection, set_union, sort, sort_by_key, unique,
+        unique_by_key, upper_bound,
     },
 };
 
 const N: usize = 10_000_000;
 
 struct EqualU32;
-struct EvenUsize;
+struct EvenIndex;
 struct LessU32;
-struct LessUsize;
+struct LessIndex;
 struct MulTwo;
 struct PositiveF32;
 struct SumF32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for EqualU32 {
-    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-        massively::op::mbool(lhs == rhs)
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs == rhs
     }
 }
 
 #[cubecl::cube]
-impl PredicateOp<u32> for EvenUsize {
-    fn apply(value: u32) -> massively::MBool {
-        massively::op::mbool(value % 2u32 == 0u32)
+impl PredicateOp<u32> for EvenIndex {
+    fn apply(value: u32) -> bool {
+        value % 2u32 == 0u32
     }
 }
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for LessU32 {
-    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-        massively::op::mbool(lhs < rhs)
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs < rhs
     }
 }
 
 #[cubecl::cube]
-impl BinaryPredicateOp<u32> for LessUsize {
-    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-        massively::op::mbool(lhs < rhs)
+impl BinaryPredicateOp<u32> for LessIndex {
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs < rhs
     }
 }
 
@@ -64,8 +64,8 @@ impl UnaryOp<f32> for MulTwo {
 
 #[cubecl::cube]
 impl PredicateOp<f32> for PositiveF32 {
-    fn apply(input: f32) -> massively::MBool {
-        massively::op::mbool(input > 0.0)
+    fn apply(input: f32) -> bool {
+        input > 0.0
     }
 }
 
@@ -102,6 +102,12 @@ macro_rules! benchmark {
     };
 }
 
+macro_rules! benchmark_synchronous {
+    ($group:ident, $name:literal, $expression:expr) => {
+        $group.bench_function($name, |b| b.iter(|| black_box($expression)));
+    };
+}
+
 fn bench_performance(c: &mut Criterion) {
     let exec = common::exec();
     let mut group = c.benchmark_group("performance");
@@ -112,27 +118,21 @@ fn bench_performance(c: &mut Criterion) {
         benchmark!(
             group,
             exec,
-            "transform",
-            transform(&exec, black_box(values.slice(..)), MulTwo).unwrap()
+            "map",
+            map(&exec, black_box(values.slice(..)), MulTwo).unwrap()
         );
     }
 
     {
         let values = exec.to_device(&common::dense_f32(N));
         let keys = exec.to_device(&common::run_keys(N, 8));
-        let reduce_init = exec.value(0.0_f32).unwrap();
+        let reduce_init = 0.0_f32;
         exec.sync().unwrap();
         benchmark!(
             group,
             exec,
             "exclusive_scan",
-            exclusive_scan(
-                &exec,
-                black_box(values.slice(..)),
-                exec.value(0.0).unwrap(),
-                SumF32,
-            )
-            .unwrap()
+            exclusive_scan(&exec, black_box(values.slice(..)), 0.0, SumF32,).unwrap()
         );
         benchmark!(
             group,
@@ -167,9 +167,8 @@ fn bench_performance(c: &mut Criterion) {
             )
             .unwrap()
         );
-        benchmark!(
+        benchmark_synchronous!(
             group,
-            exec,
             "reduce",
             reduce(
                 &exec,
@@ -179,9 +178,8 @@ fn bench_performance(c: &mut Criterion) {
             )
             .unwrap()
         );
-        benchmark!(
+        benchmark_synchronous!(
             group,
-            exec,
             "reduce_by_key",
             reduce_by_key(
                 &exec,
@@ -199,9 +197,8 @@ fn bench_performance(c: &mut Criterion) {
         let values = exec.to_device(&common::dense_f32(N));
         let flags = exec.to_device(&common::flags(N, 50));
         exec.sync().unwrap();
-        benchmark!(
+        benchmark_synchronous!(
             group,
-            exec,
             "copy_where",
             copy_where(
                 &exec,
@@ -210,15 +207,13 @@ fn bench_performance(c: &mut Criterion) {
             )
             .unwrap()
         );
-        benchmark!(
+        benchmark_synchronous!(
             group,
-            exec,
             "partition",
             partition(&exec, black_box(values.slice(..)), PositiveF32).unwrap()
         );
-        benchmark!(
+        benchmark_synchronous!(
             group,
-            exec,
             "remove_where",
             remove_where(
                 &exec,
@@ -238,7 +233,7 @@ fn bench_performance(c: &mut Criterion) {
                 .collect::<Vec<_>>(),
         );
         let flags = exec.to_device(&common::flags(N, 50));
-        let reduce_init = exec.value(0.0_f32).unwrap();
+        let reduce_init = 0.0_f32;
         let output = exec.alloc::<f32>(N);
         exec.sync().unwrap();
         benchmark!(
@@ -339,9 +334,13 @@ fn bench_performance(c: &mut Criterion) {
         let keys = exec.to_device(&common::run_keys(N, 8));
         let values = exec.to_device(&ascending(N));
         exec.sync().unwrap();
-        benchmark!(
+        benchmark_synchronous!(
             group,
-            exec,
+            "unique",
+            unique(&exec, black_box(keys.slice(..)), EqualU32).unwrap()
+        );
+        benchmark_synchronous!(
+            group,
             "unique_by_key",
             unique_by_key(
                 &exec,
@@ -371,6 +370,8 @@ fn bench_performance(c: &mut Criterion) {
                 .map(|index| (index * 2 + 1) as u32)
                 .collect::<Vec<_>>(),
         );
+        let left_values = exec.to_device(&common::dense_f32(N));
+        let right_values = exec.to_device(&common::dense_f32(N));
         exec.sync().unwrap();
         benchmark!(
             group,
@@ -384,15 +385,28 @@ fn bench_performance(c: &mut Criterion) {
             )
             .unwrap()
         );
+        benchmark!(
+            group,
+            exec,
+            "merge_by_key",
+            merge_by_key(
+                &exec,
+                black_box(left.slice(..)),
+                black_box(left_values.slice(..)),
+                black_box(right.slice(..)),
+                black_box(right_values.slice(..)),
+                LessU32,
+            )
+            .unwrap()
+        );
     }
 
     {
         let left = exec.to_device(&ascending(N));
         let right = exec.to_device(&shifted(N));
         exec.sync().unwrap();
-        benchmark!(
+        benchmark_synchronous!(
             group,
-            exec,
             "set_difference",
             set_difference(
                 &exec,
@@ -402,9 +416,8 @@ fn bench_performance(c: &mut Criterion) {
             )
             .unwrap()
         );
-        benchmark!(
+        benchmark_synchronous!(
             group,
-            exec,
             "set_intersection",
             set_intersection(
                 &exec,
@@ -414,9 +427,8 @@ fn bench_performance(c: &mut Criterion) {
             )
             .unwrap()
         );
-        benchmark!(
+        benchmark_synchronous!(
             group,
-            exec,
             "set_union",
             set_union(
                 &exec,
@@ -458,59 +470,50 @@ fn bench_performance(c: &mut Criterion) {
         );
     }
 
-    benchmark!(
+    benchmark_synchronous!(
         group,
-        exec,
         "all_of",
-        all_of(&exec, lazy::counting(0).take(N as u32), EvenUsize).unwrap()
+        all_of(&exec, lazy::counting(0).take(N as u32), EvenIndex).unwrap()
     );
-    benchmark!(
+    benchmark_synchronous!(
         group,
-        exec,
         "any_of",
-        any_of(&exec, lazy::counting(0).take(N as u32), EvenUsize).unwrap()
+        any_of(&exec, lazy::counting(0).take(N as u32), EvenIndex).unwrap()
     );
-    benchmark!(
+    benchmark_synchronous!(
         group,
-        exec,
         "count_if",
-        count_if(&exec, lazy::counting(0).take(N as u32), EvenUsize).unwrap()
+        count_if(&exec, lazy::counting(0).take(N as u32), EvenIndex).unwrap()
     );
-    benchmark!(
+    benchmark_synchronous!(
         group,
-        exec,
         "find_if",
-        find_if(&exec, lazy::counting(0).take(N as u32), EvenUsize).unwrap()
+        find_if(&exec, lazy::counting(0).take(N as u32), EvenIndex).unwrap()
     );
-    benchmark!(
+    benchmark_synchronous!(
         group,
-        exec,
         "is_partitioned",
-        is_partitioned(&exec, lazy::counting(0).take(N as u32), EvenUsize).unwrap()
+        is_partitioned(&exec, lazy::counting(0).take(N as u32), EvenIndex).unwrap()
     );
-    benchmark!(
+    benchmark_synchronous!(
         group,
-        exec,
         "none_of",
-        none_of(&exec, lazy::counting(0).take(N as u32), EvenUsize).unwrap()
+        none_of(&exec, lazy::counting(0).take(N as u32), EvenIndex).unwrap()
     );
-    benchmark!(
+    benchmark_synchronous!(
         group,
-        exec,
         "max_element",
-        max_element(&exec, lazy::counting(0).take(N as u32), LessUsize).unwrap()
+        max_element(&exec, lazy::counting(0).take(N as u32), LessIndex).unwrap()
     );
-    benchmark!(
+    benchmark_synchronous!(
         group,
-        exec,
         "min_element",
-        min_element(&exec, lazy::counting(0).take(N as u32), LessUsize).unwrap()
+        min_element(&exec, lazy::counting(0).take(N as u32), LessIndex).unwrap()
     );
-    benchmark!(
+    benchmark_synchronous!(
         group,
-        exec,
         "minmax_element",
-        minmax_element(&exec, lazy::counting(0).take(N as u32), LessUsize).unwrap()
+        minmax_element(&exec, lazy::counting(0).take(N as u32), LessIndex).unwrap()
     );
 
     group.finish();

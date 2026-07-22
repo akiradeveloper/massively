@@ -7,16 +7,6 @@ use std::cmp::Ordering;
 
 use crate::op;
 
-pub fn transform<T, Op>(source: &[T], _op: Op, output: &mut [Op::Output])
-where
-    T: Copy,
-    Op: op::UnaryOp<T>,
-{
-    for i in 0..source.len() {
-        output[i] = Op::apply(source[i]);
-    }
-}
-
 pub fn map<T, Op>(source: &[T], _op: Op) -> Vec<Op::Output>
 where
     T: Copy,

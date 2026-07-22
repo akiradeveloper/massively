@@ -8,3 +8,4 @@ mod reduce;
 mod runtime;
 mod tuple;
 mod flat_rows;
+mod flat_map;

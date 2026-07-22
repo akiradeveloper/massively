@@ -68,7 +68,7 @@ where
         Ok(self.capacity())
     }
     fn truncate(&mut self, len: usize) {
-        DeviceVec::truncate(self, len);
+        DeviceVec::truncate_usize(self, len);
     }
     fn logical_extent(&self) -> crate::extent::LogicalExtent {
         DeviceVec::logical_extent(self)
@@ -80,7 +80,7 @@ where
         self.column()
     }
     fn write(&self) -> Self::Write {
-        self.slice_mut(..)
+        self.slice_mut_usize(..)
     }
     fn read_first(&self, exec: &Executor<R>) -> Result<Self::Item, Error> {
         exec.to_host(self)?
@@ -89,10 +89,10 @@ where
             .ok_or(Error::LengthMismatch { left: 0, right: 1 })
     }
     fn slice<Range: RangeBounds<usize>>(&self, range: Range) -> Self::Read {
-        self.slice(range)
+        self.slice_usize(range)
     }
     fn slice_mut<Range: RangeBounds<usize>>(&self, range: Range) -> Self::Write {
-        self.slice_mut(range)
+        self.slice_mut_usize(range)
     }
 
     fn read_item(&self, exec: &Executor<R>, index: usize) -> Result<Self::Item, Error> {
@@ -102,7 +102,7 @@ where
                 right: self.capacity(),
             });
         }
-        Ok(exec.to_host(&self.slice(index..index + 1))?[0])
+        Ok(exec.to_host(&self.slice_usize(index..index + 1))?[0])
     }
 }
 
@@ -283,19 +283,6 @@ where
     fn alloc_scratch(exec: &Executor<R>, len: usize) -> Self::Storage {
         Item::StorageLeaves::alloc_columns(exec, len)
     }
-}
-
-pub(crate) fn scratch_singleton<R, Item>(
-    exec: &Executor<R>,
-    value: Item,
-) -> Result<<Item as ScratchStorage<R>>::Storage, Error>
-where
-    R: Runtime,
-    Item: ScratchStorage<R>,
-{
-    let storage = Item::alloc_scratch(exec, 1);
-    storage.write().fill_output(exec, value)?;
-    Ok(storage)
 }
 
 impl<R, L0> AllocColumns<R> for Last<L0>
@@ -729,7 +716,7 @@ where
     }
 
     fn truncate(&mut self, len: crate::MIndex) {
-        DeviceVec::truncate(self, len as usize);
+        DeviceVec::truncate(self, len);
     }
 
     fn logical_extent(&self) -> crate::extent::LogicalExtent {
@@ -746,18 +733,18 @@ where
 
     fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
     where
-        Bounds: RangeBounds<usize>,
+        Bounds: RangeBounds<crate::MIndex>,
     {
         let (start, count) = crate::api::iter::resolve_iter_range(self.capacity(), range);
-        self.slice(start..start + count)
+        self.slice_usize(start..start + count)
     }
 
     fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
     where
-        Bounds: RangeBounds<usize>,
+        Bounds: RangeBounds<crate::MIndex>,
     {
         let (start, count) = crate::api::iter::resolve_iter_range(self.capacity(), range);
-        self.slice_mut(start..start + count)
+        self.slice_mut_usize(start..start + count)
     }
 }
 
@@ -820,7 +807,7 @@ where
 
     fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
     where
-        Bounds: RangeBounds<usize>,
+        Bounds: RangeBounds<crate::MIndex>,
     {
         let len = MStorage::capacity(self).expect("storage columns have equal lengths");
         let (start, count) = crate::api::iter::resolve_iter_range(len as usize, range);
@@ -829,7 +816,7 @@ where
 
     fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
     where
-        Bounds: RangeBounds<usize>,
+        Bounds: RangeBounds<crate::MIndex>,
     {
         let len = MStorage::capacity(self).expect("storage columns have equal lengths");
         let (start, count) = crate::api::iter::resolve_iter_range(len as usize, range);
@@ -851,8 +838,7 @@ impl<R: Runtime> Executor<R> {
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     /// let output = exec.alloc::<u32>(4);
     /// let values = exec.alloc::<u32>(4);
-    /// let value = exec.value(7_u32).unwrap();
-    /// fill(&exec, &value, values.slice_mut(..)).unwrap();
+    /// fill(&exec, 7_u32, values.slice_mut(..)).unwrap();
     /// scatter(
     ///     &exec,
     ///     values.slice(..),
@@ -882,12 +868,19 @@ impl<R: Runtime> Executor<R> {
     /// use massively::Executor;
     ///
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-    /// let value = exec.value(42_u32).unwrap();
-    /// let values = exec.full(3, &value).unwrap();
+    /// let values = exec.full(3, 42_u32).unwrap();
     ///
     /// assert_eq!(exec.to_host(&values).unwrap(), vec![42, 42, 42]);
     /// ```
-    pub fn full<Item>(
+    pub fn full<Item>(&self, len: usize, value: Item) -> Result<crate::MVec<R, Item>, Error>
+    where
+        Item: MAlloc<R>,
+    {
+        let value = self.value(value)?;
+        self.full_value(len, &value)
+    }
+
+    pub(crate) fn full_value<Item>(
         &self,
         len: usize,
         value: &crate::MVal<R, Item>,
@@ -896,102 +889,8 @@ impl<R: Runtime> Executor<R> {
         Item: MAlloc<R>,
     {
         let storage = self.alloc::<Item>(len);
-        crate::vector::fill(self, value, MStorage::slice_mut(&storage, ..))?;
+        crate::api::algorithm::fill_value(self, value, MStorage::slice_mut(&storage, ..))?;
         Ok(storage)
-    }
-}
-
-/// Normalizes an arbitrary read expression into temporary flat-row storage.
-///
-/// Consumers that need to add another read leaf (for example a permutation)
-/// use this boundary to turn an `A13` expression back into at most twelve
-/// physical payload leaves.
-#[doc(hidden)]
-pub(crate) trait NormalizeInput<R: Runtime>: ReadExpression + Sized {
-    type Storage: RowStorage<R>;
-    type SemanticRead: ReadExpression<Item = Self::Item> + LowerReadExpression + StageRead<R, Env0>;
-
-    fn normalize(self, exec: &Executor<R>) -> Result<Self::Storage, Error>;
-
-    fn semantic_read(storage: &Self::Storage) -> Self::SemanticRead;
-}
-
-/// Normalizes an input after a single semantic prefix item.
-#[doc(hidden)]
-pub(crate) trait PrependInput<R: Runtime>: NormalizeInput<R> {
-    fn prepend(self, exec: &Executor<R>, prefix: Self::Item) -> Result<Self::Storage, Error>;
-}
-
-impl<R, Input> PrependInput<R> for Input
-where
-    R: Runtime,
-    Input: NormalizeInput<R> + LowerReadExpression + StageRead<R, Env0>,
-    Input::Item: ScratchStorage<R, Storage = Input::Storage>,
-    Input::Storage: RowStorage<R, Item = Input::Item>,
-    <Input::Storage as RowStorage<R>>::Write:
-        crate::selection::FillOutput<R> + LowerOutputExpression + StageOutput<R, Env0>,
-    <<Input::Item as StorageLayout>::StorageLeaves as cubecl::prelude::CubeType>::ExpandType:
-        crate::storage::StorePadded12Expand,
-    Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
-            R,
-            Input,
-            <Input::Storage as RowStorage<R>>::Write,
-            crate::read::KernelReadSlots<Input::Slots>,
-            crate::output::KernelOutputSlots<
-                <<Input::Storage as RowStorage<R>>::Write as LowerOutputExpression>::Slots,
-            >,
-        >,
-{
-    fn prepend(self, exec: &Executor<R>, prefix: Self::Item) -> Result<Self::Storage, Error> {
-        let len = self.logical_len()?;
-        let input_extent = self.logical_extent()?;
-        let output_extent = crate::extent::LogicalExtent::add(
-            exec,
-            &crate::extent::LogicalExtent::fixed(1),
-            &input_extent,
-            len + 1,
-        )?;
-        let mut prefixed = Input::Item::alloc_scratch(exec, len + 1);
-        prefixed.set_logical_extent(output_extent);
-        prefixed.slice_mut(..1).fill_output(exec, prefix)?;
-        materialize(exec, self, prefixed.slice_mut(1..))?;
-        Ok(prefixed)
-    }
-}
-
-impl<R, Input> NormalizeInput<R> for Input
-where
-    R: Runtime,
-    Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
-    Input::Item: ScratchStorage<R>,
-    <Input::Item as StorageLayout>::StorageLeaves: crate::storage::StorePadded12,
-    <Input::Item as ScratchStorage<R>>::Storage: RowStorage<R>,
-    <<Input::Item as ScratchStorage<R>>::Storage as RowStorage<R>>::Write:
-        OutputExpression<Item = Input::Item>,
-    Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
-            R,
-            Input,
-            <<Input::Item as ScratchStorage<R>>::Storage as RowStorage<R>>::Write,
-            crate::read::KernelReadSlots<Input::Slots>,
-            crate::output::KernelOutputSlots<
-                <<Input::Item as ScratchStorage<R>>::Storage as RowStorage<R>>::WriteSlots,
-            >,
-        >,
-{
-    type Storage = <Input::Item as ScratchStorage<R>>::Storage;
-    type SemanticRead = <<Input::Item as ScratchStorage<R>>::Storage as RowStorage<R>>::Read;
-
-    fn normalize(self, exec: &Executor<R>) -> Result<Self::Storage, Error> {
-        let len = self.logical_len()?;
-        let extent = self.logical_extent()?;
-        let mut storage = Input::Item::alloc_scratch(exec, len);
-        storage.set_logical_extent(extent);
-        materialize(exec, self, storage.write())?;
-        Ok(storage)
-    }
-
-    fn semantic_read(storage: &Self::Storage) -> Self::SemanticRead {
-        storage.read()
     }
 }
 
@@ -1041,28 +940,6 @@ where
     }
 }
 
-/// Materializes a fixed-ABI read expression into internal scratch storage.
-///
-/// The semantic item itself need not support owned allocation; only its
-/// fixed-width physical leaves are materialized.
-pub(crate) fn normalize_lowered_scratch<R, Input>(
-    exec: &Executor<R>,
-    input: Input,
-) -> Result<<Input::Item as ScratchStorage<R>>::Storage, Error>
-where
-    R: Runtime,
-    Input: crate::core::facade::KernelInput<R>,
-    Input::Item: ScratchStorage<R>,
-    <Input::Item as ScratchStorage<R>>::Storage: RowStorage<R, Item = Input::Item>,
-{
-    let len = input.logical_len()?;
-    let extent = input.logical_extent()?;
-    let mut storage = Input::Item::alloc_scratch(exec, len);
-    storage.set_logical_extent(extent);
-    crate::transform::materialize_fixed(exec, &input, &storage.write())?;
-    Ok(storage)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1100,8 +977,7 @@ mod tests {
     #[test]
     fn full_writes_and_exposes_flat_columns() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-        let value = exec.value((7, 3.5, -2)).unwrap();
-        let storage = exec.full::<FlatRow3>(2, &value).unwrap();
+        let storage = exec.full::<FlatRow3>(2, (7, 3.5, -2)).unwrap();
         let (a, b, c) = storage.into_columns();
 
         assert_eq!(exec.to_host(&a).unwrap(), vec![7, 7]);

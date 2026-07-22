@@ -6,11 +6,8 @@
 use cubecl::prelude::*;
 
 use crate::{
-    Error, Executor, MAlloc, MIndex, MIter, MIterMut, MStorage, MVal, MVec,
-    op::BinaryPredicateOp,
-    op::ReductionOp,
-    op::UnaryOp,
-    seg::{ForEachSegment, Reduce, SegmentIterator, SummarizingExecutableInto},
+    Error, Executor, MAlloc, MIndex, MIter, MIterMut, MStorage, MVal, MVec, op::BinaryPredicateOp,
+    op::ReductionOp, op::UnaryOp, seg::SegmentIterator,
 };
 
 use super::{
@@ -23,8 +20,8 @@ struct IndexLess;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for IndexLess {
-    fn apply(lhs: u32, rhs: u32) -> crate::MBool {
-        crate::op::mbool(lhs < rhs)
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs < rhs
     }
 }
 
@@ -32,8 +29,8 @@ struct IndexEqual;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for IndexEqual {
-    fn apply(lhs: u32, rhs: u32) -> crate::MBool {
-        crate::op::mbool(lhs == rhs)
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs == rhs
     }
 }
 
@@ -86,9 +83,10 @@ pub struct MappedTraversal<R: Runtime, Expr, Map> {
 /// Selects all outgoing edges of the vertices in `frontier`.
 ///
 /// `max_edges` is a host-known physical allocation bound. The actual number of
-/// selected edges remains in [`Traversal::edge_count`] on the device. If the
-/// bound is too small, terminal operations safely process its prefix and
-/// [`Traversal::fits`] is false; neither check performs a host readback.
+/// selected edges remains internal and device-resident until
+/// [`Traversal::edge_count`] or a variable-length terminal requests it. If
+/// the bound is too small, terminal operations safely process its prefix.
+/// Construction and composition do not read device-produced lengths back.
 pub fn traverse<R, Destinations, Offsets, Frontier>(
     exec: &Executor<R>,
     graph: Csr<Destinations, Offsets>,
@@ -108,12 +106,13 @@ where
 }
 
 impl<R: Runtime> Traversal<R> {
-    /// Number of edges selected by this traversal, kept on the device.
+    /// Number of edges selected by this traversal.
     ///
     /// This can exceed [`Self::capacity`] when the supplied physical bound was
     /// too small.  Terminal results contain the first `capacity` edges.
-    pub const fn edge_count(&self) -> &MVal<R, MIndex> {
-        &self.control.required_len
+    /// This is an explicit synchronization boundary.
+    pub fn edge_count(&self, exec: &Executor<R>) -> Result<MIndex, Error> {
+        self.control.required_len.read(exec)
     }
 
     /// Host-known physical edge capacity supplied to [`traverse`].
@@ -123,10 +122,9 @@ impl<R: Runtime> Traversal<R> {
 
     /// Whether the selected edge stream fits in the physical capacity.
     ///
-    /// The result remains device-resident and can be read explicitly at an
-    /// application boundary when an undersized bound must be reported.
-    pub const fn fits(&self) -> &MVal<R, crate::MBool> {
-        &self.control.fits
+    /// This is an explicit synchronization boundary.
+    pub fn fits(&self, exec: &Executor<R>) -> Result<bool, Error> {
+        Ok(self.edge_count(exec)? <= self.capacity())
     }
 
     /// Attaches a lazy edge expression and map operation.
@@ -146,12 +144,12 @@ where
     Map: UnaryOp<Expr::Item>,
     Map::Output: MAlloc<R> + Copy,
 {
-    /// Returns mapped storage carrying its device-resident logical length.
+    /// Returns mapped storage with an exact host-visible logical length.
     pub fn emit(self, exec: &Executor<R>) -> Result<MVec<R, Map::Output>, Error> {
         let capacity = self.traversal.control.capacity as usize;
         let mut output = exec.alloc::<Map::Output>(capacity);
         let len = self.emit_into(exec, output.slice_mut(..))?;
-        output.set_logical_extent(len.logical_extent(capacity));
+        output.set_fixed_len(len.read(exec)?);
         Ok(output)
     }
 
@@ -184,12 +182,13 @@ where
     pub fn reduce_by_source<ReduceOp>(
         self,
         exec: &Executor<R>,
-        init: MVal<R, Map::Output>,
+        init: Map::Output,
         reduce: ReduceOp,
     ) -> Result<MVec<R, Map::Output>, Error>
     where
         ReduceOp: ReductionOp<Map::Output>,
     {
+        let init = exec.value(init)?;
         let output = exec.alloc::<Map::Output>(self.traversal.control.source_count as usize);
         self.reduce_by_source_into(exec, init, reduce, output.slice_mut(..))?;
         Ok(output)
@@ -208,7 +207,8 @@ where
         ReduceOp: ReductionOp<Map::Output>,
     {
         let input = self.expr.materialize(exec, &self.traversal.control)?;
-        let mapped = exec.full::<Map::Output>(self.traversal.control.capacity as usize, &init)?;
+        let mapped =
+            exec.full_value::<Map::Output>(self.traversal.control.capacity as usize, &init)?;
         crate::api::algorithm::transform::transform_prefix_into(
             exec,
             input.slice(..),
@@ -216,12 +216,14 @@ where
             self.traversal.control.output_len.scratch_storage(),
             mapped.slice_mut(..),
         )?;
-        ForEachSegment(Reduce(reduce, init)).run_into(
+        crate::seg::reduce_segments(
             exec,
             SegmentIterator::new(
                 mapped.slice(..),
                 self.traversal.control.output_offsets.slice(..),
             ),
+            init,
+            reduce,
             output,
         )
     }
@@ -230,14 +232,15 @@ where
     pub fn reduce_by_destination<ReduceOp>(
         self,
         exec: &Executor<R>,
-        init: MVal<R, Map::Output>,
+        init: Map::Output,
         reduce: ReduceOp,
     ) -> Result<MVec<R, Map::Output>, Error>
     where
         ReduceOp: ReductionOp<Map::Output>,
     {
+        let init = exec.value(init)?;
         let output = exec.alloc::<Map::Output>(self.traversal.control.vertex_count as usize);
-        crate::vector::fill(exec, &init, output.slice_mut(..))?;
+        crate::api::algorithm::fill_value(exec, &init, output.slice_mut(..))?;
         self.reduce_by_destination_into(exec, init, reduce, output.slice_mut(..))?;
         Ok(output)
     }
@@ -255,7 +258,8 @@ where
         ReduceOp: ReductionOp<Map::Output>,
     {
         let input = self.expr.materialize(exec, &self.traversal.control)?;
-        let mapped = exec.full::<Map::Output>(self.traversal.control.capacity as usize, &init)?;
+        let mapped =
+            exec.full_value::<Map::Output>(self.traversal.control.capacity as usize, &init)?;
         crate::api::algorithm::transform::transform_prefix_into(
             exec,
             input.slice(..),
@@ -263,7 +267,7 @@ where
             self.traversal.control.output_len.scratch_storage(),
             mapped.slice_mut(..),
         )?;
-        crate::vector::scatter_reduce(
+        crate::api::algorithm::scatter_reduce_value(
             exec,
             mapped.slice(..),
             self.traversal.control.destinations.slice(..),
@@ -281,7 +285,7 @@ where
     pub fn update_by_destination<StateOutput, ReduceOp>(
         self,
         exec: &Executor<R>,
-        proposal_init: MVal<R, Map::Output>,
+        proposal_init: Map::Output,
         reduce: ReduceOp,
         state_output: StateOutput,
     ) -> Result<(), Error>
@@ -289,7 +293,7 @@ where
         StateOutput: MIterMut<R, Item = Map::Output>,
         ReduceOp: ReductionOp<Map::Output>,
     {
-        self.reduce_by_destination_into(exec, proposal_init, reduce, state_output)
+        self.reduce_by_destination_into(exec, exec.value(proposal_init)?, reduce, state_output)
     }
 
     /// Applies minimum proposals by destination and emits vertices whose state decreased.
@@ -299,7 +303,7 @@ where
     pub fn relax_min_by_destination<State, StateOutput>(
         self,
         exec: &Executor<R>,
-        infinity: MVal<R, u32>,
+        infinity: u32,
         state: State,
         state_output: StateOutput,
     ) -> Result<MVec<R, u32>, Error>
@@ -311,6 +315,7 @@ where
             + MAlloc<R, Owned = crate::DeviceVec<R, u32>>,
     {
         let capacity = self.traversal.control.capacity as usize;
+        let infinity = exec.value(infinity)?;
         let mut next = exec.alloc::<u32>(capacity);
         let len = self.relax_min_by_destination_into(
             exec,
@@ -319,7 +324,7 @@ where
             state_output,
             next.slice_mut(..),
         )?;
-        next.set_logical_extent(len.logical_extent(capacity));
+        next.set_fixed_len(len.read(exec)?);
         Ok(next)
     }
 
@@ -346,7 +351,7 @@ where
         }
 
         let input = self.expr.materialize(exec, &self.traversal.control)?;
-        let proposals = exec.full(edge_capacity as usize, &infinity)?;
+        let proposals = exec.full_value(edge_capacity as usize, &infinity)?;
         crate::api::algorithm::transform::transform_prefix_into(
             exec,
             input.slice(..),
@@ -369,8 +374,8 @@ where
         let unique_destinations = exec.alloc_column::<u32>(edge_capacity as usize);
         let reduced_proposals = exec.alloc_column::<u32>(edge_capacity as usize);
         let zero = exec.value(0u32)?;
-        crate::vector::fill(exec, &zero, unique_destinations.slice_mut(..))?;
-        crate::vector::fill(exec, &infinity, reduced_proposals.slice_mut(..))?;
+        crate::api::algorithm::fill_value(exec, &zero, unique_destinations.slice_mut(..))?;
+        crate::api::algorithm::fill_value(exec, &infinity, reduced_proposals.slice_mut(..))?;
         let unique_len = crate::vector::reduce_by_key_into(
             exec,
             sorted_destinations.slice(..),
@@ -409,6 +414,11 @@ where
             state_output,
         )?;
 
-        crate::vector::copy_where_into(exec, unique_destinations.slice(..), flags.slice(..), next)
+        crate::vector::copy_where_into(
+            exec,
+            unique_destinations.slice(..),
+            crate::lazy::map(flags.slice(..), crate::op::NonZero),
+            next,
+        )
     }
 }

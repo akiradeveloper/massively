@@ -3,8 +3,8 @@
 use cubecl::prelude::*;
 
 use crate::{
-    A1, Column, Constant, DeviceSliceMut, DeviceVec, Dispatch, Error, Executor, MBool, MVal,
-    ReadExpression, RowStorage, S1, StorageLayout, Transform, Zip,
+    A1, Column, Constant, DeviceSliceMut, DeviceVec, Dispatch, Error, Executor, ReadExpression,
+    RowStorage, S1, StorageLayout, Transform, Zip,
     indexed::GatherInput,
     op::UnaryOp,
     output::{LowerOutputExpression, OutputExpression, SliceOutput, StageOutput},
@@ -18,7 +18,7 @@ use crate::{
 const BLOCK_SIZE: u32 = 256;
 
 #[cubecl::cube(launch_unchecked)]
-fn selected_indices_kernel(positions: &[u32], len: &[u32], invert: &[u32], indices: &mut [u32]) {
+fn selected_indices_kernel(positions: &[u32], len: &[u32], indices: &mut [u32]) {
     let index = ABSOLUTE_POS as usize;
     if index < len[0] as usize {
         let previous = if index == 0usize {
@@ -26,15 +26,8 @@ fn selected_indices_kernel(positions: &[u32], len: &[u32], invert: &[u32], indic
         } else {
             positions[index - 1usize]
         };
-        let passes = positions[index] != previous;
-        let selected = if invert[0] != 0u32 { !passes } else { passes };
-        if selected {
-            let rank = if invert[0] != 0u32 {
-                index as u32 + 1u32 - positions[index]
-            } else {
-                positions[index]
-            };
-            indices[(rank - 1u32) as usize] = index as u32;
+        if positions[index] != previous {
+            indices[(positions[index] - 1u32) as usize] = index as u32;
         }
     }
 }
@@ -65,20 +58,20 @@ fn partition_permutation_kernel(
 struct IsTrue;
 
 #[cubecl::cube]
-impl UnaryOp<MBool> for IsTrue {
+impl UnaryOp<bool> for IsTrue {
     type Output = u32;
-    fn apply(input: MBool) -> u32 {
-        if input != 0u32 { 1u32 } else { 0u32 }
+    fn apply(input: bool) -> u32 {
+        if input { 1u32 } else { 0u32 }
     }
 }
 
 struct IsFalse;
 
 #[cubecl::cube]
-impl UnaryOp<MBool> for IsFalse {
+impl UnaryOp<bool> for IsFalse {
     type Output = u32;
-    fn apply(input: MBool) -> u32 {
-        if input != 0u32 { 0u32 } else { 1u32 }
+    fn apply(input: bool) -> u32 {
+        if input { 0u32 } else { 1u32 }
     }
 }
 
@@ -88,17 +81,6 @@ struct SumU32;
 impl ReductionOp<u32> for SumU32 {
     fn apply(lhs: u32, rhs: u32) -> u32 {
         lhs + rhs
-    }
-}
-
-struct InvertCount;
-
-#[cubecl::cube]
-impl UnaryOp<(u32, u32)> for InvertCount {
-    type Output = u32;
-
-    fn apply(input: (u32, u32)) -> u32 {
-        input.1 - input.0
     }
 }
 
@@ -173,7 +155,7 @@ where
 
 /// Internal capability to consume a logical stencil expression.
 #[doc(hidden)]
-pub trait FlagInput<R: Runtime>: ReadExpression<Item = MBool> + Sized {
+pub trait FlagInput<R: Runtime>: ReadExpression<Item = bool> + Sized {
     fn flag_len(&self) -> Result<usize, Error>;
     fn flag_extent(&self) -> Result<crate::extent::LogicalExtent, Error>;
     fn selected_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error>;
@@ -183,7 +165,7 @@ pub trait FlagInput<R: Runtime>: ReadExpression<Item = MBool> + Sized {
 impl<R, Stencil> FlagInput<R> for Stencil
 where
     R: Runtime,
-    Stencil: ReadExpression<Item = MBool> + LowerReadExpression + StageRead<R, Env0>,
+    Stencil: ReadExpression<Item = bool> + LowerReadExpression + StageRead<R, Env0>,
     Transform<Stencil, IsTrue>:
         ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
     Transform<Stencil, IsFalse>:
@@ -231,7 +213,7 @@ where
             positions.slice_mut(..),
         )?;
         positions.set_logical_extent(extent);
-        SelectionControl::from_positions(exec, positions, false)
+        SelectionControl::from_positions(exec, positions)
     }
 
     fn rejected_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error> {
@@ -245,7 +227,7 @@ where
             positions.slice_mut(..),
         )?;
         positions.set_logical_extent(extent);
-        SelectionControl::from_positions(exec, positions, false)
+        SelectionControl::from_positions(exec, positions)
     }
 }
 
@@ -261,75 +243,28 @@ pub struct SelectionControl<R: Runtime> {
 }
 
 impl<R: Runtime> SelectionControl<R> {
-    pub(crate) fn from_indices(
-        len: usize,
-        source_extent: crate::extent::LogicalExtent,
-        indices: DeviceVec<R, u32>,
-        count: DeviceVec<R, u32>,
-    ) -> Self {
-        Self {
-            len,
-            source_extent,
-            indices,
-            count,
-        }
-    }
-
     pub(crate) fn from_flags(exec: &Executor<R>, flags: DeviceVec<R, u32>) -> Result<Self, Error> {
         let positions = inclusive_scan_u32(exec, &flags)?;
-        Self::from_positions(exec, positions, false)
-    }
-
-    pub(crate) fn split_from_positions(
-        exec: &Executor<R>,
-        positions: DeviceVec<R, u32>,
-    ) -> Result<(Self, Self), Error> {
-        let selected = last_u32(exec, &positions)?;
-        let total: MVal<R, u32> =
-            MVal::from_storage(positions.logical_extent().materialize(exec)?)?;
-        let rejected = crate::vector::transform(
-            exec,
-            crate::zip2(selected.slice(..), total.as_iter()),
-            InvertCount,
-        )?;
-        let passing = Self::from_positions_with_count(exec, &positions, selected, false)?;
-        let failing = Self::from_positions_with_count(exec, &positions, rejected, true)?;
-        Ok((passing, failing))
+        Self::from_positions(exec, positions)
     }
 
     pub(crate) fn from_positions(
         exec: &Executor<R>,
         positions: DeviceVec<R, u32>,
-        invert: bool,
     ) -> Result<Self, Error> {
-        let selected = last_u32(exec, &positions)?;
-        let count = if invert {
-            let total: MVal<R, u32> =
-                MVal::from_storage(positions.logical_extent().materialize(exec)?)?;
-            crate::vector::transform(
-                exec,
-                crate::zip2(selected.slice(..), total.as_iter()),
-                InvertCount,
-            )?
-        } else {
-            selected
-        };
-        Self::from_positions_with_count(exec, &positions, count, invert)
+        let count = last_u32(exec, &positions)?;
+        Self::from_positions_with_count(exec, &positions, count)
     }
 
-    pub(crate) fn from_positions_with_count(
+    fn from_positions_with_count(
         exec: &Executor<R>,
         positions: &DeviceVec<R, u32>,
         count: DeviceVec<R, u32>,
-        invert: bool,
     ) -> Result<Self, Error> {
         let source_extent = positions.logical_extent();
         let mut indices = exec.alloc_row::<u32>(positions.capacity());
         if positions.capacity() != 0 {
             let len_handle = positions.logical_extent().materialize(exec)?;
-            let invert_handle = exec
-                .client()
-                .create_from_slice(u32::as_bytes(&[u32::from(invert)]));
             unsafe {
                 selected_indices_kernel::launch_unchecked::<R>(
                     exec.client(),
@@ -339,7 +274,6 @@ impl<R: Runtime> SelectionControl<R> {
                     CubeDim::new_1d(BLOCK_SIZE),
                     BufferArg::from_raw_parts(positions.handle.clone(), positions.capacity()),
                     BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
-                    BufferArg::from_raw_parts(invert_handle, 1),
                     BufferArg::from_raw_parts(indices.handle.clone(), indices.capacity()),
                 );
             }
@@ -662,6 +596,10 @@ mod tests {
     use crate::{Counting, Permute, Zip};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
+    fn bool_flags<Input>(input: Input) -> Transform<Input, crate::op::NonZero> {
+        Transform::new(input, crate::op::NonZero)
+    }
+
     #[test]
     fn copy_where_preserves_flat_three_column_rows() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
@@ -678,8 +616,8 @@ mod tests {
             out_c.slice_mut(..),
         );
 
-        let count = copy_where(&exec, input, flags.column(), output).unwrap();
-        let count = exec.to_host(&count).unwrap()[0] as usize;
+        let count = copy_where(&exec, input, bool_flags(flags.column()), output).unwrap();
+        let count = exec.to_host(&count).unwrap()[0];
         assert_eq!(count, 2);
         assert_eq!(exec.to_host(&out_a.slice(..count)).unwrap(), vec![2, 3]);
         assert_eq!(
@@ -696,7 +634,7 @@ mod tests {
         let positions = exec.alloc_row::<u32>(4);
         inclusive_scan(
             &exec,
-            Transform::new(flags.column(), IsTrue),
+            Transform::new(bool_flags(flags.column()), IsTrue),
             SumU32,
             positions.slice_mut(..),
         )
@@ -745,7 +683,7 @@ mod tests {
             outputs[6].slice_mut(..),
         );
 
-        let count = copy_where(&exec, input, flags.column(), output).unwrap();
+        let count = copy_where(&exec, input, bool_flags(flags.column()), output).unwrap();
         assert_eq!(exec.to_host(&count).unwrap(), vec![2]);
         for (column, output) in outputs.iter().enumerate() {
             assert_eq!(
@@ -761,8 +699,13 @@ mod tests {
         let input = exec.to_device(&[10_u32, 20, 30, 40]);
         let flags = exec.to_device(&[0_u32, 1, 0, 1]);
         let output = exec.to_device(&[0_u32; 4]);
-        let count =
-            remove_where(&exec, input.column(), flags.column(), output.slice_mut(..)).unwrap();
+        let count = remove_where(
+            &exec,
+            input.column(),
+            bool_flags(flags.column()),
+            output.slice_mut(..),
+        )
+        .unwrap();
         let count = exec.to_host(&count).unwrap()[0];
         assert_eq!(count, 2);
         assert_eq!(exec.to_host(&output.slice(..2)).unwrap(), vec![10, 30]);
@@ -772,8 +715,8 @@ mod tests {
 
     #[cubecl::cube]
     impl crate::op::PredicateOp<u32> for IsEven {
-        fn apply(input: u32) -> crate::MBool {
-            crate::op::mbool(input % 2u32 == 0u32)
+        fn apply(input: u32) -> bool {
+            input % 2u32 == 0u32
         }
     }
 
@@ -797,7 +740,13 @@ mod tests {
         let output = || Zip::new(Zip::new(a.slice_mut(..), b.slice_mut(..)), c.slice_mut(..));
         fill(&exec, (7_u32, 2.5_f32, -3_i32), output()).unwrap();
         let flags = exec.to_device(&[0_u32, 1, 0, 1]);
-        replace_where(&exec, (9_u32, 4.5_f32, -8_i32), flags.column(), output()).unwrap();
+        replace_where(
+            &exec,
+            (9_u32, 4.5_f32, -8_i32),
+            bool_flags(flags.column()),
+            output(),
+        )
+        .unwrap();
         assert_eq!(exec.to_host(&a).unwrap(), vec![7, 9, 7, 9]);
         assert_eq!(exec.to_host(&b).unwrap(), vec![2.5, 4.5, 2.5, 4.5]);
         assert_eq!(exec.to_host(&c).unwrap(), vec![-3, -8, -3, -8]);
@@ -865,7 +814,14 @@ mod tests {
             outputs[6].slice_mut(..),
         );
 
-        transform_where(&exec, input, IncrementSeven, stencil.column(), output).unwrap();
+        transform_where(
+            &exec,
+            input,
+            IncrementSeven,
+            bool_flags(stencil.column()),
+            output,
+        )
+        .unwrap();
         for (column, output) in outputs.iter().enumerate() {
             assert_eq!(
                 exec.to_host(output).unwrap(),

@@ -125,7 +125,7 @@ mod tests {
         )
         .unwrap()
         .map(edge(edge_values.slice(..)), Identity)
-        .reduce_by_source(&exec, exec.value(0).unwrap(), Add)
+        .reduce_by_source(&exec, 0, Add)
         .unwrap();
         assert_eq!(exec.to_host(&source_reduced).unwrap(), vec![90, 30]);
 
@@ -141,7 +141,7 @@ mod tests {
             zip2(source(vertex_values.slice(..)), edge_id()),
             SourcePlusEdge,
         )
-        .reduce_by_destination(&exec, exec.value(0).unwrap(), Add)
+        .reduce_by_destination(&exec, 0, Add)
         .unwrap();
         assert_eq!(
             exec.to_host(&destination_reduced).unwrap(),
@@ -163,7 +163,7 @@ mod tests {
         )
         .update_by_destination(
             &exec,
-            exec.value((0, 0)).unwrap(),
+            (0, 0),
             PairAdd,
             zip2(state_left.slice_mut(..), state_right.slice_mut(..)),
         )
@@ -181,12 +181,7 @@ mod tests {
         )
         .unwrap()
         .map(source(distance.slice(..)), AddOne)
-        .relax_min_by_destination(
-            &exec,
-            exec.value(u32::MAX).unwrap(),
-            distance.slice(..),
-            distance.slice_mut(..),
-        )
+        .relax_min_by_destination(&exec, u32::MAX, distance.slice(..), distance.slice_mut(..))
         .unwrap();
         assert_eq!(exec.to_host(&distance).unwrap(), vec![0, 1, 1]);
         assert_eq!(exec.to_host(&next).unwrap(), vec![1, 2]);
@@ -224,8 +219,8 @@ mod tests {
             2,
         )
         .unwrap();
-        assert_eq!(traversal.edge_count().read(&exec).unwrap(), 4);
-        assert_eq!(traversal.fits().read(&exec).unwrap(), 0);
+        assert_eq!(traversal.edge_count(&exec).unwrap(), 4);
+        assert!(!traversal.fits(&exec).unwrap());
 
         let emitted = traversal
             .map(destination_id(), Identity)

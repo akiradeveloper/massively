@@ -7,7 +7,7 @@ use cubecl::prelude::*;
 use std::ops::{Bound, RangeBounds};
 
 use crate::{
-    Zip,
+    MIndex, Zip,
     arity::{A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, AddArity, ReadArity},
     eval::{
         AdjacentExpr, AdjacentIndexedTransformExpr, Broadcast, Count, DeviceExpr, Direct, Eval1,
@@ -90,8 +90,20 @@ impl<T> DeviceSlice<T> {
         self
     }
 
-    /// Returns the physical view bound without synchronizing.
-    pub fn capacity(&self) -> usize {
+    /// Returns the host-visible logical item count.
+    pub fn len(&self) -> MIndex {
+        let len = self
+            .extent
+            .host_len()
+            .expect("device-produced length escaped the synchronous API boundary");
+        MIndex::try_from(len).expect("device slice length does not fit in MIndex")
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub(crate) fn capacity(&self) -> usize {
         self.len
     }
 
@@ -111,6 +123,14 @@ impl<T> DeviceSlice<T> {
     /// ```
     pub fn slice<Range>(&self, range: Range) -> Self
     where
+        Range: RangeBounds<MIndex>,
+    {
+        let (relative, len) = resolve_mindex_slice_range(self.len, range);
+        self.slice_usize(relative..relative + len)
+    }
+
+    pub(crate) fn slice_usize<Range>(&self, range: Range) -> Self
+    where
         Range: RangeBounds<usize>,
     {
         let (relative, len) = resolve_slice_range(self.len, range);
@@ -124,6 +144,32 @@ impl<T> DeviceSlice<T> {
             _item: PhantomData,
         }
     }
+}
+
+pub(crate) fn resolve_mindex_slice_range<Range>(len: usize, range: Range) -> (usize, usize)
+where
+    Range: RangeBounds<MIndex>,
+{
+    let logical_len = MIndex::try_from(len).expect("slice length does not fit in MIndex");
+    let start = match range.start_bound() {
+        Bound::Included(&start) => start,
+        Bound::Excluded(&start) => start.checked_add(1).expect("slice start overflow"),
+        Bound::Unbounded => 0,
+    };
+    let end = match range.end_bound() {
+        Bound::Included(&end) => end.checked_add(1).expect("slice end overflow"),
+        Bound::Excluded(&end) => end,
+        Bound::Unbounded => logical_len,
+    };
+    assert!(
+        start <= end,
+        "slice start ({start}) is greater than slice end ({end})"
+    );
+    assert!(
+        end <= logical_len,
+        "slice end ({end}) is out of bounds for length {logical_len}"
+    );
+    (start as usize, (end - start) as usize)
 }
 
 /// Internal name for a staged physical read leaf.
@@ -549,7 +595,7 @@ where
     T: MStorageElement,
 {
     fn slice_expression(&self, start: usize, len: usize) -> Self {
-        self.slice(start..start + len)
+        self.slice_usize(start..start + len)
     }
 }
 

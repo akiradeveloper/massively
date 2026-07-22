@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-forbidden='SegmentKeyInput|SegmentedValues|SegmentRead|CanonicalAlloc|CanonicalStorage|CanonicalAbi|ScratchAbi|SortAbi|ItemDispatch|MutableItem|MutableDispatch|ConcreteOutput|OutputOperation|RadixKeyAbi|RadixStorage|LayoutCompatible|AllocColumns|RowAlloc|ScratchStorage|KernelRow|GatherInput|KernelInput|IterLength|SliceExpression|ReadExpression|OutputExpression|StorageLayout|MaterializeDispatch|ReduceDispatch|ReadArity|StorageArity|Eval[1-8]|\bColumn\b'
+forbidden='MVal|SegmentKeyInput|SegmentedValues|SegmentRead|CanonicalAlloc|CanonicalStorage|CanonicalAbi|ScratchAbi|SortAbi|ItemDispatch|MutableItem|MutableDispatch|ConcreteOutput|OutputOperation|RadixKeyAbi|RadixStorage|LayoutCompatible|AllocColumns|RowAlloc|ScratchStorage|KernelRow|GatherInput|KernelInput|IterLength|SliceExpression|ReadExpression|OutputExpression|StorageLayout|MaterializeDispatch|ReduceDispatch|ReadArity|StorageArity|Eval[1-8]|\bColumn\b'
 
 mapfile -d '' pages < <(
     find target/doc/massively -type f \
@@ -20,7 +20,7 @@ fi
 legacy_pages=(
     trait.CanonicalForm.html trait.WritableFrom.html trait.ToCanonical.html
     trait.MItem.html trait.MScratchItem.html trait.MSortItem.html trait.MutableItem.html
-    struct.Zip.html struct.SegmentRead.html
+    struct.Zip.html struct.SegmentRead.html struct.MVal.html type.MBool.html
 )
 
 for page in "${legacy_pages[@]}"; do
@@ -39,12 +39,12 @@ done
 
 algorithms=(
     adjacent_difference adjacent_find all_of any_of copy copy_where count_if equal
-    exclusive_scan exclusive_scan_by_key fill find_first_of find_if gather gather_where
+    exclusive_scan exclusive_scan_by_key fill find_first_of find_if flat_map gather gather_where
     inclusive_scan inclusive_scan_by_key is_partitioned is_sorted is_sorted_until
-    lexicographical_compare lower_bound max_element merge merge_by_key min_element
+    lexicographical_compare lower_bound map max_element merge merge_by_key min_element
     minmax_element mismatch none_of partition reduce reduce_by_key remove_where
     replace_where reverse scatter scatter_reduce scatter_where set_difference
-    set_intersection set_union sort sort_by_key radix_sort_by_key transform transform_where unique
+    set_intersection set_union sort sort_by_key radix_sort_by_key transform_where unique
     unique_by_key upper_bound
 )
 
@@ -53,7 +53,7 @@ for algorithm in "${algorithms[@]}"; do
     test ! -e "target/doc/massively/fn.${algorithm}.html"
 done
 
-operations=(BinaryPredicateOp PredicateOp ReductionOp UnaryOp)
+operations=(BinaryPredicateOp ExpandOp PredicateOp ReductionOp UnaryOp)
 
 for operation in "${operations[@]}"; do
     test -f "target/doc/massively/op/trait.${operation}.html"

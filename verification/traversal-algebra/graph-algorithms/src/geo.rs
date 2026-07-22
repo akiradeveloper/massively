@@ -44,11 +44,11 @@ pub fn solve<R: Runtime>(
     iterations: usize,
 ) -> common::Result<MVec<R, (f32, f32)>> {
     let n = graph.vertex_count();
-    assert_eq!(initial.capacity()?, n);
-    assert_eq!(known.capacity(), n as usize);
+    assert_eq!(initial.len()?, n);
+    assert_eq!(known.len(), n);
     let degree = common::resident_degrees(exec, graph)?;
     let mut coordinates = initial.clone();
-    let zero = exec.value((0.0, 0.0))?;
+    let zero = (0.0, 0.0);
 
     for _ in 0..iterations {
         let sums = graph::traverse(
@@ -58,9 +58,9 @@ pub fn solve<R: Runtime>(
             graph.edge_capacity()?,
         )?
         .map(graph::destination(coordinates.slice(..)), Identity)
-        .reduce_by_source(exec, zero.clone(), SumCoordinates)?;
+        .reduce_by_source(exec, zero, SumCoordinates)?;
 
-        coordinates = vector::transform(
+        coordinates = vector::map(
             exec,
             zip2(
                 zip2(coordinates.slice(..), sums.slice(..)),
@@ -85,7 +85,7 @@ mod tests {
         let graph = DeviceCsr::from_host(&exec, &graph).unwrap();
         let latitude = exec.to_device(&[0.0f32, 0.0, 2.0]);
         let longitude = exec.to_device(&[0.0f32, 0.0, 2.0]);
-        let initial = vector::transform(
+        let initial = vector::map(
             &exec,
             zip2(latitude.slice(..), longitude.slice(..)),
             Identity,

@@ -2,12 +2,44 @@
 
 use cubecl::prelude::{CubeType, Runtime};
 
-use crate::{Error, Executor, MAlloc, MIter, MIterMut, MStorage, MVal, MVec, op::ReductionOp};
+use crate::{Error, Executor, MAlloc, MIter, MIterMut, MStorage, MVec, op::ReductionOp};
 
 struct ScanOperation<'a, R: Runtime, Input, Op, const ADJACENT: bool> {
     exec: &'a Executor<R>,
     input: Input,
     op: Op,
+}
+
+struct ExclusiveScanOperation<'a, R: Runtime, Input, Item, Op> {
+    exec: &'a Executor<R>,
+    input: Input,
+    init: Item,
+    op: Op,
+}
+
+impl<R, Item, Input, Op> crate::api::iter::OutputOperation<R, Item>
+    for ExclusiveScanOperation<'_, R, Input, Item, Op>
+where
+    R: Runtime,
+    Item: CubeType + Send + Sync + 'static,
+    Input: MIter<R, Item = Item>,
+    Op: ReductionOp<Item>,
+{
+    type Result = Result<(), Error>;
+
+    fn run<Output>(self, output: Output) -> Self::Result
+    where
+        Item: crate::api::iter::KernelRow + crate::allocation::ScratchStorage<R>,
+        Output: crate::api::iter::ConcreteOutput<R, Item>,
+    {
+        crate::scan::exclusive_scan(
+            self.exec,
+            crate::api::iter::lower_fixed::<R, _>(self.input),
+            self.init,
+            self.op,
+            output,
+        )
+    }
 }
 
 impl<R, Item, Input, Op, const ADJACENT: bool> crate::api::iter::OutputOperation<R, Item>
@@ -69,11 +101,9 @@ where
     Item: MAlloc<R>,
     Op: ReductionOp<Item>,
 {
-    let len = input.capacity()? as usize;
-    let extent = input.logical_extent()?;
-    let mut output = exec.alloc::<Item>(len);
+    let len = input.len()? as usize;
+    let output = exec.alloc::<Item>(len);
     inclusive_scan_into(exec, input, op, output.slice_mut(..))?;
-    output.set_logical_extent(extent);
     Ok(output)
 }
 
@@ -129,11 +159,9 @@ where
     Item: MAlloc<R>,
     Op: ReductionOp<Item>,
 {
-    let len = input.capacity()? as usize;
-    let extent = input.logical_extent()?;
-    let mut output = exec.alloc::<Item>(len);
+    let len = input.len()? as usize;
+    let output = exec.alloc::<Item>(len);
     adjacent_difference_into(exec, input, op, output.slice_mut(..))?;
-    output.set_logical_extent(extent);
     Ok(output)
 }
 
@@ -174,15 +202,14 @@ where
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3, 4]);
-/// let init = exec.value(0_u32).unwrap();
-/// let output = exclusive_scan(&exec, input.slice(..), init, Add).unwrap();
+/// let output = exclusive_scan(&exec, input.slice(..), 0_u32, Add).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![0, 1, 3, 6]);
 /// ```
 pub fn exclusive_scan<R, Input, Item, Op>(
     exec: &Executor<R>,
     input: Input,
-    init: MVal<R, Item>,
+    init: Item,
     op: Op,
 ) -> Result<MVec<R, Item>, Error>
 where
@@ -191,14 +218,15 @@ where
     Item: MAlloc<R>,
     Op: ReductionOp<Item>,
 {
-    let len = input.capacity()? as usize;
-    let extent = input.logical_extent()?;
-    let mut prefixed = exec.alloc::<Item>(len + 1);
-    crate::vector::copy(exec, init.as_iter(), prefixed.slice_mut(..1))?;
-    crate::vector::copy(exec, input, prefixed.slice_mut(1..))?;
-    prefixed.set_logical_extent(extent.clone());
-    let mut output = exec.alloc::<Item>(len);
-    inclusive_scan_into(exec, prefixed.slice(..len), op, output.slice_mut(..))?;
-    output.set_logical_extent(extent);
+    let len = input.len()? as usize;
+    let output = exec.alloc::<Item>(len);
+    output
+        .slice_mut(..)
+        .run_output_operation(ExclusiveScanOperation {
+            exec,
+            input,
+            init,
+            op,
+        })?;
     Ok(output)
 }

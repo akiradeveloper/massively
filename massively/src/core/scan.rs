@@ -5,14 +5,15 @@ use cubecl::prelude::*;
 use crate::{
     A13, DeviceVec, Dispatch, Error, Executor, MStorageElement, ReadExpression, RowStorage, S12,
     StorageLayout,
-    allocation::PrependInput,
     eval::Eval13,
     launch::cube_count_1d,
     output::{
-        LowerOutputExpression, OutputBindings, OutputExpression, PaddedOutputSlots, StageOutput,
+        LowerOutputExpression, OutputBindings, OutputExpression, PaddedOutputSlots, SliceOutput,
+        StageOutput,
     },
     read::{Adjacent, Env0, Env12, Env13, KernelReadSlots, LowerReadExpression, PaddedReadSlots},
     reduce::{ReductionOp, StageRead, StagedBindings},
+    selection::FillOutput,
     storage::{
         Decompose, LoadMutPadded12, LoadPadded12, MutableLeaves, PlaneShuffleLeaves, Recompose,
         SharedLeaves, StorePadded12, StorePadded12Expand,
@@ -233,6 +234,7 @@ mod unused_scalar_scan_kernels {
 fn scan_value_padded12<Item, O0, O1, O2, O3, O4, O5, O6, O7, O8, O9, O10, O11, Leaves, Layout, Op>(
     value: Item,
     valid_value: u32,
+    exclusive: bool,
     logical_len: usize,
     global: usize,
     unit: usize,
@@ -280,7 +282,20 @@ fn scan_value_padded12<Item, O0, O1, O2, O3, O4, O5, O6, O7, O8, O9, O10, O11, L
     Leaves: SharedLeaves
         + MutableLeaves
         + PlaneShuffleLeaves
-        + StorePadded12<
+        + LoadMutPadded12<
+            O0 = O0,
+            O1 = O1,
+            O2 = O2,
+            O3 = O3,
+            O4 = O4,
+            O5 = O5,
+            O6 = O6,
+            O7 = O7,
+            O8 = O8,
+            O9 = O9,
+            O10 = O10,
+            O11 = O11,
+        > + StorePadded12<
             O0 = O0,
             O1 = O1,
             O2 = O2,
@@ -362,7 +377,57 @@ fn scan_value_padded12<Item, O0, O1, O2, O3, O4, O5, O6, O7, O8, O9, O10, O11, L
         ));
         Leaves::store(&cells, combined);
     }
-    if global < logical_len {
+    if exclusive {
+        let previous_cells =
+            Leaves::into_cells(Leaves::shuffle_leaves_up(Leaves::read(&cells), 1u32));
+        if UNIT_POS_PLANE == 0u32 && PLANE_POS > 0u32 {
+            Leaves::store(
+                &previous_cells,
+                Leaves::load_shared(&shared, PLANE_POS as usize - 1usize),
+            );
+        }
+        if unit > 0usize && global < logical_len {
+            if block == 0usize {
+                let initial = Layout::recompose(Leaves::load_mut_padded(
+                    out0,
+                    out1,
+                    out2,
+                    out3,
+                    out4,
+                    out5,
+                    out6,
+                    out7,
+                    out8,
+                    out9,
+                    out10,
+                    out11,
+                    output_offsets,
+                    0usize,
+                ));
+                let combined = Layout::decompose(Op::apply(
+                    initial,
+                    Layout::recompose(Leaves::read(&previous_cells)),
+                ));
+                Leaves::store(&previous_cells, combined);
+            }
+            Leaves::read(&previous_cells).store_padded(
+                out0,
+                out1,
+                out2,
+                out3,
+                out4,
+                out5,
+                out6,
+                out7,
+                out8,
+                out9,
+                out10,
+                out11,
+                output_offsets,
+                global,
+            );
+        }
+    } else if global < logical_len {
         Leaves::read(&cells).store_padded(
             out0,
             out1,
@@ -413,6 +478,10 @@ macro_rules! define_padded_scan_kernel {
             Leaves: SharedLeaves
                 + MutableLeaves
                 + PlaneShuffleLeaves
+                + LoadMutPadded12<
+                    O0 = O0, O1 = O1, O2 = O2, O3 = O3, O4 = O4, O5 = O5,
+                    O6 = O6, O7 = O7, O8 = O8, O9 = O9, O10 = O10, O11 = O11,
+                >
                 + StorePadded12<
                     O0 = O0, O1 = O1, O2 = O2, O3 = O3, O4 = O4, O5 = O5,
                     O6 = O6, O7 = O7, O8 = O8, O9 = O9, O10 = O10, O11 = O11,
@@ -425,6 +494,7 @@ macro_rules! define_padded_scan_kernel {
             $( $slot: &[$leaf], )+
             read_offsets: &[u32],
             len: &[u32],
+            #[comptime] exclusive: bool,
             zero_offsets: &[u32],
             output_offsets: &[u32],
             out0: &mut [O0], out1: &mut [O1], out2: &mut [O2], out3: &mut [O3],
@@ -442,6 +512,7 @@ macro_rules! define_padded_scan_kernel {
             scan_value_padded12::<Item, O0, O1, O2, O3, O4, O5, O6, O7, O8, O9, O10, O11, Leaves, Layout, Op>(
                 Expr::$method($( $slot, )+ read_offsets, safe_global),
                 if global < logical_len { 1u32 } else { 0u32 },
+                exclusive,
                 logical_len, global, unit, block, zero_offsets, output_offsets,
                 out0, out1, out2, out3, out4, out5, out6, out7, out8, out9, out10, out11,
                 sum0, sum1, sum2, sum3, sum4, sum5, sum6, sum7, sum8, sum9, sum10, sum11,
@@ -758,7 +829,8 @@ fn add_block_prefix_padded12<
             O9 = O9,
             O10 = O10,
             O11 = O11,
-        > + Send
+        > + MutableLeaves
+        + Send
         + Sync
         + 'static,
     Layout: Decompose<Item, Leaves = Leaves> + Recompose<Item, Leaves = Leaves>,
@@ -777,6 +849,7 @@ fn add_block_prefix_padded12<
     prefix10: &[O10],
     prefix11: &[O11],
     len: &[u32],
+    #[comptime] exclusive: bool,
     prefix_offsets: &[u32],
     output_offsets: &[u32],
     output0: &mut [O0],
@@ -795,7 +868,7 @@ fn add_block_prefix_padded12<
     let block = CUBE_POS as usize;
     let index = block * BLOCK_SIZE as usize + UNIT_POS as usize;
     if block > 0usize && index < len[0] as usize {
-        let prefix = Layout::recompose(Leaves::load_padded(
+        let prefix_cells = Leaves::into_cells(Leaves::load_padded(
             prefix0,
             prefix1,
             prefix2,
@@ -811,38 +884,84 @@ fn add_block_prefix_padded12<
             prefix_offsets,
             block - 1usize,
         ));
-        let value = Layout::recompose(Leaves::load_mut_padded(
-            output0,
-            output1,
-            output2,
-            output3,
-            output4,
-            output5,
-            output6,
-            output7,
-            output8,
-            output9,
-            output10,
-            output11,
-            output_offsets,
-            index,
-        ));
-        Layout::decompose(Op::apply(prefix, value)).store_padded(
-            output0,
-            output1,
-            output2,
-            output3,
-            output4,
-            output5,
-            output6,
-            output7,
-            output8,
-            output9,
-            output10,
-            output11,
-            output_offsets,
-            index,
-        );
+        if exclusive {
+            let initial = Layout::recompose(Leaves::load_mut_padded(
+                output0,
+                output1,
+                output2,
+                output3,
+                output4,
+                output5,
+                output6,
+                output7,
+                output8,
+                output9,
+                output10,
+                output11,
+                output_offsets,
+                0usize,
+            ));
+            let with_initial = Layout::decompose(Op::apply(
+                initial,
+                Layout::recompose(Leaves::read(&prefix_cells)),
+            ));
+            Leaves::store(&prefix_cells, with_initial);
+        }
+        if exclusive && UNIT_POS == 0u32 {
+            Leaves::read(&prefix_cells).store_padded(
+                output0,
+                output1,
+                output2,
+                output3,
+                output4,
+                output5,
+                output6,
+                output7,
+                output8,
+                output9,
+                output10,
+                output11,
+                output_offsets,
+                index,
+            );
+        } else {
+            let value = Layout::recompose(Leaves::load_mut_padded(
+                output0,
+                output1,
+                output2,
+                output3,
+                output4,
+                output5,
+                output6,
+                output7,
+                output8,
+                output9,
+                output10,
+                output11,
+                output_offsets,
+                index,
+            ));
+            Layout::decompose(Op::apply(
+                Layout::recompose(Leaves::read(&prefix_cells)),
+                value,
+            ))
+            .store_padded(
+                output0,
+                output1,
+                output2,
+                output3,
+                output4,
+                output5,
+                output6,
+                output7,
+                output8,
+                output9,
+                output10,
+                output11,
+                output_offsets,
+                index,
+            );
+        }
     }
 }
 
@@ -851,7 +970,13 @@ pub trait InclusiveScanDispatch<R, Input, Output, Item, ReadSlots, WriteSlots, O
 where
     R: Runtime,
 {
-    fn run(exec: &Executor<R>, input: &Input, op: Op, output: &Output) -> Result<(), Error>;
+    fn run(
+        exec: &Executor<R>,
+        input: &Input,
+        op: Op,
+        output: &Output,
+        exclusive: bool,
+    ) -> Result<(), Error>;
 }
 
 #[doc(hidden)]
@@ -864,6 +989,7 @@ where
         input: &Input,
         output: &Output,
         partials: &Partials,
+        exclusive: bool,
     ) -> Result<(), Error>;
 }
 
@@ -1077,6 +1203,10 @@ macro_rules! impl_padded_scan_dispatch {
             Item::StorageLeaves: SharedLeaves
                 + MutableLeaves
                 + PlaneShuffleLeaves
+                + LoadMutPadded12<
+                    O0 = O0, O1 = O1, O2 = O2, O3 = O3, O4 = O4, O5 = O5,
+                    O6 = O6, O7 = O7, O8 = O8, O9 = O9, O10 = O10, O11 = O11,
+                >
                 + StorePadded12<
                     O0 = O0, O1 = O1, O2 = O2, O3 = O3, O4 = O4, O5 = O5,
                     O6 = O6, O7 = O7, O8 = O8, O9 = O9, O10 = O10, O11 = O11,
@@ -1088,6 +1218,7 @@ macro_rules! impl_padded_scan_dispatch {
                 input: &Input,
                 output: &Output,
                 partials: &Partials,
+                exclusive: bool,
             ) -> Result<(), Error> {
                 let len = input.logical_len()?;
                 let output_len = output.logical_len()?;
@@ -1133,6 +1264,7 @@ macro_rules! impl_padded_scan_dispatch {
                         $( BufferArg::from_raw_parts(reads.slots[$index].0.clone(), reads.slots[$index].1), )+
                         BufferArg::from_raw_parts(read_offsets, reads.offsets.len()),
                         BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
+                        exclusive,
                         BufferArg::from_raw_parts(zero_offsets.clone(), 12),
                         BufferArg::from_raw_parts(write_offsets.clone(), writes.offsets.len()),
                         BufferArg::from_raw_parts(writes.slots[0].0.clone(), writes.slots[0].1),
@@ -1174,6 +1306,7 @@ fn scan_pass<R, Input, Output, Partials, Item, Op>(
     input: &Input,
     output: &Output,
     partials: &Partials,
+    exclusive: bool,
 ) -> Result<(), Error>
 where
     R: Runtime,
@@ -1208,7 +1341,7 @@ where
         KernelReadSlots<Input::Slots>,
         crate::output::KernelOutputSlots<Output::Slots>,
         Op,
-    >>::run_pass(exec, input, output, partials)
+    >>::run_pass(exec, input, output, partials, exclusive)
 }
 
 fn add_fixed_prefixes<R, Output, Item, Op>(
@@ -1217,6 +1350,7 @@ fn add_fixed_prefixes<R, Output, Item, Op>(
     output: &Output,
     len: usize,
     extent: &crate::extent::LogicalExtent,
+    exclusive: bool,
 ) -> Result<(), Error>
 where
     R: Runtime,
@@ -1326,6 +1460,7 @@ where
                 prefix_bindings.slots[11].1,
             ),
             BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
+            exclusive,
             BufferArg::from_raw_parts(prefix_offsets, prefix_bindings.offsets.len()),
             BufferArg::from_raw_parts(output_offsets, output_bindings.offsets.len()),
             BufferArg::from_raw_parts(
@@ -1426,12 +1561,12 @@ where
     let input_read = FixedScanRead::<R, Item>::new(input.read());
     let output_write = output.write();
     let partial_write = partials.write();
-    scan_pass::<R, _, _, _, Item, Op>(exec, &input_read, &output_write, &partial_write)?;
+    scan_pass::<R, _, _, _, Item, Op>(exec, &input_read, &output_write, &partial_write, false)?;
 
     if blocks > 1 {
         let mut prefixes = Item::alloc_scratch(exec, blocks);
         scan_fixed_storage::<R, Item, Op>(exec, &partials, &mut prefixes)?;
-        add_fixed_prefixes::<R, _, Item, Op>(exec, &prefixes, &output_write, len, &extent)?;
+        add_fixed_prefixes::<R, _, Item, Op>(exec, &prefixes, &output_write, len, &extent, false)?;
     }
     Ok(())
 }
@@ -1468,7 +1603,13 @@ where
             Op,
         >,
 {
-    fn run(exec: &Executor<R>, input: &Input, _op: Op, output: &Output) -> Result<(), Error> {
+    fn run(
+        exec: &Executor<R>,
+        input: &Input,
+        _op: Op,
+        output: &Output,
+        exclusive: bool,
+    ) -> Result<(), Error> {
         let len = input.logical_len()?;
         let output_len = output.logical_len()?;
         if output_len != len {
@@ -1498,12 +1639,12 @@ where
             ReadSlots,
             WriteSlots,
             Op,
-        >>::run_pass(exec, input, output, &partial_write)?;
+        >>::run_pass(exec, input, output, &partial_write, exclusive)?;
 
         if blocks > 1 {
             let mut prefixes = Item::alloc_scratch(exec, blocks);
             scan_fixed_storage::<R, Item, Op>(exec, &partials, &mut prefixes)?;
-            add_fixed_prefixes::<R, _, Item, Op>(exec, &prefixes, output, len, &extent)?;
+            add_fixed_prefixes::<R, _, Item, Op>(exec, &prefixes, output, len, &extent, exclusive)?;
         }
         Ok(())
     }
@@ -1538,7 +1679,7 @@ where
         KernelReadSlots<Env1<Item>>,
         crate::output::KernelOutputSlots<Env1<Item>>,
         Op,
-    >>::run(exec, &input.column(), op, &output.slice_mut(..))
+    >>::run(exec, &input.column(), op, &output.slice_mut(..), false)
 }
 
 /// Computes an inclusive scan into preallocated output storage.
@@ -1572,7 +1713,7 @@ where
         KernelReadSlots<Input::Slots>,
         crate::output::KernelOutputSlots<Output::Slots>,
         Op,
-    >>::run(exec, &input, op, &output)
+    >>::run(exec, &input, op, &output, false)
 }
 
 /// Computes adjacent reductions while preserving the first input item.
@@ -1601,67 +1742,55 @@ where
     materialize(exec, Adjacent::new(input, op), output)
 }
 
-/// Internal public-API capability for a fully generic exclusive scan.
-#[doc(hidden)]
-pub(crate) trait ExclusiveScanInput<R: Runtime, Output, Op>: PrependInput<R> {
-    fn exclusive_scan_into(
-        self,
-        exec: &Executor<R>,
-        init: Self::Item,
-        op: Op,
-        output: Output,
-    ) -> Result<(), Error>;
-}
-
-impl<R, Input, Output, Op> ExclusiveScanInput<R, Output, Op> for Input
-where
-    R: Runtime,
-    Input: PrependInput<R>,
-    Input::Item: crate::allocation::ScratchStorage<R, Storage = Input::Storage>,
-    <Input::Item as StorageLayout>::StorageLeaves: StorePadded12 + crate::core::facade::KernelValue,
-    Input::Storage: RowStorage<R, Item = Input::Item>,
-    <Input::Storage as RowStorage<R>>::Read: LowerReadExpression + StageRead<R, Env0>,
-    Output: OutputExpression<Item = Input::Item> + LowerOutputExpression + StageOutput<R, Env0>,
-    Output::Slots: PaddedOutputSlots,
-    Dispatch<A13, S12>: InclusiveScanDispatch<
-            R,
-            <Input::Storage as RowStorage<R>>::Read,
-            Output,
-            Input::Item,
-            KernelReadSlots<
-                <<Input::Storage as RowStorage<R>>::Read as LowerReadExpression>::Slots,
-            >,
-            crate::output::KernelOutputSlots<Output::Slots>,
-            Op,
-        >,
-    Op: ReductionOp<Input::Item>,
-{
-    fn exclusive_scan_into(
-        self,
-        exec: &Executor<R>,
-        init: Self::Item,
-        op: Op,
-        output: Output,
-    ) -> Result<(), Error> {
-        let prefixed = self.prepend(exec, init)?;
-        let len = prefixed.len()?.saturating_sub(1);
-        inclusive_scan(exec, prefixed.slice(..len), op, output)
-    }
-}
-
 /// Computes an exclusive scan into preallocated output storage.
-pub(crate) fn exclusive_scan<R, Input, Output, Op>(
+pub(crate) fn exclusive_scan<R, Input, Output, Item, Op>(
     exec: &Executor<R>,
     input: Input,
-    init: Input::Item,
+    init: Item,
     op: Op,
     output: Output,
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Input: ExclusiveScanInput<R, Output, Op>,
+    Input: ReadExpression<Item = Item> + LowerReadExpression + StageRead<R, Env0>,
+    Item: CubeType + Send + Sync + 'static,
+    Op: ReductionOp<Item>,
+    Output: OutputExpression<Item = Item>
+        + LowerOutputExpression
+        + StageOutput<R, Env0>
+        + SliceOutput
+        + FillOutput<R>,
+    Output::Slots: PaddedOutputSlots,
+    Dispatch<A13, S12>: InclusiveScanDispatch<
+            R,
+            Input,
+            Output,
+            Item,
+            KernelReadSlots<Input::Slots>,
+            crate::output::KernelOutputSlots<Output::Slots>,
+            Op,
+        >,
 {
-    input.exclusive_scan_into(exec, init, op, output)
+    let len = input.logical_len()?;
+    let output_len = output.logical_len()?;
+    if output_len != len {
+        return Err(Error::LengthMismatch {
+            left: len,
+            right: output_len,
+        });
+    }
+    if len > 0 {
+        output.slice_output(..1).fill_output(exec, init)?;
+    }
+    <Dispatch<A13, S12> as InclusiveScanDispatch<
+        R,
+        Input,
+        Output,
+        Item,
+        KernelReadSlots<Input::Slots>,
+        crate::output::KernelOutputSlots<Output::Slots>,
+        Op,
+    >>::run(exec, &input, op, &output, true)
 }
 
 pub(crate) fn inclusive_scan_u32<R: Runtime>(
@@ -1755,6 +1884,15 @@ mod tests {
     impl ReductionOp<u32> for Sum {
         fn apply(lhs: u32, rhs: u32) -> u32 {
             lhs + rhs
+        }
+    }
+
+    struct TakeLeft;
+
+    #[cubecl::cube]
+    impl ReductionOp<u32> for TakeLeft {
+        fn apply(lhs: u32, _rhs: u32) -> u32 {
+            lhs
         }
     }
 
@@ -1893,6 +2031,30 @@ mod tests {
         let output = exec.to_device(&[99_u32; 6]);
         exclusive_scan(&exec, input.column(), 10, Sum, output.slice_mut(1..5)).unwrap();
         assert_eq!(exec.to_host(&output).unwrap(), vec![99, 10, 11, 13, 16, 99]);
+    }
+
+    #[test]
+    fn exclusive_scan_crosses_recursive_boundaries_in_operand_order() {
+        let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+        let len = 70_001usize;
+        let input = exec.to_device(&vec![1_u32; len]);
+        let output = exec.to_device(&vec![0_u32; len]);
+        exclusive_scan(&exec, input.column(), 10, Sum, output.slice_mut(..)).unwrap();
+        let actual = exec.to_host(&output).unwrap();
+        for &index in &[0, 255, 256, 65_535, 70_000] {
+            assert_eq!(actual[index], 10 + index as u32);
+        }
+
+        let ordered = exec.to_device(&vec![0_u32; 600]);
+        exclusive_scan(
+            &exec,
+            input.slice(..600),
+            42,
+            TakeLeft,
+            ordered.slice_mut(..),
+        )
+        .unwrap();
+        assert_eq!(exec.to_host(&ordered).unwrap(), vec![42; 600]);
     }
 
     #[test]

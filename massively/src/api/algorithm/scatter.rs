@@ -9,8 +9,8 @@ struct IndexLess;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<crate::MIndex> for IndexLess {
-    fn apply(lhs: crate::MIndex, rhs: crate::MIndex) -> crate::MBool {
-        crate::op::mbool(lhs < rhs)
+    fn apply(lhs: crate::MIndex, rhs: crate::MIndex) -> bool {
+        lhs < rhs
     }
 }
 
@@ -18,8 +18,8 @@ struct IndexEqual;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<crate::MIndex> for IndexEqual {
-    fn apply(lhs: crate::MIndex, rhs: crate::MIndex) -> crate::MBool {
-        crate::op::mbool(lhs == rhs)
+    fn apply(lhs: crate::MIndex, rhs: crate::MIndex) -> bool {
+        lhs == rhs
     }
 }
 
@@ -101,7 +101,7 @@ where
     Item: CubeType + Send + Sync + 'static,
     Values: MIter<R, Item = Item>,
     Indices: MIter<R, Item = crate::MIndex>,
-    Stencil: MIter<R, Item = crate::MBool>,
+    Stencil: MIter<R, Item = bool>,
 {
     type Result = Result<(), Error>;
 
@@ -183,19 +183,7 @@ where
         )?;
         let head_control =
             crate::selection::SelectionControl::from_flags(self.exec, heads.clone())?;
-        let mut unique_positions = self.exec.alloc::<u32>(len as usize);
-        crate::indexed::IndexedCopyInput::indexed_copy_selected(
-            permutation.column(),
-            self.exec,
-            head_control.indices().column(),
-            None,
-            Some(head_control.count()),
-            true,
-            unique_positions.slice_mut(..),
-        )?;
-        let reduced_extent =
-            crate::extent::LogicalExtent::from_device(head_control.count(), len as usize);
-        unique_positions.set_logical_extent(reduced_extent.clone());
+        let reduced_extent = head_control.indices().logical_extent();
 
         let sorted_values = crate::read::FixedRead::new(
             <<Item as crate::allocation::ScratchStorage<R>>::Storage as RowStorage<R>>::read(
@@ -226,7 +214,8 @@ where
             self.exec,
             reduced_values,
             indices,
-            &unique_positions,
+            head_control.indices(),
+            &permutation,
             head_control.count(),
             output,
         )
@@ -304,19 +293,20 @@ where
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, vector::scatter_where};
+/// use massively::{Executor, lazy, op, vector::scatter_where};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let values = exec.to_device(&[10_u32, 20, 30]);
 /// let indices = exec.to_device(&[2_u32, 0, 1]);
 /// let stencil = exec.to_device(&[1_u32, 0, 1]);
 /// let output = exec.to_device(&[99_u32, 99, 99]);
+/// let stencil = lazy::map(stencil.slice(..), op::NonZero);
 ///
 /// scatter_where(
 ///     &exec,
 ///     values.slice(..),
 ///     indices.slice(..),
-///     stencil.slice(..),
+///     stencil,
 ///     output.slice_mut(..),
 /// )
 /// .unwrap();
@@ -334,7 +324,7 @@ where
     R: Runtime,
     Values: MIter<R, Item = Output::Item>,
     Indices: MIter<R, Item = crate::MIndex>,
-    Stencil: MIter<R, Item = crate::MBool>,
+    Stencil: MIter<R, Item = bool>,
     Output: MIterMut<R>,
 {
     output.run_output_operation(ScatterWhereOperation {
@@ -373,13 +363,11 @@ where
 /// let values = exec.to_device(&[2_u32, 3, 5, 7]);
 /// let indices = exec.to_device(&[1_u32, 0, 1, 1]);
 /// let output = exec.to_device(&[10_u32, 20, 30]);
-/// let init = exec.value(0_u32).unwrap();
-///
 /// scatter_reduce(
 ///     &exec,
 ///     values.slice(..),
 ///     indices.slice(..),
-///     init,
+///     0_u32,
 ///     Add,
 ///     output.slice_mut(..),
 /// )
@@ -388,6 +376,26 @@ where
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![13, 34, 30]);
 /// ```
 pub fn scatter_reduce<R, Values, Indices, Item, Output, Op>(
+    exec: &Executor<R>,
+    values: Values,
+    indices: Indices,
+    init: Item,
+    op: Op,
+    output: Output,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Values: MIter<R, Item = Item>,
+    Item: MAlloc<R>,
+    Indices: MIter<R, Item = crate::MIndex>,
+    Output: MIterMut<R, Item = Item>,
+    Op: ReductionOp<Item>,
+{
+    let init = exec.value(init)?;
+    scatter_reduce_value(exec, values, indices, init, op, output)
+}
+
+pub(crate) fn scatter_reduce_value<R, Values, Indices, Item, Output, Op>(
     exec: &Executor<R>,
     values: Values,
     indices: Indices,
@@ -417,15 +425,6 @@ mod tests {
     use super::*;
     use crate::{zip2, zip3};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-
-    struct Add;
-
-    #[cubecl::cube]
-    impl ReductionOp<u32> for Add {
-        fn apply(lhs: u32, rhs: u32) -> u32 {
-            lhs + rhs
-        }
-    }
 
     struct PairAdd;
 
@@ -457,7 +456,7 @@ mod tests {
             &exec,
             zip2(left.slice(..), right.slice(..)),
             indices.slice(..),
-            exec.value((0, 0)).unwrap(),
+            (0, 0),
             PairAdd,
             zip2(output_left.slice_mut(..), output_right.slice_mut(..)),
         )
@@ -481,7 +480,7 @@ mod tests {
             &exec,
             zip3(first.slice(..), second.slice(..), third.slice(..)),
             indices.slice(..),
-            exec.value((0, 0, 0)).unwrap(),
+            (0, 0, 0),
             TripleAdd,
             zip3(
                 output_first.slice_mut(..),

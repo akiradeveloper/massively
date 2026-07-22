@@ -5,8 +5,8 @@ mod common;
 use cubecl::prelude::*;
 use massively::seg::{
     AdjacentDifference, AllOf, AnyOf, CountIf, ExclusiveScan, Executable, Filter, ForEachSegment,
-    InclusiveScan, IsSorted, IsSortedUntil, NoneOf, Reduce, Reverse, SegmentIterator, Sort,
-    Transform, Unique,
+    InclusiveScan, IsSorted, IsSortedUntil, Map, NoneOf, Reduce, Reverse, SegmentIterator, Sort,
+    Unique,
 };
 use massively::{
     MStorage, op::BinaryPredicateOp, op::PredicateOp, op::ReductionOp, op::UnaryOp, zip2,
@@ -56,7 +56,7 @@ macro_rules! length_preserving_case {
                 ).unwrap();
 
                 let (expected, expected_offsets) = flatten(&$oracle(&segments));
-                let output_offsets = massively::vector::transform(
+                let output_offsets = massively::vector::map(
                     &exec,
                     output.offsets().clone(),
                     massively::op::Identity,
@@ -78,17 +78,15 @@ macro_rules! compacting_case {
                 let (values, offsets) = flatten(&segments);
                 let values_gpu = exec.to_device(&values);
                 let offsets_gpu = exec.to_device(&offsets);
-                let (output, output_len) = ForEachSegment($algorithm).run(
+                let output = ForEachSegment($algorithm).run(
                     &exec,
                     SegmentIterator::new(
                         lazify(values_gpu.slice(..)),
                         lazify(offsets_gpu.slice(..)),
                     ),
                 ).unwrap();
-                let output_len = output_len.read(&exec).unwrap() as usize;
-
                 let (expected_values, expected_offsets) = flatten(&$oracle(&segments));
-                prop_assert_eq!(&exec.to_host(output.values()).unwrap()[..output_len], &expected_values);
+                prop_assert_eq!(exec.to_host(output.values()).unwrap(), expected_values);
                 prop_assert_eq!(exec.to_host(output.offsets()).unwrap(), expected_offsets);
             }
         }
@@ -118,7 +116,7 @@ macro_rules! summarizing_case {
     };
 }
 
-length_preserving_case!(seg_transform, |_| Transform(AddOne), |segments| {
+length_preserving_case!(seg_map, |_| Map(AddOne), |segments| {
     reference::map(segments, AddOne)
 });
 length_preserving_case!(seg_sort, |_| Sort(Less), |segments| reference::sort(
@@ -128,14 +126,9 @@ length_preserving_case!(seg_reverse, |_| Reverse, reference::reverse);
 length_preserving_case!(seg_inclusive_scan, |_| InclusiveScan(Sum), |segments| {
     reference::inclusive_scan(segments, Sum)
 });
-length_preserving_case!(
-    seg_exclusive_scan,
-    |exec: &massively::Executor<cubecl::wgpu::WgpuRuntime>| ExclusiveScan(
-        Sum,
-        exec.value(7).unwrap(),
-    ),
-    |segments| { reference::exclusive_scan(segments, Sum, 7) }
-);
+length_preserving_case!(seg_exclusive_scan, |_| ExclusiveScan(Sum, 7), |segments| {
+    reference::exclusive_scan(segments, Sum, 7)
+});
 length_preserving_case!(
     seg_adjacent_difference,
     |_| AdjacentDifference(Sum),
@@ -151,7 +144,7 @@ compacting_case!(seg_filter, Filter(Even), |segments| reference::filter(
 
 summarizing_case!(
     seg_reduce,
-    |exec: &massively::Executor<cubecl::wgpu::WgpuRuntime>| Reduce(Sum, exec.value(7).unwrap()),
+    |_| Reduce(Sum, 7),
     |segments| reference::reduce(segments, Sum, 7)
 );
 summarizing_case!(seg_count_if, |_| CountIf(Even), |segments| {
@@ -215,8 +208,8 @@ impl op::ReductionOp<Pair> for PairSum {
 
 #[cubecl::cube]
 impl PredicateOp<Pair> for PairEven {
-    fn apply(input: Pair) -> massively::MBool {
-        massively::op::mbool(input.0 % 2u32 == 0u32)
+    fn apply(input: Pair) -> bool {
+        input.0 % 2u32 == 0u32
     }
 }
 
@@ -228,8 +221,8 @@ impl op::PredicateOp<Pair> for PairEven {
 
 #[cubecl::cube]
 impl BinaryPredicateOp<Pair> for PairEqual {
-    fn apply(lhs: Pair, rhs: Pair) -> massively::MBool {
-        massively::op::mbool(lhs.0 == rhs.0 && lhs.1 == rhs.1)
+    fn apply(lhs: Pair, rhs: Pair) -> bool {
+        lhs.0 == rhs.0 && lhs.1 == rhs.1
     }
 }
 
@@ -241,8 +234,8 @@ impl op::BinaryPredicateOp<Pair> for PairEqual {
 
 #[cubecl::cube]
 impl BinaryPredicateOp<Pair> for PairLess {
-    fn apply(lhs: Pair, rhs: Pair) -> massively::MBool {
-        massively::op::mbool(lhs.0 < rhs.0)
+    fn apply(lhs: Pair, rhs: Pair) -> bool {
+        lhs.0 < rhs.0
     }
 }
 
@@ -311,7 +304,7 @@ macro_rules! pair_length_preserving_case {
                     ),
                     expected,
                 );
-                let output_offsets = massively::vector::transform(
+                let output_offsets = massively::vector::map(
                     &exec,
                     output.offsets().clone(),
                     massively::op::Identity,
@@ -334,22 +327,18 @@ macro_rules! pair_compacting_case {
                 let first_gpu = exec.to_device(&first);
                 let second_gpu = exec.to_device(&second);
                 let offsets_gpu = exec.to_device(&offsets);
-                let (output, output_len) = ForEachSegment($algorithm).run(
+                let output = ForEachSegment($algorithm).run(
                     &exec,
                     SegmentIterator::new(
                         zip2(lazify(first_gpu.slice(..)), lazify(second_gpu.slice(..))),
                         lazify(offsets_gpu.slice(..)),
                     ),
                 ).unwrap();
-                let output_len = output_len.read(&exec).unwrap() as usize;
-
                 let (expected, expected_offsets) = flatten(&$oracle(&segments));
                 let (output_first, output_second) =
                     MStorage::into_columns(output.values().clone());
-                let mut output_first = exec.to_host(&output_first).unwrap();
-                let mut output_second = exec.to_host(&output_second).unwrap();
-                output_first.truncate(output_len);
-                output_second.truncate(output_len);
+                let output_first = exec.to_host(&output_first).unwrap();
+                let output_second = exec.to_host(&output_second).unwrap();
                 prop_assert_eq!(
                     pair_rows(output_first, output_second),
                     expected,
@@ -419,7 +408,7 @@ macro_rules! pair_flag_reduce_case {
     };
 }
 
-pair_length_preserving_case!(seg_pair_transform, |_| Transform(PairAddOne), |segments| {
+pair_length_preserving_case!(seg_pair_map, |_| Map(PairAddOne), |segments| {
     reference::map(segments, PairAddOne)
 });
 pair_length_preserving_case!(seg_pair_sort, |_| Sort(PairLess), |segments| {
@@ -433,10 +422,7 @@ pair_length_preserving_case!(
 );
 pair_length_preserving_case!(
     seg_pair_exclusive_scan,
-    |exec: &massively::Executor<cubecl::wgpu::WgpuRuntime>| ExclusiveScan(
-        PairSum,
-        exec.value((7, 11)).unwrap(),
-    ),
+    |_| ExclusiveScan(PairSum, (7, 11)),
     |segments| reference::exclusive_scan(segments, PairSum, (7, 11))
 );
 pair_length_preserving_case!(
@@ -452,14 +438,9 @@ pair_compacting_case!(seg_pair_filter, Filter(PairEven), |segments| {
     reference::filter(segments, PairEven)
 });
 
-pair_item_reduce_case!(
-    seg_pair_reduce,
-    |exec: &massively::Executor<cubecl::wgpu::WgpuRuntime>| Reduce(
-        PairSum,
-        exec.value((7, 11)).unwrap(),
-    ),
-    |segments| { reference::reduce(segments, PairSum, (7, 11)) }
-);
+pair_item_reduce_case!(seg_pair_reduce, |_| Reduce(PairSum, (7, 11)), |segments| {
+    reference::reduce(segments, PairSum, (7, 11))
+});
 pair_flag_reduce_case!(seg_pair_count_if, CountIf(PairEven), |segments| {
     reference::count_if(segments, PairEven)
 });

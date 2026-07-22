@@ -43,7 +43,7 @@ where
 
     fn slice<Bounds>(&self, range: Bounds) -> Self::Slice
     where
-        Bounds: RangeBounds<usize>,
+        Bounds: RangeBounds<MIndex>,
     {
         let input = self.clone().lower_read();
         let len = private::IterLength::logical_len(&input)
@@ -91,7 +91,7 @@ where
 
     fn slice<Bounds>(&self, range: Bounds) -> Self::Slice
     where
-        Bounds: RangeBounds<usize>,
+        Bounds: RangeBounds<MIndex>,
     {
         let input = self.clone().lower_read();
         let len = private::IterLength::logical_len(&input)
@@ -113,14 +113,14 @@ where
     }
 }
 
-/// Logical lazy transform lowered only when an algorithm consumes it.
+/// Logical lazy map lowered only when an algorithm consumes it.
 #[derive(Debug)]
-pub struct Transform<Input, Op> {
+pub struct Map<Input, Op> {
     input: Input,
     _op: PhantomData<fn() -> Op>,
 }
 
-impl<Input: Clone, Op> Clone for Transform<Input, Op> {
+impl<Input: Clone, Op> Clone for Map<Input, Op> {
     fn clone(&self) -> Self {
         Self {
             input: self.input.clone(),
@@ -129,9 +129,9 @@ impl<Input: Clone, Op> Clone for Transform<Input, Op> {
     }
 }
 
-impl<Input: Copy, Op> Copy for Transform<Input, Op> {}
+impl<Input: Copy, Op> Copy for Map<Input, Op> {}
 
-impl<Input, Op> Transform<Input, Op> {
+impl<Input, Op> Map<Input, Op> {
     pub fn new(input: Input, _op: Op) -> Self {
         Self {
             input,
@@ -141,7 +141,7 @@ impl<Input, Op> Transform<Input, Op> {
 }
 
 #[doc(hidden)]
-impl<R, Input, Op> MIter<R> for Transform<Input, Op>
+impl<R, Input, Op> MIter<R> for Map<Input, Op>
 where
     R: Runtime,
     Input: MIter<R>,
@@ -155,11 +155,11 @@ where
 
     fn slice<Bounds>(&self, range: Bounds) -> Self::Slice
     where
-        Bounds: RangeBounds<usize>,
+        Bounds: RangeBounds<MIndex>,
     {
         let input = self.clone().lower_read();
         let len = private::IterLength::logical_len(&input)
-            .expect("cannot slice a lazy transform with an invalid length");
+            .expect("cannot slice a lazy map with an invalid length");
         let (start, count) = crate::api::iter::resolve_iter_range(len, range);
         crate::read::Slice::new(input.slice_expression(start, count))
     }
@@ -236,11 +236,11 @@ impl crate::read::TakenSource for Counting {
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, lazy, op, vector::transform};
+/// use massively::{Executor, lazy, op, vector::map};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let repeated = lazy::constant(7_u32).take(3);
-/// let output = transform(&exec, repeated, op::Identity).unwrap();
+/// let output = map(&exec, repeated, op::Identity).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![7, 7, 7]);
 /// ```
@@ -278,7 +278,7 @@ pub fn counting(start: MIndex) -> Counting {
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, lazy, op, vector::transform};
+/// use massively::{Executor, lazy, op, vector::map};
 ///
 /// struct Double;
 ///
@@ -293,13 +293,13 @@ pub fn counting(start: MIndex) -> Counting {
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3]);
-/// let doubled = lazy::transform(input.slice(..), Double);
-/// let output = transform(&exec, doubled, op::Identity).unwrap();
+/// let doubled = lazy::map(input.slice(..), Double);
+/// let output = map(&exec, doubled, op::Identity).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![2, 4, 6]);
 /// ```
-pub fn transform<Input, Op>(input: Input, op: Op) -> Transform<Input, Op> {
-    Transform::new(input, op)
+pub fn map<Input, Op>(input: Input, op: Op) -> Map<Input, Op> {
+    Map::new(input, op)
 }
 
 /// Lazily reads `values[indices[i]]`.
@@ -308,13 +308,13 @@ pub fn transform<Input, Op>(input: Input, op: Op) -> Transform<Input, Op> {
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, lazy, op, vector::transform};
+/// use massively::{Executor, lazy, op, vector::map};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let values = exec.to_device(&[10_u32, 20, 30]);
 /// let indices = exec.to_device(&[2_u32, 0]);
 /// let permuted = lazy::permute(values.slice(..), indices.slice(..));
-/// let output = transform(&exec, permuted, op::Identity).unwrap();
+/// let output = map(&exec, permuted, op::Identity).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![30, 10]);
 /// ```
@@ -331,11 +331,11 @@ pub fn permute<Values, Indices>(values: Values, indices: Indices) -> Permute<Val
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, lazy, op, vector::transform};
+/// use massively::{Executor, lazy, op, vector::map};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[10_u32, 20, 30]);
-/// let output = transform(&exec, lazy::reverse(input.slice(..)), op::Identity).unwrap();
+/// let output = map(&exec, lazy::reverse(input.slice(..)), op::Identity).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![30, 20, 10]);
 /// ```
@@ -343,22 +343,22 @@ pub fn reverse<Values>(values: Values) -> Reverse<Values> {
     Reverse::new(values)
 }
 
-/// Wraps an input in a lazy identity transform.
+/// Wraps an input in a lazy identity map.
 ///
-/// This is useful in tests and when an explicit lazy transform node is required.
+/// This is useful in tests and when an explicit lazy map node is required.
 ///
 /// # Examples
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, lazy, op, vector::transform};
+/// use massively::{Executor, lazy, op, vector::map};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3]);
-/// let output = transform(&exec, lazy::identity(input.slice(..)), op::Identity).unwrap();
+/// let output = map(&exec, lazy::identity(input.slice(..)), op::Identity).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 3]);
 /// ```
-pub fn identity<Input>(input: Input) -> Transform<Input, crate::op::Identity> {
-    Transform::new(input, crate::op::Identity)
+pub fn identity<Input>(input: Input) -> Map<Input, crate::op::Identity> {
+    Map::new(input, crate::op::Identity)
 }

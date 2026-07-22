@@ -13,8 +13,8 @@ struct GreaterU32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for GreaterU32 {
-    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-        massively::op::mbool(lhs > rhs)
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs > rhs
     }
 }
 
@@ -22,15 +22,15 @@ struct EqualPair;
 
 #[cubecl::cube]
 impl PredicateOp<(u32, u32)> for EqualPair {
-    fn apply(input: (u32, u32)) -> massively::MBool {
-        massively::op::mbool(input.0 == input.1)
+    fn apply(input: (u32, u32)) -> bool {
+        input.0 == input.1
     }
 }
 
 fn read_u32<R: Runtime>(
     exec: &Executor<R>,
     values: &DeviceVec<R, u32>,
-    index: usize,
+    index: u32,
 ) -> common::Result<u32> {
     Ok(exec.to_host(&values.slice(index..index + 1))?[0])
 }
@@ -50,11 +50,9 @@ pub fn solve<R: Runtime>(
     let colors = common::filled(exec, n as usize, u32::MAX)?;
 
     for position in 0..n as usize {
-        let vertex = read_u32(exec, &order, position)?;
-        let offsets = exec.to_host(&graph.offsets().slice(vertex as usize..vertex as usize + 2))?;
-        let neighbors = graph
-            .destinations()
-            .slice(offsets[0] as usize..offsets[1] as usize);
+        let vertex = read_u32(exec, &order, position as u32)?;
+        let offsets = exec.to_host(&graph.offsets().slice(vertex..vertex + 2))?;
+        let neighbors = graph.destinations().slice(offsets[0]..offsets[1]);
         let neighbor_count = offsets[1] - offsets[0];
 
         let mut color = 0u32;
@@ -67,7 +65,7 @@ pub fn solve<R: Runtime>(
                 ),
                 EqualPair,
             )?;
-            if used.read(exec)? == 0 {
+            if used == 0 {
                 break;
             }
             color += 1;

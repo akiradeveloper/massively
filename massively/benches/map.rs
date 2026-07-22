@@ -2,7 +2,7 @@ mod common;
 
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
-use massively::{op::UnaryOp, vector::transform};
+use massively::{op::UnaryOp, vector::map};
 
 struct MulTwo;
 
@@ -14,15 +14,15 @@ impl UnaryOp<f32> for MulTwo {
     }
 }
 
-fn bench_transform(c: &mut Criterion) {
+fn bench_map(c: &mut Criterion) {
     let exec = common::exec();
-    let mut group = c.benchmark_group("transform");
+    let mut group = c.benchmark_group("map");
     for &len in common::SIZES {
         let input = exec.to_device(&common::dense_f32(len));
         exec.sync().unwrap();
         group.bench_function(BenchmarkId::new("gpu", len), |b| {
             b.iter(|| {
-                black_box(transform(&exec, black_box(input.slice(..)), MulTwo).unwrap());
+                black_box(map(&exec, black_box(input.slice(..)), MulTwo).unwrap());
                 exec.sync().unwrap();
             })
         });
@@ -30,5 +30,5 @@ fn bench_transform(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group! { name = benches; config = common::criterion(); targets = bench_transform }
+criterion_group! { name = benches; config = common::criterion(); targets = bench_map }
 criterion_main!(benches);

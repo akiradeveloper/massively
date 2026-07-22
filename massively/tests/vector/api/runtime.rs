@@ -31,3 +31,24 @@ fn public_device_slice_methods_return_public_view_types() {
     assert_eq!(exec.to_host(&read_from_write).unwrap(), vec![3, 4]);
     assert_eq!(exec.to_host(&nested_write).unwrap(), vec![3, 4]);
 }
+
+#[test]
+fn slice_bounds_are_mindex_values() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let values = exec.to_device(&[10_u32, 20, 30, 40, 50]);
+    let start: MIndex = 1;
+    let end: MIndex = 4;
+
+    let read = values.slice(start..end);
+    let write = values.slice_mut(start..end);
+    let lazy = lazy::counting(10).take(5).slice(start..end);
+
+    assert_eq!(read.len(), 3);
+    assert_eq!(write.len(), 3);
+    let read_is_empty: bool = read.is_empty();
+    let empty_is_empty: bool = values.slice(end..end).is_empty();
+    assert!(!read_is_empty);
+    assert!(empty_is_empty);
+    assert_eq!(MIter::<WgpuRuntime>::len(&lazy).unwrap(), 3);
+    assert_eq!(exec.to_host(&read).unwrap(), vec![20, 30, 40]);
+}

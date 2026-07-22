@@ -2,28 +2,37 @@
 
 use cubecl::prelude::*;
 
-use crate::MBool;
+use crate::MIndex;
 
-/// Converts a shader-local Rust boolean into a Massively boolean.
+/// Encodes a device-register boolean for numeric scratch storage.
 #[cubecl::cube]
-pub fn mbool(value: bool) -> MBool {
+pub(crate) fn bool_flag(value: bool) -> u32 {
     if value { 1u32 } else { 0u32 }
 }
 
-/// Converts a Massively boolean into a shader-local Rust boolean.
+/// Converts a `u32` flag into a semantic boolean.
+///
+/// Zero is `false`; every non-zero value is `true`.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NonZero;
+
 #[cubecl::cube]
-pub fn is_true(value: MBool) -> bool {
-    value != 0
+impl UnaryOp<u32> for NonZero {
+    type Output = bool;
+
+    fn apply(value: u32) -> bool {
+        value != 0u32
+    }
 }
 
-/// Compile-time unary operation used by [`crate::lazy::Transform`].
+/// Compile-time unary operation used by [`crate::lazy::Map`].
 ///
 /// # Examples
 ///
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, op, vector::transform};
+/// use massively::{Executor, op, vector::map};
 ///
 /// struct Square;
 ///
@@ -38,7 +47,7 @@ pub fn is_true(value: MBool) -> bool {
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[2_u32, 3, 4]);
-/// let output = transform(&exec, input.slice(..), Square).unwrap();
+/// let output = map(&exec, input.slice(..), Square).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![4, 9, 16]);
 /// ```
@@ -47,6 +56,20 @@ pub trait UnaryOp<Input: CubeType>: 'static + Send + Sync {
     type Output: CubeType + Send + Sync + 'static;
 
     fn apply(input: Input) -> Self::Output;
+}
+
+/// Compile-time indexed expansion operation.
+///
+/// `count` returns the number of output items produced by one input item.
+/// `generate` returns the item at `local_index`, where callers guarantee
+/// `local_index < count(input)`.
+#[cubecl::cube]
+pub trait ExpandOp<Input: CubeType>: 'static + Send + Sync {
+    type Output: CubeType + Send + Sync + 'static;
+
+    fn count(input: Input) -> MIndex;
+
+    fn generate(input: Input, local_index: MIndex) -> Self::Output;
 }
 
 /// Internal index-aware transform operation.
@@ -73,11 +96,11 @@ pub trait IndexedBinaryOp<Input: CubeType>: 'static + Send + Sync {
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, op, vector::transform};
+/// use massively::{Executor, op, vector::map};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3]);
-/// let output = transform(&exec, input.slice(..), op::Identity).unwrap();
+/// let output = map(&exec, input.slice(..), op::Identity).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 3]);
 /// ```

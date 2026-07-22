@@ -13,37 +13,34 @@ pub(crate) type Result<T> = std::result::Result<T, massively::Error>;
 /// Explicit synchronization boundary used by these host-controlled reference
 /// algorithms when they need an exact-length fixed vector.
 pub(crate) fn materialize_exact<R, Storage>(
-    exec: &Executor<R>,
-    mut storage: Storage,
+    _exec: &Executor<R>,
+    storage: Storage,
 ) -> Result<Storage>
 where
     R: Runtime,
     Storage: MStorage<R>,
 {
-    let len = storage.read_len(exec)?;
-    storage.set_fixed_len(len);
+    storage.len()?;
     Ok(storage)
 }
 
 pub(crate) fn materialize_exact_pair<R, Left, Right>(
-    exec: &Executor<R>,
-    (mut left, mut right): (Left, Right),
+    _exec: &Executor<R>,
+    (left, right): (Left, Right),
 ) -> Result<(Left, Right)>
 where
     R: Runtime,
     Left: MStorage<R>,
     Right: MStorage<R>,
 {
-    let len = left.read_len(exec)?;
-    let right_len = right.read_len(exec)?;
+    let len = left.len()?;
+    let right_len = right.len()?;
     if right_len != len {
         return Err(massively::Error::LengthMismatch {
             left: len as usize,
             right: right_len as usize,
         });
     }
-    left.set_fixed_len(len);
-    right.set_fixed_len(len);
     Ok((left, right))
 }
 
@@ -56,8 +53,8 @@ pub(crate) fn indices<Input>(input: Input) -> Input {
     input
 }
 
-pub(crate) fn stencil<Input>(input: Input) -> Input {
-    input
+pub(crate) fn stencil<Input>(input: Input) -> lazy::Map<Input, massively::op::NonZero> {
+    lazy::map(input, massively::op::NonZero)
 }
 
 pub(crate) trait FillValue<R: Runtime>: Sized {
@@ -67,8 +64,7 @@ pub(crate) trait FillValue<R: Runtime>: Sized {
 impl<R: Runtime> FillValue<R> for u32 {
     fn filled(exec: &Executor<R>, len: usize, value: Self) -> Result<DeviceVec<R, Self>> {
         let output = exec.alloc::<u32>(len);
-        let value = exec.value(value)?;
-        vector::fill(exec, &value, output.slice_mut(..))?;
+        vector::fill(exec, value, output.slice_mut(..))?;
         Ok(output)
     }
 }
@@ -76,8 +72,7 @@ impl<R: Runtime> FillValue<R> for u32 {
 impl<R: Runtime> FillValue<R> for f32 {
     fn filled(exec: &Executor<R>, len: usize, value: Self) -> Result<DeviceVec<R, Self>> {
         let output = exec.alloc::<f32>(len);
-        let value = exec.value(value)?;
-        vector::fill(exec, &value, output.slice_mut(..))?;
+        vector::fill(exec, value, output.slice_mut(..))?;
         Ok(output)
     }
 }
@@ -153,11 +148,9 @@ impl<R: Runtime> DeviceCsr<R> {
     /// Creates a device CSR from already-resident storage without copying it.
     pub fn from_parts(destinations: DeviceVec<R, u32>, offsets: DeviceVec<R, u32>) -> Result<Self> {
         let vertex_count = offsets
-            .capacity()
+            .len()
             .checked_sub(1)
             .ok_or(massively::Error::LengthMismatch { left: 1, right: 0 })?;
-        let vertex_count = u32::try_from(vertex_count)
-            .map_err(|_| massively::Error::LengthTooLarge { len: vertex_count })?;
         Ok(Self {
             destinations,
             offsets,
@@ -180,7 +173,7 @@ impl<R: Runtime> DeviceCsr<R> {
 
     /// Returns the number of directed CSR entries.
     pub fn edge_count(&self) -> usize {
-        self.destinations.capacity()
+        self.destinations.len() as usize
     }
 
     /// Host-known physical bound for traversing a duplicate-free frontier.
@@ -192,10 +185,10 @@ impl<R: Runtime> DeviceCsr<R> {
 
     /// Safe physical traversal bound when the frontier may contain duplicate
     /// vertices and no tighter maximum-degree bound is available.
-    pub fn repeated_edge_capacity(&self, source_count: usize) -> Result<MIndex> {
+    pub fn repeated_edge_capacity(&self, source_count: MIndex) -> Result<MIndex> {
         let capacity = self
             .edge_count()
-            .checked_mul(source_count)
+            .checked_mul(source_count as usize)
             .ok_or(massively::Error::LengthTooLarge { len: usize::MAX })?;
         MIndex::try_from(capacity).map_err(|_| massively::Error::LengthTooLarge { len: capacity })
     }
@@ -225,10 +218,10 @@ pub struct DeviceWeightedCsr<R: Runtime, Weight = f32> {
 impl<R: Runtime, Weight> DeviceWeightedCsr<R, Weight> {
     /// Creates a resident weighted CSR from already-resident storage.
     pub fn from_parts(graph: DeviceCsr<R>, weights: DeviceVec<R, Weight>) -> Result<Self> {
-        if graph.edge_count() != weights.capacity() {
+        if graph.edge_count() != weights.len() as usize {
             return Err(massively::Error::LengthMismatch {
                 left: graph.edge_count(),
-                right: weights.capacity(),
+                right: weights.len() as usize,
             });
         }
         Ok(Self { graph, weights })
@@ -326,7 +319,7 @@ pub(crate) fn resident_degrees<R: Runtime>(
         graph.edge_capacity()?,
     )?
     .map(graph::edge_id(), One)
-    .reduce_by_source(exec, exec.value(0)?, SumU32)
+    .reduce_by_source(exec, 0, SumU32)
 }
 
 pub(crate) fn dangling_mass<R: Runtime>(
@@ -336,11 +329,10 @@ pub(crate) fn dangling_mass<R: Runtime>(
 ) -> Result<f32> {
     vector::reduce(
         exec,
-        lazy::transform(zip2(rank.slice(..), degree.slice(..)), DanglingRank),
-        exec.value(0.0)?,
+        lazy::map(zip2(rank.slice(..), degree.slice(..)), DanglingRank),
+        0.0,
         SumF32,
-    )?
-    .read(exec)
+    )
 }
 
 pub(crate) fn accumulate_rank<R: Runtime>(
@@ -365,7 +357,7 @@ pub(crate) fn accumulate_rank<R: Runtime>(
         ),
         RankContribution,
     )
-    .update_by_destination(exec, exec.value(0.0)?, SumF32, output.slice_mut(..))
+    .update_by_destination(exec, 0.0, SumF32, output.slice_mut(..))
 }
 
 #[cfg(test)]

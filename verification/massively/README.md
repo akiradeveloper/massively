@@ -60,7 +60,7 @@ instruction PRAM -> normalized PRAM -> Massively Core -> public API basis
 ```
 
 The final target has an independent transition semantics consisting of the
-contracts of public `transform`, `gather`, `copy_where`, stable `sort`,
+contracts of public `map`, `gather`, `copy_where`, stable `sort`,
 `unique`, `copy`, and collision-free `scatter`.  In particular, conflicting
 writes are implemented by sorting write rows by `(destination, processor id)`,
 retaining the first row of each destination run, and scattering the resulting

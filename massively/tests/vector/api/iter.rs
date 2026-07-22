@@ -1,9 +1,9 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
-    Executor, MAlloc, MIter, MIterMut, MStorage, MVec, lazy, op::Identity, op::UnaryOp,
-    vector::gather, vector::transform, zip2, zip3, zip4, zip5, zip6, zip7, zip8, zip9, zip10,
-    zip11, zip12,
+    Executor, MAlloc, MIter, MIterMut, MStorage, MVec, lazy, op::Identity, op::NonZero,
+    op::UnaryOp, vector::gather, vector::map, zip2, zip3, zip4, zip5, zip6, zip7, zip8, zip9,
+    zip10, zip11, zip12,
 };
 
 fn allocate_for_output<R, Output>(exec: &Executor<R>, output: &Output) -> MVec<R, Output::Item>
@@ -12,7 +12,7 @@ where
     Output: MIterMut<R>,
     Output::Item: MAlloc<R>,
 {
-    exec.alloc::<Output::Item>(MIterMut::capacity(output).unwrap() as usize)
+    exec.alloc::<Output::Item>(MIterMut::len(output).unwrap() as usize)
 }
 
 fn transform_where_into<R, Input, Stencil, Output, Op>(
@@ -25,7 +25,7 @@ fn transform_where_into<R, Input, Stencil, Output, Op>(
 where
     R: Runtime,
     Input: MIter<R>,
-    Stencil: MIter<R, Item = massively::MBool>,
+    Stencil: MIter<R, Item = bool>,
     Output: MIterMut<R>,
     Op: UnaryOp<Input::Item, Output = Output::Item>,
 {
@@ -46,7 +46,7 @@ fn custom_functions_can_request_owned_allocation() {
     let output = zip2(first.slice_mut(..), second.slice_mut(..));
 
     let owned = allocate_for_output(&exec, &output);
-    assert_eq!(MStorage::capacity(&owned).unwrap(), 3);
+    assert_eq!(MStorage::len(&owned).unwrap(), 3);
 }
 
 #[test]
@@ -59,7 +59,7 @@ fn custom_preallocated_functions_do_not_need_allocation_bound() {
         &exec,
         input.slice(..),
         Identity,
-        lazy::constant(1_u32).take(3),
+        lazy::map(lazy::constant(1_u32).take(3), NonZero),
         output.slice_mut(..),
     )
     .unwrap();
@@ -104,23 +104,22 @@ impl UnaryOp<(u32, u32)> for AddPair {
 }
 
 #[cubecl::cube]
-impl UnaryOp<(massively::MBool, massively::MIndex)> for EncodeBoolIndex {
+impl UnaryOp<(bool, massively::MIndex)> for EncodeBoolIndex {
     type Output = u32;
 
-    fn apply(input: (massively::MBool, massively::MIndex)) -> u32 {
-        if massively::op::is_true(input.0) {
-            input.1
-        } else {
-            0u32
-        }
+    fn apply(input: (bool, massively::MIndex)) -> u32 {
+        if input.0 { input.1 } else { 0u32 }
     }
 }
 
 #[test]
 fn zip_flattens_read_only_semantic_scalars() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-    let input = zip2(lazy::constant(1_u32).take(3), lazy::counting(4).take(3));
-    let output = transform(&exec, input, EncodeBoolIndex).unwrap();
+    let input = zip2(
+        lazy::map(lazy::constant(1_u32).take(3), NonZero),
+        lazy::counting(4).take(3),
+    );
+    let output = map(&exec, input, EncodeBoolIndex).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![4, 5, 6]);
 }
@@ -133,11 +132,11 @@ fn zip_helpers_expose_flat_public_iterators() {
         .collect();
 
     assert_eq!(
-        MIter::<WgpuRuntime>::capacity(&zip2(columns[0].slice(..), columns[1].slice(..))).unwrap(),
+        MIter::<WgpuRuntime>::len(&zip2(columns[0].slice(..), columns[1].slice(..))).unwrap(),
         2
     );
     assert_eq!(
-        MIter::<WgpuRuntime>::capacity(&zip3(
+        MIter::<WgpuRuntime>::len(&zip3(
             columns[0].slice(..),
             columns[1].slice(..),
             columns[2].slice(..),
@@ -146,7 +145,7 @@ fn zip_helpers_expose_flat_public_iterators() {
         2,
     );
     assert_eq!(
-        MIter::<WgpuRuntime>::capacity(&zip4(
+        MIter::<WgpuRuntime>::len(&zip4(
             columns[0].slice(..),
             columns[1].slice(..),
             columns[2].slice(..),
@@ -156,7 +155,7 @@ fn zip_helpers_expose_flat_public_iterators() {
         2,
     );
     assert_eq!(
-        MIter::<WgpuRuntime>::capacity(&zip5(
+        MIter::<WgpuRuntime>::len(&zip5(
             columns[0].slice(..),
             columns[1].slice(..),
             columns[2].slice(..),
@@ -167,7 +166,7 @@ fn zip_helpers_expose_flat_public_iterators() {
         2,
     );
     assert_eq!(
-        MIter::<WgpuRuntime>::capacity(&zip6(
+        MIter::<WgpuRuntime>::len(&zip6(
             columns[0].slice(..),
             columns[1].slice(..),
             columns[2].slice(..),
@@ -179,7 +178,7 @@ fn zip_helpers_expose_flat_public_iterators() {
         2,
     );
     assert_eq!(
-        MIter::<WgpuRuntime>::capacity(&zip7(
+        MIter::<WgpuRuntime>::len(&zip7(
             columns[0].slice(..),
             columns[1].slice(..),
             columns[2].slice(..),
@@ -192,7 +191,7 @@ fn zip_helpers_expose_flat_public_iterators() {
         2,
     );
     assert_eq!(
-        MIter::<WgpuRuntime>::capacity(&zip8(
+        MIter::<WgpuRuntime>::len(&zip8(
             columns[0].slice(..),
             columns[1].slice(..),
             columns[2].slice(..),
@@ -206,7 +205,7 @@ fn zip_helpers_expose_flat_public_iterators() {
         2,
     );
     assert_eq!(
-        MIter::<WgpuRuntime>::capacity(&zip9(
+        MIter::<WgpuRuntime>::len(&zip9(
             columns[0].slice(..),
             columns[1].slice(..),
             columns[2].slice(..),
@@ -221,7 +220,7 @@ fn zip_helpers_expose_flat_public_iterators() {
         2,
     );
     assert_eq!(
-        MIter::<WgpuRuntime>::capacity(&zip10(
+        MIter::<WgpuRuntime>::len(&zip10(
             columns[0].slice(..),
             columns[1].slice(..),
             columns[2].slice(..),
@@ -237,7 +236,7 @@ fn zip_helpers_expose_flat_public_iterators() {
         2,
     );
     assert_eq!(
-        MIter::<WgpuRuntime>::capacity(&zip11(
+        MIter::<WgpuRuntime>::len(&zip11(
             columns[0].slice(..),
             columns[1].slice(..),
             columns[2].slice(..),
@@ -254,7 +253,7 @@ fn zip_helpers_expose_flat_public_iterators() {
         2,
     );
     assert_eq!(
-        MIter::<WgpuRuntime>::capacity(&zip12(
+        MIter::<WgpuRuntime>::len(&zip12(
             columns[0].slice(..),
             columns[1].slice(..),
             columns[2].slice(..),
@@ -272,7 +271,7 @@ fn zip_helpers_expose_flat_public_iterators() {
         2,
     );
 
-    let output = transform(
+    let output = map(
         &exec,
         zip3(
             columns[0].slice(..),
@@ -292,13 +291,13 @@ fn zip_grouping_does_not_change_the_logical_row() {
     let b = exec.to_device(&[3_u32, 4]);
     let c = exec.to_device(&[5_u32, 6]);
 
-    let left_grouped = transform(
+    let left_grouped = map(
         &exec,
         zip2(zip2(a.slice(..), b.slice(..)), c.slice(..)),
         IdentityTriple,
     )
     .unwrap();
-    let right_grouped = transform(
+    let right_grouped = map(
         &exec,
         zip2(a.slice(..), zip2(b.slice(..), c.slice(..))),
         IdentityTriple,
@@ -325,9 +324,9 @@ fn read_slice_adapters_compose_on_binary_zip_trees() {
     let sliced = zip3(a.slice(..), b.slice(..), c.slice(..))
         .slice(1..4)
         .slice(1..2);
-    assert_eq!(MIter::<WgpuRuntime>::capacity(&sliced).unwrap(), 1);
+    assert_eq!(MIter::<WgpuRuntime>::len(&sliced).unwrap(), 1);
 
-    let output = transform(&exec, sliced, AddThree).unwrap();
+    let output = map(&exec, sliced, AddThree).unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![333]);
 }
 
@@ -338,11 +337,10 @@ fn mutable_slice_adapters_compose_and_can_be_read_back() {
     let out_b = exec.to_device(&[0_u32; 5]);
     let output = zip2(out_a.slice_mut(..), out_b.slice_mut(..));
 
-    let value = exec.value((7_u32, 9_u32)).unwrap();
     massively::vector::replace_where(
         &exec,
-        &value,
-        lazy::constant(1_u32).take(1),
+        (7_u32, 9_u32),
+        lazy::map(lazy::constant(1_u32).take(1), NonZero),
         output.slice_mut(1..4).slice_mut(1..2),
     )
     .unwrap();
@@ -350,7 +348,7 @@ fn mutable_slice_adapters_compose_and_can_be_read_back() {
     assert_eq!(exec.to_host(&out_b).unwrap(), vec![0, 0, 9, 0, 0]);
 
     let read = output.slice(1..4).slice(1..2);
-    let copy = transform(&exec, read, Identity).unwrap();
+    let copy = map(&exec, read, Identity).unwrap();
     let (first, second) = MStorage::into_columns(copy);
     assert_eq!(exec.to_host(&first).unwrap(), vec![7]);
     assert_eq!(exec.to_host(&second).unwrap(), vec![9]);
@@ -363,7 +361,7 @@ fn gather_keeps_an_eval8_value_expression_lazy() {
         .map(|column| exec.to_device(&[column, column + 10, column + 20]))
         .collect();
     let indices = exec.to_device(&[2_u32, 0]);
-    let left = lazy::transform(
+    let left = lazy::map(
         zip4(
             columns[0].slice(..),
             columns[1].slice(..),
@@ -372,7 +370,7 @@ fn gather_keeps_an_eval8_value_expression_lazy() {
         ),
         SumFour,
     );
-    let right = lazy::transform(
+    let right = lazy::map(
         zip4(
             columns[4].slice(..),
             columns[5].slice(..),
@@ -381,7 +379,7 @@ fn gather_keeps_an_eval8_value_expression_lazy() {
         ),
         SumFour,
     );
-    let values = lazy::transform(zip2(left, right), AddPair);
+    let values = lazy::map(zip2(left, right), AddPair);
     let output = gather(&exec, values, indices.slice(..)).unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![188, 28]);
 }

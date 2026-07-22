@@ -1,6 +1,6 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, MStorage, op::UnaryOp, vector::transform};
+use massively::{Executor, MStorage, op::UnaryOp, vector::map};
 
 type Twelve = (u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32);
 
@@ -57,7 +57,7 @@ impl UnaryOp<u32> for ReversedTuple {
 fn flat_tuples_can_be_destructured_directly_inside_cube_ops() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let input = exec.to_device(&[10_u32, 20]);
-    let outputs = transform(&exec, input.slice(..), ReversedTuple).unwrap();
+    let outputs = map(&exec, input.slice(..), ReversedTuple).unwrap();
     let (a, b, c, d, e, f, g, h, i, j, k, l) = MStorage::into_columns(outputs);
     let outputs = [&a, &b, &c, &d, &e, &f, &g, &h, &i, &j, &k, &l];
 
@@ -76,7 +76,7 @@ fn flat_tuples_can_be_destructured_directly_inside_cube_ops() {
 fn tuple_outputs_expose_flat_owned_columns() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let input = exec.to_device(&[10_u32, 20]);
-    let outputs = transform(&exec, input.slice(..), AscendingTuple).unwrap();
+    let outputs = map(&exec, input.slice(..), AscendingTuple).unwrap();
     let (a, b, c, d, e, f, g, h, i, j, k, l) = MStorage::into_columns(outputs);
     let outputs = [&a, &b, &c, &d, &e, &f, &g, &h, &i, &j, &k, &l];
 

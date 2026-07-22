@@ -98,11 +98,11 @@ uniform_stream!(
     "A deterministic uniform `u32` stream over an inclusive range.",
     r#"```
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, op, util::random, vector::transform};
+use massively::{Executor, op, util::random, vector::map};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let values = random::uniform_u32(10, 20, 123).unwrap().take(8);
-let output = transform(&exec, values, op::Identity).unwrap();
+let output = map(&exec, values, op::Identity).unwrap();
 
 let values = exec.to_host(&output).unwrap();
 assert!(values.iter().all(|value| (10..=20).contains(value)));
@@ -116,11 +116,11 @@ uniform_stream!(
     "A deterministic uniform `u64` stream over an inclusive range.",
     r#"```
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, op, util::random, vector::transform};
+use massively::{Executor, op, util::random, vector::map};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let values = random::uniform_u64(100, 200, 123).unwrap().take(8);
-let output = transform(&exec, values, op::Identity).unwrap();
+let output = map(&exec, values, op::Identity).unwrap();
 
 let values = exec.to_host(&output).unwrap();
 assert!(values.iter().all(|value| (100..=200).contains(value)));
@@ -134,11 +134,11 @@ uniform_stream!(
     "A deterministic uniform `f32` stream over a bounded range.",
     r#"```
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, op, util::random, vector::transform};
+use massively::{Executor, op, util::random, vector::map};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let values = random::uniform_f32(-1.0, 1.0, 123).unwrap().take(8);
-let output = transform(&exec, values, op::Identity).unwrap();
+let output = map(&exec, values, op::Identity).unwrap();
 
 let values = exec.to_host(&output).unwrap();
 assert!(values.iter().all(|value| (-1.0..=1.0).contains(value)));
@@ -152,11 +152,11 @@ uniform_stream!(
     "A deterministic uniform `f64` stream over a bounded range.",
     r#"```
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, op, util::random, vector::transform};
+use massively::{Executor, op, util::random, vector::map};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let values = random::uniform_f64(-1.0, 1.0, 123).unwrap().take(8);
-let output = transform(&exec, values, op::Identity).unwrap();
+let output = map(&exec, values, op::Identity).unwrap();
 
 let values = exec.to_host(&output).unwrap();
 assert!(values.iter().all(|value| (-1.0..=1.0).contains(value)));
@@ -229,11 +229,11 @@ normal_stream!(
     "A deterministic normally distributed `f32` stream.",
     r#"```
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, op, util::random, vector::transform};
+use massively::{Executor, op, util::random, vector::map};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let values = random::normal_f32(0.0, 1.0, 123).take(8);
-let output = transform(&exec, values, op::Identity).unwrap();
+let output = map(&exec, values, op::Identity).unwrap();
 
 assert!(exec.to_host(&output).unwrap().iter().all(|value| value.is_finite()));
 ```"#
@@ -246,11 +246,11 @@ normal_stream!(
     "A deterministic normally distributed `f64` stream.",
     r#"```
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, op, util::random, vector::transform};
+use massively::{Executor, op, util::random, vector::map};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let values = random::normal_f64(0.0, 1.0, 123).take(8);
-let output = transform(&exec, values, op::Identity).unwrap();
+let output = map(&exec, values, op::Identity).unwrap();
 
 assert!(exec.to_host(&output).unwrap().iter().all(|value| value.is_finite()));
 ```"#

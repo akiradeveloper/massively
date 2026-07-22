@@ -248,23 +248,19 @@ fn zip8_through_zip11_match_their_visible_columns() {
         .collect();
 
     let output =
-        massively::vector::transform(&exec, lazify(zip_prefix_columns!(8, device)), Identity)
-            .unwrap();
+        massively::vector::map(&exec, lazify(zip_prefix_columns!(8, device)), Identity).unwrap();
     assert_prefix!(8, exec, output, expected);
 
     let output =
-        massively::vector::transform(&exec, lazify(zip_prefix_columns!(9, device)), Identity)
-            .unwrap();
+        massively::vector::map(&exec, lazify(zip_prefix_columns!(9, device)), Identity).unwrap();
     assert_prefix!(9, exec, output, expected);
 
     let output =
-        massively::vector::transform(&exec, lazify(zip_prefix_columns!(10, device)), Identity)
-            .unwrap();
+        massively::vector::map(&exec, lazify(zip_prefix_columns!(10, device)), Identity).unwrap();
     assert_prefix!(10, exec, output, expected);
 
     let output =
-        massively::vector::transform(&exec, lazify(zip_prefix_columns!(11, device)), Identity)
-            .unwrap();
+        massively::vector::map(&exec, lazify(zip_prefix_columns!(11, device)), Identity).unwrap();
     assert_prefix!(11, exec, output, expected);
 }
 
@@ -298,7 +294,7 @@ fn zip12_segmented_scans_cross_block_boundaries() {
         device_keys.slice(..),
         lazify(zip12_columns!(device)),
         Equal,
-        exec.value(zero).unwrap(),
+        zero,
         MaxTwelve,
     )
     .unwrap();
@@ -313,7 +309,7 @@ proptest! {
     fn fixed_twelve_output_matches_oracle(seed in oracle_vec(0_u32..100)) {
         let exec = exec();
         let input = exec.to_device(&seed);
-        let output = massively::vector::transform(&exec, lazify(input.slice(..)), ExpandTwelve).unwrap();
+        let output = massively::vector::map(&exec, lazify(input.slice(..)), ExpandTwelve).unwrap();
         let expected = columns(&seed);
         assert_twelve!(exec, output, expected);
     }
@@ -328,7 +324,7 @@ proptest! {
             .collect();
         let input_rows = rows(&expected_columns);
 
-        let copied = massively::vector::transform(
+        let copied = massively::vector::map(
             &exec,
             lazify(zip12_columns!(device)),
             Identity,
@@ -341,7 +337,7 @@ proptest! {
             zip12_columns!(device),
             lazy::counting(0).take(seed.len() as massively::MIndex),
         ));
-        let copied = massively::vector::transform(&exec, permuted, Identity).unwrap();
+        let copied = massively::vector::map(&exec, permuted, Identity).unwrap();
         assert_twelve!(exec, copied, expected_columns);
 
         let zero = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
@@ -349,11 +345,9 @@ proptest! {
             massively::vector::reduce(
                 &exec,
                 lazify(zip12_columns!(device)),
-                exec.value(zero).unwrap(),
+                zero,
                 MaxTwelve,
             )
-            .unwrap()
-            .read(&exec)
             .unwrap(),
             reference::reduce(&input_rows, zero, MaxTwelve),
         );
@@ -369,7 +363,7 @@ proptest! {
         let scanned = massively::vector::exclusive_scan(
             &exec,
             lazify(zip12_columns!(device)),
-            exec.value(zero).unwrap(),
+            zero,
             MaxTwelve,
         ).unwrap();
         let expected_rows = reference::exclusive_scan(&input_rows, zero, MaxTwelve);

@@ -1,8 +1,29 @@
 # proposal-del2d: Massively で del2d を高速化するための API 提案
 
-状態: 検討用  
+状態: v0.86で方針変更（以下の本文は当初案の記録）
 対象: Massively 0.84 以降  
 利用事例: `del2d`
+
+## v0.86で採用した仕様
+
+当初案の「公開MVal／動的長APIと同期APIを併存させる」方針は採用しない。
+公開APIは一種類の同期インターフェイスに統一し、次を契約とする。
+
+- `MVal<R, T>`はcrate内部だけで使用し、公開・prelude exportしない。
+- `reduce`のinitは通常のitemを受け取り、結果も通常のitemとして返す。
+- predicateは組み込みの`bool`、長さとindexは`MIndex`（`u32`のalias）を返す。
+- 検索の不在はsentinelではなく`Option<MIndex>`で表す。
+- 可変長結果は公開関数のreturn boundaryで長さを一度だけ同期し、正確な
+  `len()`を持つ`MVec`として返す。
+- 固定長結果およびcaller-provided outputは、長さ取得のための同期を行わない。
+- `slice(range)`のrange要素型は`MIndex`とする。
+- 内部では`MVal`とdevice logical extentをGPUステージ間で伝播し、
+  public boundaryより前の中間readbackを行わない。
+
+したがって、公開APIの利用者はdevice scalarの寿命やcapacityとlogical lengthの
+組を管理しない。一方、データ依存のscalarや正確な可変長結果を返す関数は同期API
+であり、そのreturn boundaryでqueue完了待ちが起こり得る。indirect dispatchは
+公開契約には含めず、今回の計測で性能向上が確認できなかったため導入しない。
 
 ## 要約
 
@@ -131,7 +152,7 @@ CubeCL の現在の依存 revision (`0a62060`) には既に以下がある。
 
 最初の `winner_count` だけを `MVal<u32>` にしても、次の配列を作るために `usize` へ戻した時点で同期が再発する。device length には、少なくとも以下の伝播が必要である。
 
-- 同じ長さを保つ `transform`
+- 同じ長さを保つ `map`
 - 長さを定数倍する expand / repeat
 - 二つの長さを加える concat
 - predicate で短くなる compact / unique
@@ -167,7 +188,7 @@ indirect dispatch は重要だが、最大 capacity 分を over-dispatch して 
 
 - GPU で生成した scalar を、host を経由せず次の Massively operation が消費できる。
 - 物理 allocation の大きさと論理長を分離する。
-- compact 後の vector を transform、gather、scan、unique、sort へ渡せる。
+- compact 後の vector を map、gather、scan、unique、sort へ渡せる。
 - device length から dispatch workgroup 数を GPU 上で生成できる。
 - 既存の固定長 API と source compatibility を保つ。
 - host synchronization が発生する API を明示的に識別できる。
@@ -345,7 +366,7 @@ pub fn copy_where_dynamic_into<R, Input, Stencil, Output>(
 同様に以下が必要になる。
 
 - `remove_where_dynamic[_into]`
-- `transform_dynamic[_into]`
+- `map_dynamic[_into]`
 - `gather_dynamic[_into]`
 - `scatter_dynamic`
 - `unique_by_key_dynamic[_into]`
@@ -572,7 +593,7 @@ loop {
 
 - `DeviceDynVec`。
 - `copy_where_dynamic_into`、`remove_where_dynamic_into`。
-- dynamic transform、gather、scatter、counting。
+- dynamic map、gather、scatter、counting。
 - capacity over-dispatch 版を先に実装し、正しさと同期除去を確認する。
 - indirect dispatch を有効にして差分を計測する。
 
@@ -609,7 +630,7 @@ loop {
 
 ```text
 copy_where_dynamic
-  -> transform_dynamic
+  -> map_dynamic
   -> unique_by_key_dynamic
   -> count_if_device
   -> indirect dispatch

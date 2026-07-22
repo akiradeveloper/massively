@@ -4,11 +4,12 @@ use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, 
 use cubecl::prelude::*;
 use massively::{
     op::BinaryPredicateOp,
+    op::PredicateOp,
     op::ReductionOp,
     op::UnaryOp,
     seg::{
-        Executable, ForEachSegment, InclusiveScan, Reduce, Reverse, SegmentIterator, Sort,
-        Transform, Unique,
+        AdjacentDifference, Executable, Filter, ForEachSegment, InclusiveScan, IsSorted, Map,
+        Reduce, Reverse, SegmentIterator, Sort, Unique,
     },
     vector::inclusive_scan_by_key,
     vector::reduce_by_key,
@@ -16,6 +17,7 @@ use massively::{
 
 struct AddOne;
 struct Equal;
+struct Even;
 struct Less;
 struct Sum;
 
@@ -30,15 +32,22 @@ impl UnaryOp<u32> for AddOne {
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for Equal {
-    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-        massively::op::mbool(lhs == rhs)
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs == rhs
+    }
+}
+
+#[cubecl::cube]
+impl PredicateOp<u32> for Even {
+    fn apply(input: u32) -> bool {
+        input % 2u32 == 0u32
     }
 }
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for Less {
-    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-        massively::op::mbool(lhs < rhs)
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs < rhs
     }
 }
 
@@ -78,6 +87,74 @@ fn offsets(len: usize, segment_len: usize) -> Vec<u32> {
     result
 }
 
+fn empty_heavy_offsets(len: usize) -> Vec<u32> {
+    let mut result = Vec::with_capacity(len.div_ceil(8) * 2 + 2);
+    result.push(0);
+    let mut offset = 0;
+    while offset < len {
+        result.push(offset as u32);
+        offset = (offset + 8).min(len);
+        result.push(offset as u32);
+    }
+    result.push(offset as u32);
+    result
+}
+
+fn alternating_offsets(len: usize) -> Vec<u32> {
+    let mut result = Vec::with_capacity(len.div_ceil(2_048) + 1);
+    result.push(0);
+    let mut offset = 0;
+    let mut short = true;
+    while offset < len {
+        let segment_len = if short { 1 } else { 4_095 };
+        offset = (offset + segment_len).min(len);
+        result.push(offset as u32);
+        short = !short;
+    }
+    result
+}
+
+fn skewed_offsets(len: usize) -> Vec<u32> {
+    const CYCLE: &[(usize, usize)] = &[
+        (1, 64),
+        (2, 32),
+        (4, 16),
+        (8, 8),
+        (16, 4),
+        (64, 2),
+        (4_096, 1),
+    ];
+
+    let mut result = Vec::new();
+    result.push(0);
+    let mut offset = 0;
+    while offset < len {
+        for &(segment_len, repeat) in CYCLE {
+            for _ in 0..repeat {
+                if offset == len {
+                    break;
+                }
+                offset = (offset + segment_len).min(len);
+                result.push(offset as u32);
+            }
+        }
+    }
+    result
+}
+
+fn control_geometries(len: usize) -> Vec<(&'static str, Vec<u32>)> {
+    vec![
+        ("uniform8", offsets(len, 8)),
+        ("uniform255", offsets(len, 255)),
+        ("uniform256", offsets(len, 256)),
+        ("uniform257", offsets(len, 257)),
+        ("empty50", empty_heavy_offsets(len)),
+        ("alternating1_4095", alternating_offsets(len)),
+        ("skewed", skewed_offsets(len)),
+        ("all", offsets(len, len)),
+    ]
+}
+
 fn dense_u32(len: usize) -> Vec<u32> {
     (0..len).map(|index| (index % 251) as u32).collect()
 }
@@ -98,9 +175,9 @@ fn reverse_within_segments(len: usize, segment_len: usize) -> Vec<u32> {
         .collect()
 }
 
-fn bench_transform(c: &mut Criterion) {
+fn bench_map(c: &mut Criterion) {
     let exec = common::exec();
-    let mut group = c.benchmark_group("seg_transform");
+    let mut group = c.benchmark_group("seg_map");
     for &len in common::SIZES {
         group.throughput(Throughput::Elements(len as u64));
         let values = exec.to_device(&dense_u32(len));
@@ -109,7 +186,7 @@ fn bench_transform(c: &mut Criterion) {
 
         group.bench_function(BenchmarkId::from_parameter(len), |b| {
             b.iter(|| {
-                let output = ForEachSegment(Transform(AddOne))
+                let output = ForEachSegment(Map(AddOne))
                     .run(
                         &exec,
                         SegmentIterator::new(
@@ -187,7 +264,7 @@ fn bench_reduce(c: &mut Criterion) {
             let segment_count = host_offsets.len() - 1;
             let segment_offsets = exec.to_device(&host_offsets);
             let keys = exec.to_device(&common::run_keys(len, segment_len));
-            let init = exec.value(0u32).unwrap();
+            let init = 0u32;
             let _segment_count = segment_count;
             exec.sync().unwrap();
 
@@ -407,17 +484,115 @@ fn bench_sort_patterns(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_control_geometries(c: &mut Criterion) {
+    const LEN: usize = 1_024 * 1_024;
+
+    let exec = common::exec();
+    let values = exec.to_device(&dense_u32(LEN));
+    exec.sync().unwrap();
+
+    let mut group = c.benchmark_group("seg_control_geometries");
+    group.throughput(Throughput::Elements(LEN as u64));
+
+    for (geometry, host_offsets) in control_geometries(LEN) {
+        let segment_offsets = exec.to_device(&host_offsets);
+        exec.sync().unwrap();
+
+        group.bench_function(BenchmarkId::new("inclusive_scan", geometry), |b| {
+            b.iter(|| {
+                let output = ForEachSegment(InclusiveScan(Sum))
+                    .run(
+                        &exec,
+                        SegmentIterator::new(
+                            black_box(values.slice(..)),
+                            black_box(segment_offsets.slice(..)),
+                        ),
+                    )
+                    .unwrap();
+                exec.sync().unwrap();
+                black_box(output);
+            })
+        });
+
+        group.bench_function(BenchmarkId::new("reduce", geometry), |b| {
+            b.iter(|| {
+                let output = ForEachSegment(Reduce(Sum, 0u32))
+                    .run(
+                        &exec,
+                        SegmentIterator::new(
+                            black_box(values.slice(..)),
+                            black_box(segment_offsets.slice(..)),
+                        ),
+                    )
+                    .unwrap();
+                exec.sync().unwrap();
+                black_box(output);
+            })
+        });
+
+        group.bench_function(BenchmarkId::new("adjacent_difference", geometry), |b| {
+            b.iter(|| {
+                let output = ForEachSegment(AdjacentDifference(Sum))
+                    .run(
+                        &exec,
+                        SegmentIterator::new(
+                            black_box(values.slice(..)),
+                            black_box(segment_offsets.slice(..)),
+                        ),
+                    )
+                    .unwrap();
+                exec.sync().unwrap();
+                black_box(output);
+            })
+        });
+
+        group.bench_function(BenchmarkId::new("filter50", geometry), |b| {
+            b.iter(|| {
+                let output = ForEachSegment(Filter(Even))
+                    .run(
+                        &exec,
+                        SegmentIterator::new(
+                            black_box(values.slice(..)),
+                            black_box(segment_offsets.slice(..)),
+                        ),
+                    )
+                    .unwrap();
+                exec.sync().unwrap();
+                black_box(output);
+            })
+        });
+
+        group.bench_function(BenchmarkId::new("is_sorted", geometry), |b| {
+            b.iter(|| {
+                let output = ForEachSegment(IsSorted(Less))
+                    .run(
+                        &exec,
+                        SegmentIterator::new(
+                            black_box(values.slice(..)),
+                            black_box(segment_offsets.slice(..)),
+                        ),
+                    )
+                    .unwrap();
+                exec.sync().unwrap();
+                black_box(output);
+            })
+        });
+    }
+    group.finish();
+}
+
 criterion_group! {
     name = benches;
     config = common::criterion();
     targets =
-        bench_transform,
+        bench_map,
         bench_inclusive_scan,
         bench_reduce,
         bench_unique,
         bench_reverse,
         bench_sort,
         bench_unique_patterns,
-        bench_sort_patterns
+        bench_sort_patterns,
+        bench_control_geometries
 }
 criterion_main!(benches);

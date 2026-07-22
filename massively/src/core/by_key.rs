@@ -3,60 +3,11 @@
 use cubecl::prelude::*;
 
 use crate::{
-    DeviceVec, Error, Executor, ReadExpression, RowStorage,
+    DeviceVec, Error, Executor, ReadExpression,
     allocation::ScratchStorage,
     ordering::{AdjacentFlagInput, BinaryPredicateOp, UniqueHead, unique_head_flags},
     selection::{CopySelected, SelectionControl},
 };
-
-const BLOCK_SIZE: u32 = 256;
-
-#[cubecl::cube(launch_unchecked)]
-fn tail_indices_kernel(head_indices: &[u32], count: &[u32], source_len: &[u32], tails: &mut [u32]) {
-    let rank = ABSOLUTE_POS as usize;
-    if rank < count[0] as usize {
-        tails[rank] = if rank + 1usize < count[0] as usize {
-            head_indices[rank + 1usize] - 1u32
-        } else {
-            source_len[0] - 1u32
-        };
-    }
-}
-
-pub(crate) fn tail_control_from_heads<R: Runtime>(
-    exec: &Executor<R>,
-    heads: &SelectionControl<R>,
-) -> Result<SelectionControl<R>, Error> {
-    let count = heads.count();
-    let mut tails = exec.alloc_row::<u32>(heads.len());
-    tails.set_logical_extent(crate::extent::LogicalExtent::from_device(
-        count,
-        heads.len(),
-    ));
-    if heads.len() != 0 {
-        let len_handle = heads.source_extent().materialize(exec)?;
-        unsafe {
-            tail_indices_kernel::launch_unchecked::<R>(
-                exec.client(),
-                crate::launch::cube_count_1d(heads.len().div_ceil(BLOCK_SIZE as usize))?,
-                CubeDim::new_1d(BLOCK_SIZE),
-                BufferArg::from_raw_parts(
-                    heads.indices().handle.clone(),
-                    heads.indices().capacity(),
-                ),
-                BufferArg::from_raw_parts(count.handle.clone(), 1),
-                BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
-                BufferArg::from_raw_parts(tails.handle.clone(), tails.capacity()),
-            );
-        }
-    }
-    Ok(SelectionControl::from_indices(
-        heads.len(),
-        heads.source_extent(),
-        tails,
-        count.clone(),
-    ))
-}
 
 /// Key-only phase producing segment head flags.
 #[doc(hidden)]
@@ -75,31 +26,13 @@ where
     }
 }
 
-fn segmented_lowered_storage<R, Values, Op>(
-    exec: &Executor<R>,
-    values: Values,
-    heads: &DeviceVec<R, u32>,
-    init: Option<<Values::Item as ScratchStorage<R>>::Storage>,
-    op: Op,
-    mode: u8,
-) -> Result<<Values::Item as ScratchStorage<R>>::Storage, Error>
-where
-    R: Runtime,
-    Values: crate::core::facade::KernelInput<R>,
-    Values::Item: ScratchStorage<R>,
-    Op: crate::op::ReductionOp<Values::Item>,
-{
-    let values = crate::allocation::normalize_lowered_scratch(exec, values)?;
-    crate::segmented::segmented_fixed(exec, &values, heads, init, op, mode)
-}
-
 /// Fixed-input implementation used by the public logical iterator facade.
 pub(crate) fn inclusive_scan_by_key_lowered<R, Keys, Values, Equal, Op, Output>(
     exec: &Executor<R>,
     keys: Keys,
     values: Values,
     _equal: Equal,
-    op: Op,
+    _op: Op,
     output: Output,
 ) -> Result<(), Error>
 where
@@ -112,9 +45,9 @@ where
         crate::core::facade::KernelOutput<R> + crate::output::OutputExpression<Item = Values::Item>,
 {
     let heads = keys.segment_heads(exec)?;
-    let scanned = segmented_lowered_storage(exec, values, &heads, None, op, 0)?;
-    let read = crate::read::FixedRead::new(scanned.read());
-    crate::transform::materialize_fixed(exec, &read, &output)
+    crate::segmented::segmented_inclusive::<R, _, _, Values::Item, Op>(
+        exec, &values, &heads, &output,
+    )
 }
 
 /// Fixed-input implementation used by the public logical iterator facade.
@@ -124,7 +57,7 @@ pub(crate) fn exclusive_scan_by_key_lowered<R, Keys, Values, Equal, Op, Output>(
     values: Values,
     _equal: Equal,
     init: <Values::Item as ScratchStorage<R>>::Storage,
-    op: Op,
+    _op: Op,
     output: Output,
 ) -> Result<(), Error>
 where
@@ -137,9 +70,9 @@ where
         crate::core::facade::KernelOutput<R> + crate::output::OutputExpression<Item = Values::Item>,
 {
     let heads = keys.segment_heads(exec)?;
-    let scanned = segmented_lowered_storage(exec, values, &heads, Some(init), op, 1)?;
-    let read = crate::read::FixedRead::new(scanned.read());
-    crate::transform::materialize_fixed(exec, &read, &output)
+    crate::segmented::segmented_exclusive::<R, _, _, Values::Item, Op>(
+        exec, &values, &heads, init, &output,
+    )
 }
 
 /// Fixed-input implementation used by the public logical iterator facade.
@@ -164,9 +97,17 @@ where
         crate::core::facade::KernelOutput<R> + crate::output::OutputExpression<Item = Values::Item>,
 {
     let heads = keys.clone().segment_heads(exec)?;
-    let reduced = segmented_lowered_storage(exec, values, &heads, Some(init), op, 2)?;
-    let head_control = SelectionControl::from_flags(exec, heads)?;
-    let tail_control = tail_control_from_heads(exec, &head_control)?;
+    let head_control = SelectionControl::from_flags(exec, heads.clone())?;
+    crate::segmented::segmented_reduce::<R, _, _, Values::Item, Op>(
+        exec,
+        &values,
+        &heads,
+        head_control.indices(),
+        head_control.count(),
+        init,
+        op,
+        &value_output,
+    )?;
     crate::indexed::IndexedCopyInput::indexed_copy_selected(
         keys,
         exec,
@@ -175,16 +116,6 @@ where
         Some(head_control.count()),
         true,
         key_output,
-    )?;
-    let reduced = crate::read::FixedRead::new(reduced.read());
-    crate::indexed::IndexedCopyInput::indexed_copy_selected(
-        reduced,
-        exec,
-        tail_control.indices().column(),
-        None,
-        Some(tail_control.count()),
-        true,
-        value_output,
     )?;
     Ok(head_control.count().clone())
 }
@@ -207,17 +138,15 @@ where
     Output:
         crate::core::facade::KernelOutput<R> + crate::output::OutputExpression<Item = Values::Item>,
 {
-    let reduced = segmented_lowered_storage(exec, values, heads, Some(init), op, 2)?;
-    let tail_control = tail_control_from_heads(exec, head_control)?;
-    let reduced = crate::read::FixedRead::new(reduced.read());
-    crate::indexed::IndexedCopyInput::indexed_copy_selected(
-        reduced,
+    crate::segmented::segmented_reduce::<R, _, _, Values::Item, Op>(
         exec,
-        tail_control.indices().column(),
-        None,
-        Some(tail_control.count()),
-        true,
-        output,
+        &values,
+        heads,
+        head_control.indices(),
+        head_control.count(),
+        init,
+        op,
+        &output,
     )
 }
 
@@ -286,7 +215,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Counting, Permute, RowStorage, Transform, Zip};
+    use crate::{Counting, Permute, RowStorage, Zip};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     type Three = (u32, u32, u32);
@@ -294,8 +223,8 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<Three> for EqualThree {
-        fn apply(lhs: Three, rhs: Three) -> crate::MBool {
-            crate::op::mbool(lhs.0 == rhs.0 && lhs.1 == rhs.1 && lhs.2 == rhs.2)
+        fn apply(lhs: Three, rhs: Three) -> bool {
+            lhs.0 == rhs.0 && lhs.1 == rhs.1 && lhs.2 == rhs.2
         }
     }
 
@@ -303,8 +232,8 @@ mod tests {
 
     #[cubecl::cube]
     impl BinaryPredicateOp<u32> for EqualU32 {
-        fn apply(lhs: u32, rhs: u32) -> crate::MBool {
-            crate::op::mbool(lhs == rhs)
+        fn apply(lhs: u32, rhs: u32) -> bool {
+            lhs == rhs
         }
     }
 
@@ -476,8 +405,11 @@ mod tests {
             (10, 11, 10, 11)
         );
 
-        let key_output = exec.to_device(&vec![0_u32; len]);
-        let value_output = exec.alloc_row::<Seven>(len);
+        // A caller may know the maximum number of segments independently of
+        // the input length.  Compact outputs must not require one slot per
+        // input item.
+        let key_output = exec.to_device(&[0_u32; 2]);
+        let value_output = exec.alloc_row::<Seven>(2);
         let count = crate::api::algorithm::reduce_by_key_into(
             &exec,
             keys.column(),

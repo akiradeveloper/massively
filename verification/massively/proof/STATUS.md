@@ -20,7 +20,7 @@ is represented by exactly one normalized PRAM round and one Core bulk round.
 `InstructionNormalization.compileToPublicAPI_run_decode_correct` strengthens
 the target side to an independent denotational model of a fixed public
 Massively API program.  For every finite instruction-machine run, the compiled
-program built from `transform`, `gather`, `copy_where`, stable `sort`, `unique`,
+program built from `map`, `gather`, `copy_where`, stable `sort`, `unique`,
 `copy`, and collision-free `scatter` decodes to exactly the source execution.
 The public program is fixed by the source syntax and is not specialized to an
 input configuration or requested step count.

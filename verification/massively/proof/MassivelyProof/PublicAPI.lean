@@ -7,7 +7,7 @@ open MassivelyProof
 /-!
 This file models the small public-API basis used by the completeness compiler:
 
-* `transform` computes pull addresses, mapped registers, and write rows;
+* `map` computes pull addresses, mapped registers, and write rows;
 * `gather` reads the old materialized memory;
 * `copy_where` compacts enabled write rows;
 * `sort` orders rows by `(destination, owner)`;
@@ -31,9 +31,9 @@ structure WriteRow (wordWidth processors memorySize : Nat) where
 
 namespace Basis
 
-/-- Denotation of public `transform`. -/
-def transform {ι : Type} (indices : List ι) (map : ι → α) : List α :=
-  indices.map map
+/-- Denotation of public `map`. -/
+def map {ι : Type} (indices : List ι) (mapper : ι → α) : List α :=
+  indices.map mapper
 
 /-- Denotation of public `gather`. -/
 def gather (memory : Fin memorySize → α) (indices : List (Fin memorySize)) : List α :=
@@ -79,7 +79,7 @@ def scatterDistinct
 end Basis
 
 /-- Public-API program obtained from one normalized Core round.  The syntax
-fields are scalar callbacks used by public `transform`; the routing skeleton is
+fields are scalar callbacks used by public `map`; the routing skeleton is
 fixed by `step` below. -/
 structure Program
     {wordWidth : Nat}
@@ -124,7 +124,7 @@ def pulledAddresses
     (program : Program (wordWidth := wordWidth) signature processors memorySize registerType)
     (configuration : Config wordWidth processors memorySize registerType) :
     List (Fin memorySize) :=
-  Basis.transform (processorRows processors)
+  Basis.map (processorRows processors)
     (program.pulledAddressAt configuration)
 
 def pulledValues
@@ -174,17 +174,17 @@ def writeRowAt
   value := Term.evaluate (signature := signature)
     (program.mapEnvironment configuration processor) program.pushValue
 
-def transformedWriteRows
+def mappedWriteRows
     (program : Program (wordWidth := wordWidth) signature processors memorySize registerType)
     (configuration : Config wordWidth processors memorySize registerType) :
     List (WriteRow wordWidth processors memorySize) :=
-  Basis.transform (processorRows processors) (program.writeRowAt configuration)
+  Basis.map (processorRows processors) (program.writeRowAt configuration)
 
 def compactedWriteRows
     (program : Program (wordWidth := wordWidth) signature processors memorySize registerType)
     (configuration : Config wordWidth processors memorySize registerType) :
     List (WriteRow wordWidth processors memorySize) :=
-  Basis.copyWhere (program.transformedWriteRows configuration) fun row =>
+  Basis.copyWhere (program.mappedWriteRows configuration) fun row =>
     program.selectedAt configuration row.owner
 
 def sortedWriteRows

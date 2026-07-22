@@ -126,28 +126,74 @@ impl ReductionOp<u32> for SumU32 {
     }
 }
 
-pub(crate) struct EqualU32;
-
-#[cubecl::cube]
-impl BinaryPredicateOp<u32> for EqualU32 {
-    fn apply(lhs: u32, rhs: u32) -> crate::MBool {
-        crate::op::mbool(lhs == rhs)
-    }
-}
-
 pub(crate) struct LessU32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for LessU32 {
-    fn apply(lhs: u32, rhs: u32) -> crate::MBool {
-        crate::op::mbool(lhs < rhs)
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs < rhs
+    }
+}
+
+pub(crate) struct SegmentOffsets<R: Runtime> {
+    pub(crate) offsets: DeviceVec<R, u32>,
+    pub(crate) segment_count: usize,
+    pub(crate) value_len: usize,
+}
+
+impl<R: Runtime> SegmentOffsets<R> {
+    pub(crate) fn new<Offsets>(
+        exec: &Executor<R>,
+        offsets: Offsets,
+        value_len: usize,
+    ) -> Result<Self, Error>
+    where
+        Offsets: MIter<R, Item = MIndex>,
+    {
+        let offsets = crate::api::iter::materialize_u32(exec, offsets)?;
+        Self::from_materialized(offsets, value_len)
+    }
+
+    fn from_materialized(offsets: DeviceVec<R, u32>, value_len: usize) -> Result<Self, Error> {
+        let Some(segment_count) = offsets.capacity().checked_sub(1) else {
+            return Err(Error::LengthMismatch { left: 1, right: 0 });
+        };
+        Ok(Self {
+            offsets,
+            segment_count,
+            value_len,
+        })
+    }
+
+    pub(crate) fn compact<Input, Output, OutputOffsets>(
+        &self,
+        exec: &Executor<R>,
+        input: Input,
+        flags: DeviceVec<R, u32>,
+        output: Output,
+        output_offsets: OutputOffsets,
+    ) -> Result<DeviceVec<R, u32>, Error>
+    where
+        Input: crate::core::facade::KernelInput<R, Item = Output::Item>,
+        Output: MIterMut<R>,
+        OutputOffsets: MIterMut<R, Item = MIndex>,
+    {
+        compact_with_offsets(
+            exec,
+            &self.offsets,
+            self.segment_count,
+            self.value_len,
+            input,
+            flags,
+            output,
+            output_offsets,
+        )
     }
 }
 
 pub(crate) struct SegmentControl<R: Runtime> {
     pub(crate) offsets: DeviceVec<R, u32>,
     pub(crate) heads: DeviceVec<R, u32>,
-    pub(crate) ids: DeviceVec<R, u32>,
     pub(crate) segment_count: usize,
     pub(crate) value_len: usize,
 }
@@ -161,8 +207,8 @@ impl<R: Runtime> SegmentControl<R> {
     where
         Offsets: MIter<R, Item = MIndex>,
     {
-        let offsets = crate::api::iter::materialize_u32(exec, offsets)?;
-        Self::from_materialized(exec, offsets, value_len)
+        let offsets = SegmentOffsets::new(exec, offsets, value_len)?;
+        Self::from_offsets(exec, offsets)
     }
 
     pub(crate) fn from_materialized(
@@ -170,11 +216,18 @@ impl<R: Runtime> SegmentControl<R> {
         offsets: DeviceVec<R, u32>,
         value_len: usize,
     ) -> Result<Self, Error> {
-        let Some(segment_count) = offsets.capacity().checked_sub(1) else {
-            return Err(Error::LengthMismatch { left: 1, right: 0 });
-        };
+        let offsets = SegmentOffsets::from_materialized(offsets, value_len)?;
+        Self::from_offsets(exec, offsets)
+    }
+
+    fn from_offsets(exec: &Executor<R>, offsets: SegmentOffsets<R>) -> Result<Self, Error> {
+        let SegmentOffsets {
+            offsets,
+            segment_count,
+            value_len,
+        } = offsets;
         let zero = exec.value(0u32)?;
-        let heads = exec.full(value_len, &zero)?;
+        let heads = exec.full_value(value_len, &zero)?;
 
         if segment_count != 0 && value_len != 0 {
             let segment_count_u32 = u32::try_from(segment_count)
@@ -194,18 +247,30 @@ impl<R: Runtime> SegmentControl<R> {
             }
         }
 
-        let ids = exec.alloc::<u32>(value_len);
-        if value_len != 0 {
-            crate::vector::inclusive_scan_into(exec, heads.slice(..), MaxU32, ids.slice_mut(..))?;
-        }
-
         Ok(Self {
             offsets,
             heads,
-            ids,
             segment_count,
             value_len,
         })
+    }
+
+    /// Expands sparse segment heads into one source-segment id per value.
+    ///
+    /// Most segmented algorithms consume head flags directly and avoid this
+    /// full-length scan. Only operations that need random access to both
+    /// segment bounds request ids.
+    pub(crate) fn ids(&self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
+        let ids = exec.alloc::<u32>(self.value_len);
+        if self.value_len != 0 {
+            crate::vector::inclusive_scan_into(
+                exec,
+                self.heads.slice(..),
+                MaxU32,
+                ids.slice_mut(..),
+            )?;
+        }
+        Ok(ids)
     }
 
     pub(crate) fn reverse_indices(&self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
@@ -213,6 +278,7 @@ impl<R: Runtime> SegmentControl<R> {
         if self.value_len == 0 {
             return Ok(indices);
         }
+        let ids = self.ids(exec)?;
         let len = u32::try_from(self.value_len).map_err(|_| Error::LengthTooLarge {
             len: self.value_len,
         })?;
@@ -223,7 +289,7 @@ impl<R: Runtime> SegmentControl<R> {
                 crate::launch::cube_count_1d(self.value_len.div_ceil(BLOCK_SIZE as usize))?,
                 CubeDim::new_1d(BLOCK_SIZE),
                 BufferArg::from_raw_parts(self.offsets.handle.clone(), self.offsets.capacity()),
-                BufferArg::from_raw_parts(self.ids.handle.clone(), self.ids.capacity()),
+                BufferArg::from_raw_parts(ids.handle.clone(), ids.capacity()),
                 BufferArg::from_raw_parts(len_handle, 1),
                 BufferArg::from_raw_parts(indices.handle.clone(), indices.capacity()),
             );
@@ -308,6 +374,7 @@ impl<R: Runtime> SegmentControl<R> {
         if self.value_len == 0 {
             return Ok(candidates);
         }
+        let ids = self.ids(exec)?;
         let len = u32::try_from(self.value_len).map_err(|_| Error::LengthTooLarge {
             len: self.value_len,
         })?;
@@ -319,7 +386,7 @@ impl<R: Runtime> SegmentControl<R> {
                 CubeDim::new_1d(BLOCK_SIZE),
                 BufferArg::from_raw_parts(self.offsets.handle.clone(), self.offsets.capacity()),
                 BufferArg::from_raw_parts(self.heads.handle.clone(), self.heads.capacity()),
-                BufferArg::from_raw_parts(self.ids.handle.clone(), self.ids.capacity()),
+                BufferArg::from_raw_parts(ids.handle.clone(), ids.capacity()),
                 BufferArg::from_raw_parts(breaks.handle.clone(), breaks.capacity()),
                 BufferArg::from_raw_parts(len_handle, 1),
                 BufferArg::from_raw_parts(candidates.handle.clone(), candidates.capacity()),
@@ -377,49 +444,78 @@ impl<R: Runtime> SegmentControl<R> {
         Output: MIterMut<R>,
         OutputOffsets: MIterMut<R, Item = MIndex>,
     {
-        let positions = crate::core::scan::inclusive_scan_u32(exec, &flags)?;
-        let offset_count = self.segment_count + 1;
-        let selected_offsets = if self.value_len == 0 {
-            let zero = exec.value(0u32)?;
-            exec.full(offset_count, &zero)?
-        } else {
-            let selected_offsets = exec.alloc::<u32>(offset_count);
-            let offset_count_u32 = u32::try_from(offset_count)
-                .map_err(|_| Error::LengthTooLarge { len: offset_count })?;
-            let offset_count_handle = exec
-                .client()
-                .create_from_slice(u32::as_bytes(&[offset_count_u32]));
-            unsafe {
-                selected_offsets_kernel::launch_unchecked::<R>(
-                    exec.client(),
-                    crate::launch::cube_count_1d(offset_count.div_ceil(BLOCK_SIZE as usize))?,
-                    CubeDim::new_1d(BLOCK_SIZE),
-                    BufferArg::from_raw_parts(self.offsets.handle.clone(), self.offsets.capacity()),
-                    BufferArg::from_raw_parts(positions.handle.clone(), positions.capacity()),
-                    BufferArg::from_raw_parts(offset_count_handle, 1),
-                    BufferArg::from_raw_parts(
-                        selected_offsets.handle.clone(),
-                        selected_offsets.capacity(),
-                    ),
-                );
-            }
-            selected_offsets
-        };
-        crate::api::algorithm::transform::transform_into(
+        compact_with_offsets(
             exec,
-            selected_offsets.slice(..),
-            crate::op::Identity,
-            output_offsets,
-        )?;
-
-        let selection = crate::selection::SelectionControl::from_positions(exec, positions, false)?;
-        crate::vector::apply_permutation_prefix_into(
-            exec,
+            &self.offsets,
+            self.segment_count,
+            self.value_len,
             input,
-            selection.indices().column(),
-            selection.count(),
+            flags,
             output,
-        )?;
-        Ok(selection.count().clone())
+            output_offsets,
+        )
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compact_with_offsets<R, Input, Output, OutputOffsets>(
+    exec: &Executor<R>,
+    offsets: &DeviceVec<R, u32>,
+    segment_count: usize,
+    value_len: usize,
+    input: Input,
+    flags: DeviceVec<R, u32>,
+    output: Output,
+    output_offsets: OutputOffsets,
+) -> Result<DeviceVec<R, u32>, Error>
+where
+    R: Runtime,
+    Input: crate::core::facade::KernelInput<R, Item = Output::Item>,
+    Output: MIterMut<R>,
+    OutputOffsets: MIterMut<R, Item = MIndex>,
+{
+    let positions = crate::core::scan::inclusive_scan_u32(exec, &flags)?;
+    let offset_count = segment_count + 1;
+    let selected_offsets = if value_len == 0 {
+        let zero = exec.value(0u32)?;
+        exec.full_value(offset_count, &zero)?
+    } else {
+        let selected_offsets = exec.alloc::<u32>(offset_count);
+        let offset_count_u32 =
+            u32::try_from(offset_count).map_err(|_| Error::LengthTooLarge { len: offset_count })?;
+        let offset_count_handle = exec
+            .client()
+            .create_from_slice(u32::as_bytes(&[offset_count_u32]));
+        unsafe {
+            selected_offsets_kernel::launch_unchecked::<R>(
+                exec.client(),
+                crate::launch::cube_count_1d(offset_count.div_ceil(BLOCK_SIZE as usize))?,
+                CubeDim::new_1d(BLOCK_SIZE),
+                BufferArg::from_raw_parts(offsets.handle.clone(), offsets.capacity()),
+                BufferArg::from_raw_parts(positions.handle.clone(), positions.capacity()),
+                BufferArg::from_raw_parts(offset_count_handle, 1),
+                BufferArg::from_raw_parts(
+                    selected_offsets.handle.clone(),
+                    selected_offsets.capacity(),
+                ),
+            );
+        }
+        selected_offsets
+    };
+    crate::api::algorithm::transform::transform_into(
+        exec,
+        selected_offsets.slice(..),
+        crate::op::Identity,
+        output_offsets,
+    )?;
+
+    let selection = crate::selection::SelectionControl::from_positions(exec, positions)?;
+    crate::vector::apply_permutation_prefix_into(
+        exec,
+        input,
+        selection.indices().column(),
+        selection.count(),
+        output,
+    )?;
+    Ok(selection.count().clone())
 }

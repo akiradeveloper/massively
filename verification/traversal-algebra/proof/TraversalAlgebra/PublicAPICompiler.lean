@@ -20,9 +20,9 @@ current APIs.
 
 namespace VectorBasis
 
-/-- Dense public `vector::transform`, with a counting vertex column zipped into
+/-- Dense public `vector::map`, with a counting vertex column zipped into
 the input so the mapper can observe the logical vertex identifier. -/
-def transformStore
+def mapStore
     (input : Store n Input)
     (mapper : Fin n → Input → Output) : Store n Output :=
   fun index => mapper index (input index)
@@ -86,13 +86,13 @@ structure Program
 
 namespace Program
 
-/-- Evaluate the public dense vector transform used for vertex update. -/
+/-- Evaluate the public dense vector map used for vertex update. -/
 def updateState
     (program : Program signature vertex edge message)
     (oldState : Store n (vertex.denote n denoteBase))
     (inbox : Store n (message.denote n denoteBase)) :
     Store n (vertex.denote n denoteBase) :=
-  VectorBasis.transformStore oldState fun vertexId oldValue =>
+  VectorBasis.mapStore oldState fun vertexId oldValue =>
     Term.evaluate (signature := signature)
       (UpdateContext.environment vertexId oldValue (inbox vertexId))
       program.vertexMap

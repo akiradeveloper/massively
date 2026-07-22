@@ -301,7 +301,7 @@ def compileToPublicAPI
   PublicAPICompilation.compile (compileToCore program)
 
 /-- Main API-level completeness theorem.  The witness program consists only of
-the public basis modeled in `PublicAPI`: transform, gather, copy_where, sort,
+the public basis modeled in `PublicAPI`: map, gather, copy_where, sort,
 unique_by_key, copy, and collision-free scatter. -/
 theorem compileToPublicAPI_run_decode_correct
     (program : InstructionPRAM.Program (wordWidth := wordWidth) signature processors memorySize labels registerType)

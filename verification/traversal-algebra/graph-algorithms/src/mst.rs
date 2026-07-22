@@ -13,8 +13,8 @@ struct LessF32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<f32> for LessF32 {
-    fn apply(lhs: f32, rhs: f32) -> massively::MBool {
-        massively::op::mbool(lhs < rhs)
+    fn apply(lhs: f32, rhs: f32) -> bool {
+        lhs < rhs
     }
 }
 
@@ -32,7 +32,7 @@ impl UnaryOp<(u32, u32)> for EqualPair {
 fn read_u32<R: Runtime>(
     exec: &Executor<R>,
     values: &DeviceVec<R, u32>,
-    index: usize,
+    index: u32,
 ) -> common::Result<u32> {
     Ok(exec.to_host(&values.slice(index..index + 1))?[0])
 }
@@ -42,7 +42,7 @@ pub fn solve<R: Runtime>(
     graph: &DeviceWeightedCsr<R, f32>,
 ) -> common::Result<MVec<R, (u32, u32, f32)>> {
     let topology = graph.graph();
-    let edge_count = topology.edge_count();
+    let edge_count = topology.edge_capacity()?;
     let sources = graph::traverse(
         exec,
         topology.csr(),
@@ -55,27 +55,27 @@ pub fn solve<R: Runtime>(
     let edge_order = vector::sort_by_key(
         exec,
         graph.weights().slice(..),
-        common::counting_u32(0, edge_count),
+        common::counting_u32(0, edge_count as usize),
         LessF32,
     )?;
-    let components = vector::transform(
+    let components = vector::map(
         exec,
         common::counting_u32(0, topology.vertex_count() as usize),
         Identity,
     )?;
-    let selected = common::filled(exec, edge_count, 0u32)?;
+    let selected = common::filled(exec, edge_count as usize, 0u32)?;
 
     for position in 0..edge_count {
         let edge = read_u32(exec, &edge_order, position)?;
-        let source = read_u32(exec, &sources, edge as usize)?;
-        let destination = read_u32(exec, topology.destinations(), edge as usize)?;
-        let source_component = read_u32(exec, &components, source as usize)?;
-        let destination_component = read_u32(exec, &components, destination as usize)?;
+        let source = read_u32(exec, &sources, edge)?;
+        let destination = read_u32(exec, topology.destinations(), edge)?;
+        let source_component = read_u32(exec, &components, source)?;
+        let destination_component = read_u32(exec, &components, destination)?;
         if source_component == destination_component {
             continue;
         }
 
-        let stencil = vector::transform(
+        let stencil = vector::map(
             exec,
             zip2(
                 components.slice(..),
@@ -83,10 +83,9 @@ pub fn solve<R: Runtime>(
             ),
             EqualPair,
         )?;
-        let source_component_value = exec.value(source_component)?;
         vector::replace_where(
             exec,
-            &source_component_value,
+            source_component,
             common::stencil(stencil.slice(..)),
             components.slice_mut(..),
         )?;
@@ -126,7 +125,7 @@ mod tests {
         let graph = DeviceWeightedCsr::from_host(&exec, &graph).unwrap();
         let tree = solve(&exec, &graph).unwrap();
         let (sources, _, weights) = MStorage::into_columns(tree);
-        assert_eq!(sources.read_len(&exec).unwrap(), 3);
+        assert_eq!(sources.len(), 3);
         assert_eq!(exec.to_host(&weights).unwrap().iter().sum::<f32>(), 6.0);
     }
 }

@@ -106,6 +106,7 @@ fn scatter_combine_a13<
     index12: &[I12],
     index_offsets: &[u32],
     positions: &[u32],
+    order: &[u32],
     len: &[u32],
     active_len: &[u32],
     output0: &mut [O0],
@@ -124,7 +125,7 @@ fn scatter_combine_a13<
 ) {
     let position = ABSOLUTE_POS as usize;
     if position < len[0] as usize && position < active_len[0] as usize {
-        let index_position = positions[position] as usize;
+        let index_position = order[positions[position] as usize] as usize;
         let destination = IndexExpr::eval13(
             index0,
             index1,
@@ -202,6 +203,7 @@ pub trait ScatterCombineInput<R: Runtime, Indices, Output>: ReadExpression + Siz
         exec: &Executor<R>,
         indices: Indices,
         positions: &crate::DeviceVec<R, u32>,
+        order: &crate::DeviceVec<R, u32>,
         active_len: &crate::DeviceVec<R, u32>,
         output: Output,
     ) -> Result<(), Error>
@@ -226,6 +228,7 @@ where
         exec: &Executor<R>,
         indices: Indices,
         positions: &crate::DeviceVec<R, u32>,
+        order: &crate::DeviceVec<R, u32>,
         active_len: &crate::DeviceVec<R, u32>,
         output: Output,
     ) -> Result<(), Error>
@@ -237,6 +240,12 @@ where
             return Err(Error::LengthMismatch {
                 left: len,
                 right: positions.capacity(),
+            });
+        }
+        if len != order.capacity() {
+            return Err(Error::LengthMismatch {
+                left: len,
+                right: order.capacity(),
             });
         }
         if len == 0 {
@@ -354,6 +363,7 @@ where
                 BufferArg::from_raw_parts(index_reads.slots[12].0.clone(), index_reads.slots[12].1),
                 BufferArg::from_raw_parts(index_offsets, index_reads.offsets.len()),
                 BufferArg::from_raw_parts(positions.handle.clone(), positions.capacity()),
+                BufferArg::from_raw_parts(order.handle.clone(), order.capacity()),
                 BufferArg::from_raw_parts(len_handle.handle.clone(), 1),
                 BufferArg::from_raw_parts(active_len.handle.clone(), 1),
                 BufferArg::from_raw_parts(writes.slots[0].0.clone(), writes.slots[0].1),
@@ -380,6 +390,7 @@ pub(crate) fn apply<R, Source, Indices, Output, Op>(
     source: Source,
     indices: Indices,
     positions: &crate::DeviceVec<R, u32>,
+    order: &crate::DeviceVec<R, u32>,
     active_len: &crate::DeviceVec<R, u32>,
     output: Output,
 ) -> Result<(), Error>
@@ -388,5 +399,5 @@ where
     Source: ScatterCombineInput<R, Indices, Output>,
     Op: ReductionOp<Source::Item>,
 {
-    source.scatter_combine::<Op>(exec, indices, positions, active_len, output)
+    source.scatter_combine::<Op>(exec, indices, positions, order, active_len, output)
 }

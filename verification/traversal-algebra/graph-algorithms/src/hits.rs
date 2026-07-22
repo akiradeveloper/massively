@@ -42,22 +42,14 @@ fn normalize<R: Runtime>(
     exec: &Executor<R>,
     values: DeviceVec<R, f32>,
 ) -> common::Result<DeviceVec<R, f32>> {
-    let len = u32::try_from(values.capacity()).map_err(|_| massively::Error::LengthTooLarge {
-        len: values.capacity(),
-    })?;
-    let norm_squared = vector::reduce(
-        exec,
-        lazy::transform(values.slice(..), Square),
-        exec.value(0.0)?,
-        SumF32,
-    )?
-    .read(exec)?;
+    let len = values.len();
+    let norm_squared = vector::reduce(exec, lazy::map(values.slice(..), Square), 0.0, SumF32)?;
     let scale = if norm_squared == 0.0 {
         1.0
     } else {
         norm_squared.sqrt().recip()
     };
-    vector::transform(
+    vector::map(
         exec,
         zip2(values.slice(..), lazy::constant(scale).take(len)),
         Scale,
@@ -73,7 +65,7 @@ pub fn solve<R: Runtime>(
     assert!(n != 0);
     let mut hubs = common::filled(exec, n as usize, 1.0f32)?;
     let mut authorities = common::filled(exec, n as usize, 1.0f32)?;
-    let zero = exec.value(0.0f32)?;
+    let zero = 0.0f32;
 
     for _ in 0..iterations {
         authorities = graph::traverse(
@@ -83,7 +75,7 @@ pub fn solve<R: Runtime>(
             graph.edge_capacity()?,
         )?
         .map(graph::source(hubs.slice(..)), Identity)
-        .reduce_by_destination(exec, zero.clone(), SumF32)?;
+        .reduce_by_destination(exec, zero, SumF32)?;
         authorities = normalize(exec, authorities)?;
 
         hubs = graph::traverse(
@@ -93,7 +85,7 @@ pub fn solve<R: Runtime>(
             graph.edge_capacity()?,
         )?
         .map(graph::destination(authorities.slice(..)), Identity)
-        .reduce_by_source(exec, zero.clone(), SumF32)?;
+        .reduce_by_source(exec, zero, SumF32)?;
         hubs = normalize(exec, hubs)?;
     }
 

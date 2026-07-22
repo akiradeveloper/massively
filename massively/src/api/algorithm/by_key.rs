@@ -245,8 +245,8 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Less {
-///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-///         op::mbool(lhs < rhs)
+///     fn apply(lhs: u32, rhs: u32) -> bool {
+///         lhs < rhs
 ///     }
 /// }
 ///
@@ -276,10 +276,15 @@ where
     Values::Item: MAlloc<R>,
     Less: BinaryPredicateOp<Keys::Item>,
 {
-    let len = keys.capacity()? as usize;
-    let extent = keys.logical_extent()?.zipped(&values.logical_extent()?)?;
-    let mut value_output = exec.alloc::<Values::Item>(len);
-    value_output.set_logical_extent(extent);
+    let len = keys.len()?;
+    let value_len = values.len()?;
+    if len != value_len {
+        return Err(Error::LengthMismatch {
+            left: len as usize,
+            right: value_len as usize,
+        });
+    }
+    let value_output = exec.alloc::<Values::Item>(len as usize);
     sort_values_by_key_into(exec, keys, values, less, value_output.slice_mut(..))?;
     Ok(value_output)
 }
@@ -316,10 +321,15 @@ where
     Values: MIter<R>,
     Values::Item: MAlloc<R>,
 {
-    let len = keys.capacity()?;
-    let extent = keys.logical_extent()?.zipped(&values.logical_extent()?)?;
-    let mut value_output = exec.alloc::<Values::Item>(len as usize);
-    value_output.set_logical_extent(extent);
+    let len = keys.len()?;
+    let value_len = values.len()?;
+    if len != value_len {
+        return Err(Error::LengthMismatch {
+            left: len as usize,
+            right: value_len as usize,
+        });
+    }
+    let value_output = exec.alloc::<Values::Item>(len as usize);
     radix_sort_values_by_key_into(exec, keys, values, value_output.slice_mut(..))?;
     Ok(value_output)
 }
@@ -347,7 +357,8 @@ where
             right: value_len as usize,
         });
     }
-    let key_storage = crate::api::algorithm::transform(exec, keys, crate::op::Identity)?;
+    let key_storage =
+        crate::api::algorithm::transform::map_preserving_extent(exec, keys, crate::op::Identity)?;
     let permutation =
         <Keys::Item as RadixKey<R>>::radix_permutation(exec, &key_storage, key_len as usize)?;
     crate::api::algorithm::indexed::gather_into(exec, values, permutation.column(), value_output)
@@ -435,8 +446,8 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Equal {
-///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-///         op::mbool(lhs == rhs)
+///     fn apply(lhs: u32, rhs: u32) -> bool {
+///         lhs == rhs
 ///     }
 /// }
 ///
@@ -476,10 +487,15 @@ where
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
 {
-    let len = values.capacity()? as usize;
-    let extent = keys.logical_extent()?.zipped(&values.logical_extent()?)?;
-    let mut output = exec.alloc::<Values::Item>(len);
-    output.set_logical_extent(extent);
+    let len = keys.len()?;
+    let value_len = values.len()?;
+    if len != value_len {
+        return Err(Error::LengthMismatch {
+            left: len as usize,
+            right: value_len as usize,
+        });
+    }
+    let output = exec.alloc::<Values::Item>(len as usize);
     inclusive_scan_by_key_into(exec, keys, values, equal, op, output.slice_mut(..))?;
     Ok(output)
 }
@@ -527,8 +543,8 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Equal {
-///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-///         op::mbool(lhs == rhs)
+///     fn apply(lhs: u32, rhs: u32) -> bool {
+///         lhs == rhs
 ///     }
 /// }
 ///
@@ -542,13 +558,12 @@ where
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let keys = exec.to_device(&[1_u32, 1, 2, 2]);
 /// let values = exec.to_device(&[10_u32, 20, 30, 40]);
-/// let init = exec.value(0_u32).unwrap();
 /// let output = exclusive_scan_by_key(
 ///     &exec,
 ///     keys.slice(..),
 ///     values.slice(..),
 ///     Equal,
-///     init,
+///     0_u32,
 ///     Add,
 /// )
 /// .unwrap();
@@ -560,7 +575,7 @@ pub fn exclusive_scan_by_key<R, Keys, Values, Equal, Op>(
     keys: Keys,
     values: Values,
     equal: Equal,
-    init: MVal<R, Values::Item>,
+    init: Values::Item,
     op: Op,
 ) -> Result<MVec<R, Values::Item>, Error>
 where
@@ -571,10 +586,16 @@ where
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
 {
-    let len = values.capacity()? as usize;
-    let extent = keys.logical_extent()?.zipped(&values.logical_extent()?)?;
-    let mut output = exec.alloc::<Values::Item>(len);
-    output.set_logical_extent(extent);
+    let len = keys.len()?;
+    let value_len = values.len()?;
+    if len != value_len {
+        return Err(Error::LengthMismatch {
+            left: len as usize,
+            right: value_len as usize,
+        });
+    }
+    let output = exec.alloc::<Values::Item>(len as usize);
+    let init = exec.value(init)?;
     exclusive_scan_by_key_into(exec, keys, values, equal, init, op, output.slice_mut(..))?;
     Ok(output)
 }
@@ -623,8 +644,8 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Equal {
-///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-///         op::mbool(lhs == rhs)
+///     fn apply(lhs: u32, rhs: u32) -> bool {
+///         lhs == rhs
 ///     }
 /// }
 ///
@@ -638,13 +659,12 @@ where
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let keys = exec.to_device(&[1_u32, 1, 2, 2]);
 /// let values = exec.to_device(&[10_u32, 20, 30, 40]);
-/// let init = exec.value(0_u32).unwrap();
 /// let (key_output, value_output) = reduce_by_key(
 ///     &exec,
 ///     keys.slice(..),
 ///     values.slice(..),
 ///     Equal,
-///     init,
+///     0_u32,
 ///     Add,
 /// )
 /// .unwrap();
@@ -657,7 +677,7 @@ pub fn reduce_by_key<R, Keys, Values, KeyItem, ValueItem, Equal, Op>(
     keys: Keys,
     values: Values,
     equal: Equal,
-    init: MVal<R, ValueItem>,
+    init: ValueItem,
     op: Op,
 ) -> Result<(MVec<R, KeyItem>, MVec<R, ValueItem>), Error>
 where
@@ -669,9 +689,17 @@ where
     Equal: BinaryPredicateOp<KeyItem>,
     Op: ReductionOp<ValueItem>,
 {
-    let capacity = keys.capacity()? as usize;
-    let mut key_output = exec.alloc::<KeyItem>(capacity);
-    let mut value_output = exec.alloc::<ValueItem>(capacity);
+    let capacity = keys.len()?;
+    let value_len = values.len()?;
+    if capacity != value_len {
+        return Err(Error::LengthMismatch {
+            left: capacity as usize,
+            right: value_len as usize,
+        });
+    }
+    let mut key_output = exec.alloc::<KeyItem>(capacity as usize);
+    let mut value_output = exec.alloc::<ValueItem>(capacity as usize);
+    let init = exec.value(init)?;
     let len = reduce_by_key_into(
         exec,
         keys,
@@ -682,9 +710,9 @@ where
         key_output.slice_mut(..),
         value_output.slice_mut(..),
     )?;
-    let extent = len.logical_extent(capacity);
-    key_output.set_logical_extent(extent.clone());
-    value_output.set_logical_extent(extent);
+    let len = len.read(exec)?;
+    key_output.set_fixed_len(len);
+    value_output.set_fixed_len(len);
     Ok((key_output, value_output))
 }
 
@@ -749,8 +777,8 @@ where
 ///
 /// #[cubecl::cube]
 /// impl op::BinaryPredicateOp<u32> for Equal {
-///     fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-///         op::mbool(lhs == rhs)
+///     fn apply(lhs: u32, rhs: u32) -> bool {
+///         lhs == rhs
 ///     }
 /// }
 ///
@@ -780,10 +808,17 @@ where
     Values::Item: MAlloc<R>,
     Equal: BinaryPredicateOp<Keys::Item>,
 {
-    let capacity = keys.capacity()? as usize;
-    let mut value_output = exec.alloc::<Values::Item>(capacity);
+    let capacity = keys.len()?;
+    let value_len = values.len()?;
+    if capacity != value_len {
+        return Err(Error::LengthMismatch {
+            left: capacity as usize,
+            right: value_len as usize,
+        });
+    }
+    let mut value_output = exec.alloc::<Values::Item>(capacity as usize);
     let len = unique_by_key_into(exec, keys, values, equal, value_output.slice_mut(..))?;
-    value_output.set_logical_extent(len.logical_extent(capacity));
+    value_output.set_fixed_len(len.read(exec)?);
     Ok(value_output)
 }
 

@@ -25,23 +25,23 @@ use crate::{Error, Executor, MAlloc, MIter, MVal, op::ReductionOp};
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3, 4]);
 ///
-/// let init = exec.value(0_u32).unwrap();
-/// let sum = reduce(&exec, input.slice(..), init, Add).unwrap();
+/// let sum = reduce(&exec, input.slice(..), 0_u32, Add).unwrap();
 ///
-/// assert_eq!(sum.read(&exec).unwrap(), 10);
+/// assert_eq!(sum, 10);
 /// ```
 pub fn reduce<R, Input, Op>(
     exec: &Executor<R>,
     input: Input,
-    init: MVal<R, Input::Item>,
+    init: Input::Item,
     op: Op,
-) -> Result<MVal<R, Input::Item>, Error>
+) -> Result<Input::Item, Error>
 where
     R: Runtime,
     Input: MIter<R>,
     Input::Item: MAlloc<R>,
     Op: ReductionOp<Input::Item>,
 {
+    let init = exec.value(init)?;
     let storage =
         <<Input::Item as MAlloc<R>>::Dispatch as crate::api::iter::ItemDispatch<R>>::reduce(
             exec,
@@ -49,5 +49,5 @@ where
             init.into_storage(),
             op,
         )?;
-    MVal::from_storage(storage)
+    MVal::from_storage(storage)?.read(exec)
 }

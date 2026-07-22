@@ -1,5 +1,5 @@
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, MIter, vector::transform};
+use massively::{Executor, MIter, vector::map};
 
 fn exec() -> Executor<WgpuRuntime> {
     Executor::new(WgpuDevice::DefaultDevice)
@@ -9,7 +9,7 @@ fn materialize_u32<Input>(exec: &Executor<WgpuRuntime>, input: Input) -> Vec<u32
 where
     Input: MIter<WgpuRuntime, Item = u32>,
 {
-    let output = transform(exec, input, massively::op::Identity).unwrap();
+    let output = map(exec, input, massively::op::Identity).unwrap();
     exec.to_host(&output).unwrap()
 }
 
@@ -17,7 +17,7 @@ fn materialize_u64<Input>(exec: &Executor<WgpuRuntime>, input: Input) -> Vec<u64
 where
     Input: MIter<WgpuRuntime, Item = u64>,
 {
-    let output = transform(exec, input, massively::op::Identity).unwrap();
+    let output = map(exec, input, massively::op::Identity).unwrap();
     exec.to_host(&output).unwrap()
 }
 
@@ -25,7 +25,7 @@ fn materialize_f32<Input>(exec: &Executor<WgpuRuntime>, input: Input) -> Vec<f32
 where
     Input: MIter<WgpuRuntime, Item = f32>,
 {
-    let output = transform(exec, input, massively::op::Identity).unwrap();
+    let output = map(exec, input, massively::op::Identity).unwrap();
     exec.to_host(&output).unwrap()
 }
 
@@ -33,7 +33,7 @@ fn materialize_f64<Input>(exec: &Executor<WgpuRuntime>, input: Input) -> Vec<f64
 where
     Input: MIter<WgpuRuntime, Item = f64>,
 {
-    let output = transform(exec, input, massively::op::Identity).unwrap();
+    let output = map(exec, input, massively::op::Identity).unwrap();
     exec.to_host(&output).unwrap()
 }
 

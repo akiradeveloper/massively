@@ -174,7 +174,7 @@ fn assert_pi(count: u32) {
 
 fn bench_reduce_4g(c: &mut Criterion) {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-    let init = exec.value(0_u32).unwrap();
+    let init = 0_u32;
 
     let mut group = c.benchmark_group("reduce_4g");
     group.sample_size(10);
@@ -184,10 +184,7 @@ fn bench_reduce_4g(c: &mut Criterion) {
     group.bench_function("constant_u32", |b| {
         b.iter(|| {
             let input = lazy::constant(black_box(1_u32)).take(LEN);
-            let result = reduce(&exec, input, init.clone(), Sum)
-                .unwrap()
-                .read(&exec)
-                .unwrap();
+            let result = reduce(&exec, input, init.clone(), Sum).unwrap();
             assert_eq!(black_box(result), LEN as u32);
         })
     });
@@ -205,51 +202,35 @@ fn bench_reduce_4g(c: &mut Criterion) {
                 lazy::constant(black_box(0xf0f0_f0f0_u32)).take(LEN),
                 lazy::constant(black_box(0x55aa_aa55_u32)).take(LEN),
             );
-            let left = lazy::transform(left, FourMix);
-            let right = lazy::transform(right, FourMix);
+            let left = lazy::map(left, FourMix);
+            let right = lazy::map(right, FourMix);
             let result = reduce(
                 &exec,
-                lazy::transform(zip2(left, right), PairXor),
+                lazy::map(zip2(left, right), PairXor),
                 init.clone(),
                 Sum,
             )
-            .unwrap()
-            .read(&exec)
             .unwrap();
             black_box(result);
         })
     });
     group.bench_function("diag_a1_pcg2_hash", |b| {
         b.iter(|| {
-            let values = lazy::transform(lazy::counting(black_box(0)).take(LEN), PcgPairHash);
-            black_box(
-                reduce(&exec, values, init.clone(), Sum)
-                    .unwrap()
-                    .read(&exec)
-                    .unwrap(),
-            );
+            let values = lazy::map(lazy::counting(black_box(0)).take(LEN), PcgPairHash);
+            black_box(reduce(&exec, values, init.clone(), Sum).unwrap());
         })
     });
     group.bench_function("diag_a1_pcg2_unit_compare", |b| {
         b.iter(|| {
-            let values =
-                lazy::transform(lazy::counting(black_box(0)).take(LEN), PcgPairUnitCompare);
-            let count = reduce(&exec, values, init.clone(), Sum)
-                .unwrap()
-                .read(&exec)
-                .unwrap();
+            let values = lazy::map(lazy::counting(black_box(0)).take(LEN), PcgPairUnitCompare);
+            let count = reduce(&exec, values, init.clone(), Sum).unwrap();
             assert!((1_900_000_000..2_100_000_000).contains(&black_box(count)));
         })
     });
     group.bench_function("diag_a1_pcg2_circle", |b| {
         b.iter(|| {
-            let values = lazy::transform(lazy::counting(black_box(0)).take(LEN), PcgPairCircle);
-            assert_pi(
-                reduce(&exec, values, init.clone(), Sum)
-                    .unwrap()
-                    .read(&exec)
-                    .unwrap(),
-            );
+            let values = lazy::map(lazy::counting(black_box(0)).take(LEN), PcgPairCircle);
+            assert_pi(reduce(&exec, values, init.clone(), Sum).unwrap());
         })
     });
     group.bench_function("diag_a3_pcg2_circle_runtime_keys", |b| {
@@ -259,13 +240,8 @@ fn bench_reduce_4g(c: &mut Criterion) {
                 lazy::constant(black_box(X_KEY)).take(LEN),
                 lazy::constant(black_box(Y_KEY)).take(LEN),
             );
-            let values = lazy::transform(input, PcgPairCircleRuntime);
-            assert_pi(
-                reduce(&exec, values, init.clone(), Sum)
-                    .unwrap()
-                    .read(&exec)
-                    .unwrap(),
-            );
+            let values = lazy::map(input, PcgPairCircleRuntime);
+            assert_pi(reduce(&exec, values, init.clone(), Sum).unwrap());
         })
     });
     group.bench_function("diag_a5_pcg2_circle_runtime_range", |b| {
@@ -277,13 +253,8 @@ fn bench_reduce_4g(c: &mut Criterion) {
                 lazy::constant(black_box(0.0f32)).take(LEN),
                 lazy::constant(black_box(1.0f32)).take(LEN),
             );
-            let values = lazy::transform(input, PcgPairCircleRuntimeRange);
-            assert_pi(
-                reduce(&exec, values, init.clone(), Sum)
-                    .unwrap()
-                    .read(&exec)
-                    .unwrap(),
-            );
+            let values = lazy::map(input, PcgPairCircleRuntimeRange);
+            assert_pi(reduce(&exec, values, init.clone(), Sum).unwrap());
         })
     });
     group.bench_function("diag_a8_pcg2_circle_direct", |b| {
@@ -300,15 +271,10 @@ fn bench_reduce_4g(c: &mut Criterion) {
                 lazy::constant(black_box(1.0f32)).take(LEN),
                 lazy::constant(black_box(Y_KEY)).take(LEN),
             );
-            let x = lazy::transform(x, UniformFromArgs);
-            let y = lazy::transform(y, UniformFromArgs);
-            let values = lazy::transform(zip2(x, y), DetectHit);
-            assert_pi(
-                reduce(&exec, values, init.clone(), Sum)
-                    .unwrap()
-                    .read(&exec)
-                    .unwrap(),
-            );
+            let x = lazy::map(x, UniformFromArgs);
+            let y = lazy::map(y, UniformFromArgs);
+            let values = lazy::map(zip2(x, y), DetectHit);
+            assert_pi(reduce(&exec, values, init.clone(), Sum).unwrap());
         })
     });
     group.bench_function("monte_carlo_pi", |b| {
@@ -319,11 +285,8 @@ fn bench_reduce_4g(c: &mut Criterion) {
             let y = massively::util::random::uniform_f32(0.0, 1.0, black_box(1))
                 .unwrap()
                 .take(LEN);
-            let hits = lazy::transform(zip2(x, y), DetectHit);
-            let count = reduce(&exec, hits, init.clone(), Sum)
-                .unwrap()
-                .read(&exec)
-                .unwrap();
+            let hits = lazy::map(zip2(x, y), DetectHit);
+            let count = reduce(&exec, hits, init.clone(), Sum).unwrap();
             assert_pi(count);
         })
     });

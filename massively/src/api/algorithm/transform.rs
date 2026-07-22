@@ -66,7 +66,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, op, vector::transform};
+/// use massively::{Executor, op, vector::map};
 ///
 /// struct AddOne;
 ///
@@ -81,11 +81,28 @@ where
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3]);
-/// let output = transform(&exec, input.slice(..), AddOne).unwrap();
+/// let output = map(&exec, input.slice(..), AddOne).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![2, 3, 4]);
 /// ```
-pub fn transform<R, Input, Op>(
+pub fn map<R, Input, Op>(
+    exec: &Executor<R>,
+    input: Input,
+    op: Op,
+) -> Result<MVec<R, Op::Output>, Error>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    Op: UnaryOp<Input::Item>,
+    Op::Output: MAlloc<R>,
+{
+    let len = input.len()? as usize;
+    let output = exec.alloc::<Op::Output>(len);
+    transform_into(exec, input, op, output.slice_mut(..))?;
+    Ok(output)
+}
+
+pub(crate) fn map_preserving_extent<R, Input, Op>(
     exec: &Executor<R>,
     input: Input,
     op: Op,

@@ -13,8 +13,8 @@ struct LessU32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for LessU32 {
-    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-        massively::op::mbool(lhs < rhs)
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs < rhs
     }
 }
 
@@ -22,8 +22,8 @@ struct EqualU32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for EqualU32 {
-    fn apply(lhs: u32, rhs: u32) -> massively::MBool {
-        massively::op::mbool(lhs == rhs)
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs == rhs
     }
 }
 
@@ -35,9 +35,8 @@ pub fn solve<R: Runtime>(
     assert_eq!(lhs.vertex_count(), rhs.vertex_count());
     let n = lhs.vertex_count();
 
-    let capacity = graph::traverse(exec, rhs.csr(), lhs.destinations().slice(..), 0)?
-        .edge_count()
-        .read(exec)?;
+    let capacity =
+        graph::traverse(exec, rhs.csr(), lhs.destinations().slice(..), 0)?.edge_count(exec)?;
     let mut destinations = exec.alloc::<u32>(capacity as usize);
     let offsets = exec.alloc::<u32>(n as usize + 1);
     let mut output_len = 0u32;
@@ -50,16 +49,14 @@ pub fn solve<R: Runtime>(
             offsets.slice_mut(..),
         )?;
 
-        let bounds = exec.to_host(&lhs.offsets().slice(vertex as usize..vertex as usize + 2))?;
-        let frontier = lhs
-            .destinations()
-            .slice(bounds[0] as usize..bounds[1] as usize);
-        if frontier.capacity() == 0 {
+        let bounds = exec.to_host(&lhs.offsets().slice(vertex..vertex + 2))?;
+        let frontier = lhs.destinations().slice(bounds[0]..bounds[1]);
+        if frontier.len() == 0 {
             continue;
         }
 
         let traversal = graph::traverse(exec, rhs.csr(), frontier, capacity)?;
-        if traversal.edge_count().read(exec)? == 0 {
+        if traversal.edge_count(exec)? == 0 {
             continue;
         }
         let candidates = common::materialize_exact(
@@ -71,10 +68,7 @@ pub fn solve<R: Runtime>(
         let sorted = vector::sort(exec, candidates.slice(..), LessU32)?;
         let row =
             common::materialize_exact(exec, vector::unique(exec, sorted.slice(..), EqualU32)?)?;
-        let row_len =
-            u32::try_from(row.capacity()).map_err(|_| massively::Error::LengthTooLarge {
-                len: row.capacity(),
-            })?;
+        let row_len = row.len();
         vector::scatter(
             exec,
             row.slice(..),
@@ -90,7 +84,7 @@ pub fn solve<R: Runtime>(
         common::indices(lazy::constant(n).take(1)),
         offsets.slice_mut(..),
     )?;
-    destinations.truncate(output_len as usize);
+    destinations.truncate(output_len);
     DeviceCsr::from_parts(destinations, offsets)
 }
 

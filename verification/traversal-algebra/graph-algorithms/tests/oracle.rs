@@ -276,8 +276,7 @@ fn geolocation_matches_cpu_reference() {
                 .map(|coordinate| coordinate.1)
                 .collect::<Vec<_>>(),
         );
-        let coordinates =
-            vector::transform(exec, zip2(xs.slice(..), ys.slice(..)), Identity).unwrap();
+        let coordinates = vector::map(exec, zip2(xs.slice(..), ys.slice(..)), Identity).unwrap();
         let known = exec.to_device(
             &case
                 .known
@@ -395,7 +394,7 @@ fn minimum_spanning_forest_matches_cpu_reference() {
         let matrix = DeviceWeightedCsr::from_host(exec, &matrix).unwrap();
         let actual = graph::mst::solve(exec, &matrix).unwrap();
         let (sources, _, weights) = MStorage::into_columns(actual);
-        prop_assert_eq!(sources.capacity(), expected.0);
+        prop_assert_eq!(sources.len() as usize, expected.0);
         let actual_weight = exec.to_host(&weights).unwrap().iter().sum::<f32>();
         prop_assert!((actual_weight - expected.1).abs() <= 1e-5);
         Ok(())

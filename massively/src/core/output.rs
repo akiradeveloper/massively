@@ -90,7 +90,7 @@ where
     T: MStorageElement + StorageLayout<StorageArity = S1>,
 {
     fn slice_output<Range: RangeBounds<usize>>(&self, range: Range) -> Self {
-        self.slice_mut(range)
+        self.slice_mut_usize(range)
     }
 }
 
@@ -113,7 +113,7 @@ where
     type Read = Column<T>;
 
     fn slice_read<Range: RangeBounds<usize>>(&self, range: Range) -> Self::Read {
-        self.slice(range)
+        self.slice_usize(range)
     }
 }
 

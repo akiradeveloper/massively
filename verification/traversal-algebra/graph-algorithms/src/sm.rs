@@ -90,12 +90,12 @@ struct PairLess;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<(u32, u32)> for PairLess {
-    fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> massively::MBool {
-        massively::op::mbool(if lhs.0 != rhs.0 {
+    fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> bool {
+        if lhs.0 != rhs.0 {
             lhs.0 < rhs.0
         } else {
             lhs.1 < rhs.1
-        })
+        }
     }
 }
 
@@ -184,7 +184,7 @@ pub fn solve<R: Runtime>(
         .checked_pow(k)
         .ok_or(massively::Error::LengthTooLarge { len: usize::MAX })?;
 
-    let mut stencil = vector::transform(
+    let mut stencil = vector::map(
         exec,
         zip3(
             common::counting_u32(0, candidate_count as usize),
@@ -206,7 +206,7 @@ pub fn solve<R: Runtime>(
         .emit(exec)?,
     )?;
     let sorted_pairs = vector::sort(exec, edge_pairs.slice(..), PairLess)?;
-    let edge_count = sorted_pairs.capacity()?;
+    let edge_count = sorted_pairs.len()?;
     let searchable_len =
         (edge_count as usize)
             .checked_add(1)
@@ -232,7 +232,7 @@ pub fn solve<R: Runtime>(
 
     for query_source in 0..query.vertex_count() {
         for &query_destination in query.row(query_source) {
-            let candidates = vector::transform(
+            let candidates = vector::map(
                 exec,
                 massively::zip4(
                     common::counting_u32(0, candidate_count as usize),
@@ -250,8 +250,8 @@ pub fn solve<R: Runtime>(
                 common::indices(locations.slice(..)),
             )?;
             let present =
-                vector::transform(exec, zip2(candidates.slice(..), found.slice(..)), PairEqual)?;
-            stencil = vector::transform(exec, zip2(stencil.slice(..), present.slice(..)), Both)?;
+                vector::map(exec, zip2(candidates.slice(..), found.slice(..)), PairEqual)?;
+            stencil = vector::map(exec, zip2(stencil.slice(..), present.slice(..)), Both)?;
         }
     }
 
@@ -263,14 +263,11 @@ pub fn solve<R: Runtime>(
             common::stencil(stencil.slice(..)),
         )?,
     )?;
-    let match_count =
-        u32::try_from(codes.capacity()).map_err(|_| massively::Error::LengthTooLarge {
-            len: codes.capacity(),
-        })?;
+    let match_count = codes.len();
     let mapping_count = match_count
         .checked_mul(k)
         .ok_or(massively::Error::LengthTooLarge { len: usize::MAX })?;
-    let code_indices = vector::transform(
+    let code_indices = vector::map(
         exec,
         zip2(
             common::counting_u32(0, mapping_count as usize),
@@ -278,7 +275,7 @@ pub fn solve<R: Runtime>(
         ),
         Divide,
     )?;
-    let positions = vector::transform(
+    let positions = vector::map(
         exec,
         zip2(
             common::counting_u32(0, mapping_count as usize),
@@ -291,7 +288,7 @@ pub fn solve<R: Runtime>(
         codes.slice(..),
         common::indices(code_indices.slice(..)),
     )?;
-    let mappings = vector::transform(
+    let mappings = vector::map(
         exec,
         zip3(
             repeated_codes.slice(..),
@@ -321,6 +318,6 @@ mod tests {
         let matches = solve(&exec, &data, &triangle).unwrap();
         assert_eq!(matches.query_vertex_count(), 3);
         assert_eq!(matches.match_count(), 12);
-        assert_eq!(matches.mappings().read_len(&exec).unwrap(), 36);
+        assert_eq!(matches.mappings().len(), 36);
     }
 }
