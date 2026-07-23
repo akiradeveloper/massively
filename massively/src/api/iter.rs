@@ -291,6 +291,31 @@ where
     Input: MIter<R, Item = u32>,
 {
     let len = input.capacity()?;
+    materialize_u32_with_len(exec, input, len)
+}
+
+/// Materializes exactly the host-visible logical prefix of a `u32` iterator.
+pub(crate) fn materialize_exact_u32<R, Input>(
+    exec: &Executor<R>,
+    input: Input,
+) -> Result<crate::DeviceVec<R, u32>, Error>
+where
+    R: Runtime,
+    Input: MIter<R, Item = u32>,
+{
+    let len = input.len()?;
+    materialize_u32_with_len(exec, input, len)
+}
+
+fn materialize_u32_with_len<R, Input>(
+    exec: &Executor<R>,
+    input: Input,
+    len: MIndex,
+) -> Result<crate::DeviceVec<R, u32>, Error>
+where
+    R: Runtime,
+    Input: MIter<R, Item = u32>,
+{
     let output = exec.alloc::<u32>(len as usize);
     let input = lower_fixed::<R, _>(input);
     let output_view = output.slice_mut(..);

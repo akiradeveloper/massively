@@ -227,7 +227,7 @@ macro_rules! define_bound_kernel {
                 let low = RuntimeCell::<usize>::new(0usize);
                 let high = RuntimeCell::<usize>::new(source_len[0] as usize);
                 while low.read() < high.read() {
-                    let mid = (low.read() + high.read()) / 2usize;
+                    let mid = low.read() + (high.read() - low.read()) / 2usize;
                     if Op::go_right(
                         Source::$method($( $source_slot, )+ source_offsets, mid),
                         Values::$method($( $value_slot, )+ value_offsets, index),

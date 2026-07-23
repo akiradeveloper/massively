@@ -313,6 +313,65 @@ twelve-column limit. Output iterators are always created before an algorithm
 runs. An operation that intentionally changes a row schema expresses that
 conversion explicitly with `map`.
 
+### Segmentations
+
+`seg::Segmentation` represents one ordered partition of a flat range. Segment
+lengths, zero-based segment IDs, and CSR-style offsets are interchangeable:
+
+```text
+lengths      [1, 2, 3]
+segment IDs  [0, 1, 1, 2, 2, 2]
+offsets      [0, 1, 3, 6]
+```
+
+Offsets are the canonical form. They are compact, preserve empty segments, and
+give direct segment bounds. `Segmentation::from_lengths`,
+`Segmentation::from_segment_ids`, and `Segmentation::from_offsets` validate and
+privately materialize this form. `lengths()` and `segment_ids()` derive owned
+device columns when needed, while `offsets()` is a read-only zero-copy view.
+
+IDs alone cannot encode trailing or all-empty segments, so
+`from_segment_ids` also takes the segment count. For example,
+`[0, 2, 2]` with four segments is equivalent to lengths `[1, 0, 2, 0]`
+and offsets `[0, 1, 1, 3, 3]`.
+
+The same segmentation can be applied to any equally long single- or
+multi-column value iterator with `segments(values)`. It also supports
+segment-wise context broadcast without a special algorithm:
+
+```rust,ignore
+let ids = segmentation.segment_ids(&exec)?;
+let entry_context = lazy::permute(contexts, ids.slice(..));
+```
+
+`contexts` must contain one row per segment before this unchecked indexed view
+is consumed.
+
+A uniform context uses
+`lazy::constant(context).take(segmentation.value_count())` instead.
+Whole-segment code can first zip values with the broadcast contexts and then
+call `segmentation.segments(...)`, producing `Segment<(Value, Context)>` for
+the existing segmented reduce, scan, filter, and other algorithms.
+Empty segments have no entry to receive a broadcast; handle their context
+contribution with a parallel map over
+`zip2(segmentation.lengths(&exec)?, contexts)` and combine the two result
+streams with another `zip2`/`map`.
+
+For variable output from empty segments, zip lengths with contexts and use
+`lazy::counting(0).take(segment_count + 1)` as singleton offsets. Applying the
+ordinary `ForEachSegment(FlatMap(op))` then preserves one output segment per
+input context without a special adapter.
+
+Massively intentionally does not add a context-specific segmented adapter for
+these cases. A small set of orthogonal primitives is preferred even when the
+composition needs an extra GPU pass. Performance work may fuse that
+composition internally without adding another public semantic abstraction.
+
+Massively does not expose a generic iteration runner. A normal host `for` or
+`while` remains the control flow, and applications may retain their workspace
+between rounds. Recording or fusing that composition is an executor/compiler
+optimization; it does not require another public iteration abstraction.
+
 ### Lazy Iterators
 
 `lazy::constant`, `lazy::counting`, `lazy::map`, `lazy::permute`, and

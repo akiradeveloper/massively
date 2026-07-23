@@ -4,6 +4,13 @@
 対象: Massively 0.84 以降  
 利用事例: `del2d`
 
+2026-07-23の最終判断と実装順は
+[`proposal-compound-operations.md`](proposal-compound-operations.md)を正本とする。
+del2d固有のaffected-edge frontier、claim、flip、emitはdel2d側に置き、
+Massivelyへ未検証の汎用`Iteration`／`Worklist`を追加しない。candidateやaffected
+edgeとowner groupの対応には`seg::Segmentation`を使えるが、これはtopology updateを
+反復するrunnerではない。
+
 ## v0.86で採用した仕様
 
 当初案の「公開MVal／動的長APIと同期APIを併存させる」方針は採用しない。

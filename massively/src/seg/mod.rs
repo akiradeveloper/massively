@@ -10,9 +10,11 @@
 
 pub(crate) mod control;
 mod segment;
+mod segmentation;
 
 pub use segment::Segment;
 pub(crate) use segment::{SegmentExpand, SegmentReader};
+pub use segmentation::Segmentation;
 
 use cubecl::prelude::*;
 use std::{marker::PhantomData, ops::RangeBounds};

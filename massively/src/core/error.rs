@@ -7,6 +7,7 @@ pub enum Error {
     LengthMismatch { left: usize, right: usize },
     OutputTooShort { input: usize, output: usize },
     LengthTooLarge { len: usize },
+    InvalidSegmentation,
     UnresolvedLength,
     UnboundColumn,
     ForeignExecutor,
@@ -26,6 +27,9 @@ impl fmt::Display for Error {
                 )
             }
             Self::LengthTooLarge { len } => write!(f, "length does not fit in u32: {len}"),
+            Self::InvalidSegmentation => {
+                write!(f, "segmentation is not a valid ordered partition")
+            }
             Self::UnresolvedLength => {
                 write!(
                     f,

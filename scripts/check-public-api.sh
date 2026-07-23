@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-forbidden='MVal|SegmentKeyInput|SegmentedValues|SegmentRead|CanonicalAlloc|CanonicalStorage|CanonicalAbi|ScratchAbi|SortAbi|ItemDispatch|MutableItem|MutableDispatch|ConcreteOutput|OutputOperation|RadixKeyAbi|RadixStorage|LayoutCompatible|AllocColumns|RowAlloc|ScratchStorage|KernelRow|GatherInput|KernelInput|IterLength|SliceExpression|ReadExpression|OutputExpression|StorageLayout|MaterializeDispatch|ReduceDispatch|ReadArity|StorageArity|Eval[1-8]|\bColumn\b'
+forbidden='MVal|MExtent|MSequence|Iteration|SegmentKeyInput|SegmentedValues|SegmentContextRead|SegmentRead|CanonicalAlloc|CanonicalStorage|CanonicalAbi|ScratchAbi|SortAbi|ItemDispatch|MutableItem|MutableDispatch|ConcreteOutput|OutputOperation|RadixKeyAbi|RadixStorage|LayoutCompatible|AllocColumns|RowAlloc|ScratchStorage|KernelRow|GatherInput|KernelInput|IterLength|SliceExpression|ReadExpression|OutputExpression|StorageLayout|MaterializeDispatch|ReduceDispatch|ReadArity|StorageArity|Eval[1-8]|\bColumn\b'
+rejected_public_abstractions='MVal|MExtent|MSequence|Iteration|SegmentContexts'
+
+if rg -n -g '*.html' "$rejected_public_abstractions" target/doc/massively; then
+    echo 'rejected abstractions leaked into the public API documentation' >&2
+    exit 1
+fi
 
 mapfile -d '' pages < <(
     find target/doc/massively -type f \
@@ -20,7 +26,10 @@ fi
 legacy_pages=(
     trait.CanonicalForm.html trait.WritableFrom.html trait.ToCanonical.html
     trait.MItem.html trait.MScratchItem.html trait.MSortItem.html trait.MutableItem.html
-    struct.Zip.html struct.SegmentRead.html struct.MVal.html type.MBool.html
+    struct.Zip.html struct.SegmentRead.html struct.SegmentContextRead.html
+    struct.SegmentContexts.html
+    struct.MVal.html struct.MExtent.html
+    trait.MSequence.html type.MBool.html
 )
 
 for page in "${legacy_pages[@]}"; do
@@ -52,6 +61,15 @@ for algorithm in "${algorithms[@]}"; do
     test -f "target/doc/massively/vector/fn.${algorithm}.html"
     test ! -e "target/doc/massively/fn.${algorithm}.html"
 done
+
+test -f "target/doc/massively/seg/struct.Segmentation.html"
+test ! -e "target/doc/massively/struct.Segmentation.html"
+test ! -e "target/doc/massively/fn.segments_with_context.html"
+test ! -e "target/doc/massively/seg/fn.segments_with_context.html"
+test ! -e "target/doc/massively/seg/struct.SegmentContexts.html"
+test ! -e "target/doc/massively/seg/fn.flat_map_segments.html"
+test ! -e "target/doc/massively/seg/fn.adjacent_flat_map.html"
+test ! -e "target/doc/massively/iteration/index.html"
 
 operations=(BinaryPredicateOp ExpandOp PredicateOp ReductionOp UnaryOp)
 

@@ -1,16 +1,18 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
-    Executor, MIter,
+    Executor, MIter, MStorage, lazy,
     op::BinaryPredicateOp,
     op::ExpandOp,
     op::PredicateOp,
     op::ReductionOp,
     op::UnaryOp,
     seg::{
-        AllOf, Executable, FlatMap, ForEachSegment, Map, Reduce, Segment, SegmentIterator, Unique,
+        AllOf, Executable, FlatMap, ForEachSegment, Map, Reduce, Segment, SegmentIterator,
+        Segmentation, Unique,
     },
     vector::{copy_where, equal, is_sorted, map as vector_map},
+    zip2, zip3,
 };
 
 struct CastU64;
@@ -68,6 +70,12 @@ impl ReductionOp<u32> for Add {
 struct LexicographicalBytes;
 
 struct SliceLength;
+struct PairSliceLength;
+struct ContextForEmptySegment;
+struct AddU32Pair;
+struct EmptyContextExpand;
+struct CyclicPredecessorIndex;
+struct AddU32Triple;
 
 #[cubecl::cube]
 impl UnaryOp<Segment<u32>> for SliceLength {
@@ -75,6 +83,72 @@ impl UnaryOp<Segment<u32>> for SliceLength {
 
     fn apply(value: Segment<u32>) -> u32 {
         value.len()
+    }
+}
+
+#[cubecl::cube]
+impl UnaryOp<Segment<(u32, u32)>> for PairSliceLength {
+    type Output = u32;
+
+    fn apply(value: Segment<(u32, u32)>) -> u32 {
+        value.len()
+    }
+}
+
+#[cubecl::cube]
+impl UnaryOp<(u32, u32)> for ContextForEmptySegment {
+    type Output = u32;
+
+    fn apply(input: (u32, u32)) -> u32 {
+        if input.0 == 0u32 { input.1 } else { 0u32 }
+    }
+}
+
+#[cubecl::cube]
+impl UnaryOp<(u32, u32)> for AddU32Pair {
+    type Output = u32;
+
+    fn apply(input: (u32, u32)) -> u32 {
+        input.0 + input.1
+    }
+}
+
+#[cubecl::cube]
+impl ExpandOp<(u32, u32)> for EmptyContextExpand {
+    type Output = u32;
+
+    fn count(input: (u32, u32)) -> u32 {
+        if input.0 == 0u32 {
+            input.1 % 3u32
+        } else {
+            0u32
+        }
+    }
+
+    fn generate(input: (u32, u32), local_index: u32) -> u32 {
+        input.1 + local_index
+    }
+}
+
+#[cubecl::cube]
+impl UnaryOp<(u32, u32, u32)> for CyclicPredecessorIndex {
+    type Output = u32;
+
+    fn apply(input: (u32, u32, u32)) -> u32 {
+        if input.0 == input.1 {
+            input.2 - 1u32
+        } else {
+            input.0 - 1u32
+        }
+    }
+}
+
+#[cubecl::cube]
+impl UnaryOp<(u32, u32, u32)> for AddU32Triple {
+    type Output = u32;
+
+    fn apply(input: (u32, u32, u32)) -> u32 {
+        input.0 + input.1 + input.2
     }
 }
 
@@ -239,6 +313,310 @@ fn segmented_flat_map_rebuilds_offsets_and_preserves_empty_segments() {
         vec![20, 21, 10, 30, 31, 32]
     );
     assert_eq!(exec.to_host(output.offsets()).unwrap(), vec![0, 2, 2, 6]);
+}
+
+#[test]
+fn segmentation_representations_are_interchangeable() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+
+    let lengths = exec.to_device(&[1_u32, 2, 3]);
+    let from_lengths = Segmentation::from_lengths(&exec, lengths.slice(..)).unwrap();
+    assert_eq!(from_lengths.segment_count(), 3);
+    assert_eq!(from_lengths.value_count(), 6);
+    assert_eq!(
+        exec.to_host(&from_lengths.offsets()).unwrap(),
+        vec![0, 1, 3, 6]
+    );
+    assert_eq!(
+        exec.to_host(&from_lengths.segment_ids(&exec).unwrap())
+            .unwrap(),
+        vec![0, 1, 1, 2, 2, 2]
+    );
+
+    let ids = exec.to_device(&[0_u32, 1, 1, 2, 2, 2]);
+    let from_ids = Segmentation::from_segment_ids(&exec, ids.slice(..), 3).unwrap();
+    assert_eq!(exec.to_host(&from_ids.offsets()).unwrap(), vec![0, 1, 3, 6]);
+    assert_eq!(
+        exec.to_host(&from_ids.lengths(&exec).unwrap()).unwrap(),
+        vec![1, 2, 3]
+    );
+
+    let offsets = exec.to_device(&[0_u32, 1, 3, 6]);
+    let from_offsets = Segmentation::from_offsets(&exec, offsets.slice(..)).unwrap();
+    massively::vector::fill(&exec, 9u32, offsets.slice_mut(..)).unwrap();
+    assert_eq!(
+        exec.to_host(&from_offsets.lengths(&exec).unwrap()).unwrap(),
+        vec![1, 2, 3]
+    );
+
+    let from_lazy_lengths =
+        Segmentation::from_lengths(&exec, lazy::constant(2u32).take(3)).unwrap();
+    assert_eq!(
+        exec.to_host(&from_lazy_lengths.offsets()).unwrap(),
+        vec![0, 2, 4, 6]
+    );
+}
+
+#[test]
+fn segmentation_preserves_empty_segments() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let lengths = exec.to_device(&[1_u32, 0, 2, 0]);
+    let segmentation = Segmentation::from_lengths(&exec, lengths.slice(..)).unwrap();
+
+    assert_eq!(
+        exec.to_host(&segmentation.offsets()).unwrap(),
+        vec![0, 1, 1, 3, 3]
+    );
+    assert_eq!(
+        exec.to_host(&segmentation.segment_ids(&exec).unwrap())
+            .unwrap(),
+        vec![0, 2, 2]
+    );
+
+    let ids = exec.to_device(&[0_u32, 2, 2]);
+    let round_trip = Segmentation::from_segment_ids(&exec, ids.slice(..), 4).unwrap();
+    assert_eq!(
+        exec.to_host(&round_trip.lengths(&exec).unwrap()).unwrap(),
+        vec![1, 0, 2, 0]
+    );
+
+    let no_lengths = exec.to_device(&[] as &[u32]);
+    let empty = Segmentation::from_lengths(&exec, no_lengths.slice(..)).unwrap();
+    assert_eq!(empty.segment_count(), 0);
+    assert_eq!(empty.value_count(), 0);
+    assert_eq!(exec.to_host(&empty.offsets()).unwrap(), vec![0]);
+    assert!(
+        exec.to_host(&empty.segment_ids(&exec).unwrap())
+            .unwrap()
+            .is_empty()
+    );
+
+    let zero_offsets = exec.to_device(&[0_u32]);
+    let empty_from_offsets = Segmentation::from_offsets(&exec, zero_offsets.slice(..)).unwrap();
+    assert_eq!(empty_from_offsets.segment_count(), 0);
+    assert_eq!(empty_from_offsets.value_count(), 0);
+    assert_eq!(
+        exec.to_host(&empty_from_offsets.offsets()).unwrap(),
+        vec![0]
+    );
+
+    let empty_from_ids = Segmentation::from_segment_ids(&exec, no_lengths.slice(..), 0).unwrap();
+    assert_eq!(empty_from_ids.segment_count(), 0);
+    assert_eq!(empty_from_ids.value_count(), 0);
+    assert_eq!(exec.to_host(&empty_from_ids.offsets()).unwrap(), vec![0]);
+
+    let all_empty = Segmentation::from_segment_ids(&exec, no_lengths.slice(..), 3).unwrap();
+    assert_eq!(
+        exec.to_host(&all_empty.offsets()).unwrap(),
+        vec![0, 0, 0, 0]
+    );
+
+    let leading_empty_ids = exec.to_device(&[2_u32]);
+    let leading_empty =
+        Segmentation::from_segment_ids(&exec, leading_empty_ids.slice(..), 4).unwrap();
+    assert_eq!(
+        exec.to_host(&leading_empty.lengths(&exec).unwrap())
+            .unwrap(),
+        vec![0, 0, 1, 0]
+    );
+    assert_eq!(
+        exec.to_host(&leading_empty.segment_ids(&exec).unwrap())
+            .unwrap(),
+        vec![2]
+    );
+}
+
+#[test]
+fn segmentation_rejects_invalid_representations_and_overflow() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+
+    for offsets in [&[][..], &[1_u32, 1][..], &[0_u32, 2, 1][..]] {
+        let offsets = exec.to_device(offsets);
+        assert!(matches!(
+            Segmentation::from_offsets(&exec, offsets.slice(..)),
+            Err(massively::Error::InvalidSegmentation)
+        ));
+    }
+
+    for ids in [&[0_u32, 2, 1][..], &[0_u32, 3][..]] {
+        let ids = exec.to_device(ids);
+        assert!(matches!(
+            Segmentation::from_segment_ids(&exec, ids.slice(..), 3),
+            Err(massively::Error::InvalidSegmentation)
+        ));
+    }
+
+    let overflowing = exec.to_device(&[u32::MAX, 1]);
+    assert!(matches!(
+        Segmentation::from_lengths(&exec, overflowing.slice(..)),
+        Err(massively::Error::LengthTooLarge { .. })
+    ));
+
+    let no_ids = exec.to_device(&[] as &[u32]);
+    assert!(matches!(
+        Segmentation::from_segment_ids(&exec, no_ids.slice(..), u32::MAX),
+        Err(massively::Error::LengthTooLarge { .. })
+    ));
+}
+
+#[test]
+fn segmentation_applies_to_values_and_broadcasts_multicolumn_context() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let lengths = exec.to_device(&[1_u32, 2, 3]);
+    let segmentation = Segmentation::from_lengths(&exec, lengths.slice(..)).unwrap();
+    let values = exec.to_device(&[10_u32, 20, 21, 30, 31, 32]);
+
+    let segments = segmentation.segments(values.slice(..)).unwrap();
+    let observed_lengths = vector_map(&exec, segments, SliceLength).unwrap();
+    assert_eq!(exec.to_host(&observed_lengths).unwrap(), vec![1, 2, 3]);
+
+    let values_y = exec.to_device(&[100_u32, 200, 201, 300, 301, 302]);
+    let pair_segments = segmentation
+        .segments(zip2(values.slice(..), values_y.slice(..)))
+        .unwrap();
+    let pair_lengths = vector_map(&exec, pair_segments, PairSliceLength).unwrap();
+    assert_eq!(exec.to_host(&pair_lengths).unwrap(), vec![1, 2, 3]);
+
+    let short_values = exec.to_device(&[1_u32, 2]);
+    assert!(matches!(
+        segmentation.segments(short_values.slice(..)),
+        Err(massively::Error::LengthMismatch { left: 2, right: 6 })
+    ));
+
+    let context_x = exec.to_device(&[7_u32, 8, 9]);
+    let context_y = exec.to_device(&[70_u32, 80, 90]);
+    let ids = segmentation.segment_ids(&exec).unwrap();
+    let broadcast = vector_map(
+        &exec,
+        lazy::permute(
+            zip2(context_x.slice(..), context_y.slice(..)),
+            ids.slice(..),
+        ),
+        massively::op::Identity,
+    )
+    .unwrap();
+    let (broadcast_x, broadcast_y) = MStorage::into_columns(broadcast);
+    assert_eq!(exec.to_host(&broadcast_x).unwrap(), vec![7, 8, 8, 9, 9, 9]);
+    assert_eq!(
+        exec.to_host(&broadcast_y).unwrap(),
+        vec![70, 80, 80, 90, 90, 90]
+    );
+
+    let other = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    assert!(matches!(
+        segmentation.lengths(&other),
+        Err(massively::Error::ForeignExecutor)
+    ));
+    assert!(matches!(
+        segmentation.segment_ids(&other),
+        Err(massively::Error::ForeignExecutor)
+    ));
+    assert!(matches!(
+        Segmentation::from_lengths(&other, lengths.slice(..)),
+        Err(massively::Error::ForeignExecutor)
+    ));
+    assert!(matches!(
+        Segmentation::from_offsets(&other, segmentation.offsets()),
+        Err(massively::Error::ForeignExecutor)
+    ));
+    assert!(matches!(
+        Segmentation::from_segment_ids(&other, ids.slice(..), 3),
+        Err(massively::Error::ForeignExecutor)
+    ));
+}
+
+#[test]
+fn segmentation_context_is_composed_from_general_primitives() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let host_lengths = exec.to_device(&[2_u32, 0, 1]);
+    let segmentation = Segmentation::from_lengths(&exec, host_lengths.slice(..)).unwrap();
+    let values = exec.to_device(&[1_u32, 2, 3]);
+    let contexts = exec.to_device(&[10_u32, 20, 30]);
+
+    let ids = segmentation.segment_ids(&exec).unwrap();
+    let entry_contexts = lazy::permute(contexts.slice(..), ids.slice(..));
+    let decorated_values = zip2(values.slice(..), entry_contexts);
+    let entry_totals = vector_map(&exec, decorated_values, AddU32Pair).unwrap();
+    let segment_totals = ForEachSegment(Reduce(Add, 0u32))
+        .run(
+            &exec,
+            segmentation.segments(entry_totals.slice(..)).unwrap(),
+        )
+        .unwrap();
+
+    // Empty segments have no entry on which to broadcast. Handle a fixed-size
+    // segment-level contribution in a separate parallel pass.
+    let lengths = segmentation.lengths(&exec).unwrap();
+    let empty_contributions = vector_map(
+        &exec,
+        zip2(lengths.slice(..), contexts.slice(..)),
+        ContextForEmptySegment,
+    )
+    .unwrap();
+    let with_empty_segments = vector_map(
+        &exec,
+        zip2(segment_totals.slice(..), empty_contributions.slice(..)),
+        AddU32Pair,
+    )
+    .unwrap();
+    assert_eq!(
+        exec.to_host(&with_empty_segments).unwrap(),
+        vec![23, 20, 33]
+    );
+
+    // Variable output from an empty segment is the same general FlatMap over
+    // one context row per segment. Counting supplies singleton CSR offsets.
+    let singleton_offsets = lazy::counting(0).take(segmentation.segment_count() + 1);
+    let empty_outputs = ForEachSegment(FlatMap(EmptyContextExpand))
+        .run(
+            &exec,
+            SegmentIterator::new(
+                zip2(lengths.slice(..), contexts.slice(..)),
+                singleton_offsets,
+            ),
+        )
+        .unwrap();
+    assert_eq!(exec.to_host(empty_outputs.values()).unwrap(), vec![20, 21]);
+    assert_eq!(
+        exec.to_host(empty_outputs.offsets()).unwrap(),
+        vec![0, 0, 2, 2]
+    );
+
+    let uniform_context = lazy::constant(5u32).take(segmentation.value_count());
+    let with_uniform_context =
+        vector_map(&exec, zip2(values.slice(..), uniform_context), AddU32Pair).unwrap();
+    assert_eq!(exec.to_host(&with_uniform_context).unwrap(), vec![6, 7, 8]);
+}
+
+#[test]
+fn cyclic_segment_context_is_an_entry_parallel_composition() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let lengths = exec.to_device(&[3_u32, 0, 2]);
+    let segmentation = Segmentation::from_lengths(&exec, lengths.slice(..)).unwrap();
+    let values = exec.to_device(&[10_u32, 11, 12, 20, 21]);
+    let contexts = exec.to_device(&[100_u32, 200, 300]);
+
+    let ids = segmentation.segment_ids(&exec).unwrap();
+    let offsets = segmentation.offsets();
+    let starts = lazy::permute(offsets.slice(..segmentation.segment_count()), ids.slice(..));
+    let ends = lazy::permute(offsets.slice(1..), ids.slice(..));
+    let positions = lazy::counting(0).take(segmentation.value_count());
+    let predecessor_indices =
+        vector_map(&exec, zip3(positions, starts, ends), CyclicPredecessorIndex).unwrap();
+
+    let previous = lazy::permute(values.slice(..), predecessor_indices.slice(..));
+    let entry_contexts = lazy::permute(contexts.slice(..), ids.slice(..));
+    let output = vector_map(
+        &exec,
+        zip3(previous, values.slice(..), entry_contexts),
+        AddU32Triple,
+    )
+    .unwrap();
+
+    assert_eq!(
+        exec.to_host(&output).unwrap(),
+        vec![122, 121, 123, 341, 341]
+    );
 }
 
 #[test]
