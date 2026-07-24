@@ -1,700 +1,971 @@
-# proposal-del2d: Massively で del2d を高速化するための API 提案
+# proposal-del2d: Massively v0.87によるDelaunay実装から得た提案
 
-状態: v0.86で方針変更（以下の本文は当初案の記録）
-対象: Massively 0.84 以降  
-利用事例: `del2d`
+- 状態: 実装・実測に基づく提案
+- 対象: Massively v0.87以降
+- 対象revision: `a960fd5410d39fedf4603020437f66e618236f3c`
+- 実装: `del2d`
+- 記録日: 2026-07-24
 
-2026-07-23の最終判断と実装順は
-[`proposal-compound-operations.md`](proposal-compound-operations.md)を正本とする。
-del2d固有のaffected-edge frontier、claim、flip、emitはdel2d側に置き、
-Massivelyへ未検証の汎用`Iteration`／`Worklist`を追加しない。candidateやaffected
-edgeとowner groupの対応には`seg::Segmentation`を使えるが、これはtopology updateを
-反復するrunnerではない。
+## 位置付け
 
-## v0.86で採用した仕様
+本書は、Massively v0.87の公開primitiveだけで二次元Delaunay三角形分割を実装し、
+CPU実装との比較とGPU profileを行った後のapplication evidenceである。
 
-当初案の「公開MVal／動的長APIと同期APIを併存させる」方針は採用しない。
-公開APIは一種類の同期インターフェイスに統一し、次を契約とする。
+v0.87の正本である
+[`proposal-compound-operations.md`](https://github.com/akiradeveloper/massively/blob/v0.87/proposal/proposal-compound-operations.md)
+は、通常APIをhost-exactに保ち、公開`MVal`／`MExtent`／汎用`Iteration`を追加せず、
+`Segmentation`と少数の直交primitiveを合成する方針を採用した。
 
-- `MVal<R, T>`はcrate内部だけで使用し、公開・prelude exportしない。
-- `reduce`のinitは通常のitemを受け取り、結果も通常のitemとして返す。
-- predicateは組み込みの`bool`、長さとindexは`MIndex`（`u32`のalias）を返す。
-- 検索の不在はsentinelではなく`Option<MIndex>`で表す。
-- 可変長結果は公開関数のreturn boundaryで長さを一度だけ同期し、正確な
-  `len()`を持つ`MVec`として返す。
-- 固定長結果およびcaller-provided outputは、長さ取得のための同期を行わない。
-- `slice(range)`のrange要素型は`MIndex`とする。
-- 内部では`MVal`とdevice logical extentをGPUステージ間で伝播し、
-  public boundaryより前の中間readbackを行わない。
+本書は、過去の[`proposal-worklist.md`](proposal-worklist.md)をそのまま復活させる
+提案ではない。今回の結果から、次の二点を分けて評価する。
 
-したがって、公開APIの利用者はdevice scalarの寿命やcapacityとlogical lengthの
-組を管理しない。一方、データ依存のscalarや正確な可変長結果を返す関数は同期API
-であり、そのreturn boundaryでqueue完了待ちが起こり得る。indirect dispatchは
-公開契約には含めず、今回の計測で性能向上が確認できなかったため導入しない。
+1. 少数primitiveで複雑なalgorithmの意味を表現できるか。
+2. その合成を現在の実行境界のまま十分高速に実行できるか。
 
-## 要約
+前者には肯定的な証拠が得られた。後者は未達であり、その間を埋める限定された
+execution/lowering abstractionが次の検討対象である。
 
-Massively の現行 API は、GPU 上で計算した要素数・真偽値・reduction 結果を、次の GPU 処理へ渡す前に host の値へ戻す設計になっている。
+## 最終判断
 
-特に `copy_where`、`remove_where`、`unique_by_key` は、scan の末尾にある `u32` 1 個を host に読み戻し、その値で出力を切り詰め、次の dispatch 数を決める。この転送量は 4 byte しかないが、問題は帯域ではなく、そこまでに enqueue された GPU queue の完了を CPU が待つ点にある。反復アルゴリズムでは、この同期が各ラウンドに何度も入り、GPU と CPU が直列に動いてしまう。
+今回の経験から得た最も重要な判断は次である。
 
-本提案では、次を追加する。
+> Massivelyに直ちに必要なのは、DelaunayやWorklistという新しい高水準algorithm
+> primitiveではない。有限個の既存primitiveを、device-residentな選択数、
+> segmentation metadata、scratch、submissionとともに一つの有限DAGとしてlowering
+> できる実行境界である。
 
-- GPU 上に値を保持する `MVal<R, T>`
-- host が知る `capacity` と GPU が持つ `len` を組にした `DeviceExtent<R>`
-- `DeviceExtent` を持つ `DeviceDynVec<R, T>`
-- scalar を host に戻さず返す reduction / predicate API
-- device length を生成・伝播する selection / scan / unique / sort API
-- device length から `[x, y, z]` を生成する indirect-dispatch API
+評価を表にすると次になる。
 
-既存 API は互換性のため残す。新 API は readback を行わず、host 値が本当に必要になった境界だけ `read` を明示的に呼ぶ。
+| 仮説 | 判断 | 根拠 |
+|---|---|---|
+| primitive合成でDelaunayを表現できる | 支持 | Massively本体を変更せず、挿入、競合解決、CSR再配置、edge flipまで実装できた |
+| segmentation algebra / CSRが複雑なowner relationに有効 | 支持 | raw offsetsと`SegmentIterator`によりroundごとのglobal sortと`lower_bound`を除去できた |
+| 各round内を並列化できる | 支持 | geometry、claim、split、scan、scatter、flipはすべてGPU並列passになった |
+| 有限passへ分解すれば現在のAPIのまま速い | 不支持 | 16K点でGPU kernel約15.4 msに対しwall約97 ms、1,219 dispatch、48回の長さ観測 |
+| 現実装がGPUへ到達していない | 否定 | WGPU adapterがRadeon 680Mを選択し、amdgpu busy counterも最大98%を記録 |
+| 現時点でCPUより速い | 否定 | 524K点でもsingle-thread CPUより3.67倍遅い |
 
-重要なのは、`MVal` だけを追加しても不十分なことである。下流の iterator、出力 allocation、scan、sort、dispatch が host の `usize` を要求するままなら、別の場所で同じ同期が発生する。device scalar、device length、capacity-backed storage、indirect dispatch を一つの機能として設計する必要がある。
+したがって、v0.87の「表現の代数」は維持する。一方、primitive間の制御値と
+materializationをすべて公開host-exact境界へ戻す実行方式は、有限scopeの内部に限って
+再検討する価値がある。
 
-## 背景: `del2d` で観測した性能
+## 実験条件
 
-`del2d` は Massively 0.84 (`c642426`) を使い、ランダム点の Delaunay 三角形分割を実行している。同じ固定入力を `delaunator` ベースの CPU 実装と比較したローカル計測は次の通りだった。
+### Hardware
 
-環境は Radeon 680M、Criterion の sample size は 10。点生成と GPU upload は計測外、三角形分割と最後の GPU sync は計測内である。
+- CPU: AMD Ryzen 7 7735U、8 core / 16 thread
+- GPU: WGPU adapterがRadeon 680Mを選択し、amdgpuを使用
+- amdgpu busy counter: 計測中最大98%
 
-| N | Massively / GPU | CPU | GPU / CPU |
+### Benchmark契約
+
+- 入力点生成は計測外。
+- GPU uploadは計測外。
+- shader pipelineは事前にwarm upする。
+- GPU結果はdevice-residentのままにする。
+- 最後のGPU synchronizationは計測内。
+- CPUはsingle-threaded Delaunatorを使用する。
+- CPU側は`f32 -> f64`入力変換とhost出力構築を計測内に含む。
+- Criterion sample sizeは10、sampling modeはFlat、warm-upは3秒、measurementは5秒。
+- 乱数seedは`0x6d65_7368_2d32_6401 ^ N`。
+- `.cargo/config.toml`の`CUBECL_WGPU_MAX_TASKS=128`を使用する。
+- CubeCL revisionは`0a62060a2c7a66c94f717d7cac0be0dc259bb607`。
+- `cargo bench`のrelease相当bench profileを使用する。
+
+再現コマンドの例は次である。
+
+```console
+DEL2D_BENCH_SIZES=256,1024,4096,16384,65536,131072,262144,524288 \
+  cargo bench -p del2d --bench random_points
+```
+
+これはGPUに有利な条件である。したがって現在の差を、入力転送だけの問題として
+説明することはできない。
+
+### CPU/GPU比較
+
+| sites | GPU | CPU | GPU / CPU |
 |---:|---:|---:|---:|
-| 256 | 1.758 s | 0.0308 ms | 57,107x |
-| 1,024 | 4.222 s | 0.160 ms | 26,375x |
-| 4,096 | 8.241 s | 0.843 ms | 9,775x |
-| 16,384 | 29.448 s | 3.872 ms | 7,606x |
+| 256 | 48.805 ms | 0.031572 ms | 1,546x |
+| 1,024 | 59.770 ms | 0.16181 ms | 369x |
+| 4,096 | 80.936 ms | 0.82921 ms | 97.6x |
+| 16,384 | 96.963 ms | 4.0241 ms | 24.1x |
+| 65,536 | 157.40 ms | 22.455 ms | 7.01x |
+| 131,072 | 235.55 ms | 50.447 ms | 4.67x |
+| 262,144 | 490.79 ms | 119.13 ms | 4.12x |
+| 524,288 | 1.0505 s | 286.44 ms | 3.67x |
 
-この比較はアルゴリズム差も含むため、device length 対応だけで CPU 比を逆転できることを示すものではない。しかし、現在の GPU 実装が計算 throughput ではなく host synchronization に強く制限されていることは、コード上の制御フローから確認できる。
+入力増加に対するGPUのscaleはCPUとの差を大きく縮めている。しかし、測定した範囲に
+crossoverはない。CPUとGPUではalgorithmと仕事量が異なるため、これは純粋なhardware
+throughput比較ではない。それでも実用上の比較として、GPU版が未達であることは明確で
+ある。
 
-`del2d/src/triangulate.rs` には、概ね次の二重の反復がある。
+歴史的なv0.86時点の同hardware計測は
+[`proposal-worklist.md`](proposal-worklist.md)に16K点約193.8 msと記録されている。
+現在の96.963 msはそこから約2倍の改善である。ただしMassively revisionとdel2d実装の
+両方が変わっており、元のraw traceもrepositoryにないため、この差を一つの最適化だけの
+効果や厳密な回帰benchmarkとはみなさない。
 
-- 未挿入点がなくなるまで batch insertion を行う。
-- illegal edge がなくなるまで edge flip を行う。
+### 16K profile
 
-各ラウンド内では `unique_by_key`、`copy_where`、`remove_where`、`any_of` などを複数回呼ぶ。現行 Massively では、それぞれが scalar readback を起こし得る。したがって、ラウンド間に一度だけ同期しているのではなく、一つのラウンドの途中でも GPU queue が何度も分断される。
+16K点の代表的なprofileは次の通りだった。
 
-## 現行 API の問題
+このprofileと上表のCriterion medianは別runである。profile counterとCriterion wall
+timeを同一sampleの厳密な時間内訳として加算してはならない。
 
-### 1. logical length が必ず host 値である
+| 指標 | 値 |
+|---|---:|
+| wall time | 約97 ms |
+| GPU kernel aggregate | 約15.4 ms |
+| dispatch | 1,219 |
+| insertion round | 約19 |
+| legalization pass | 約27 |
+| exact-length observation | 48 |
+| `MaterializeA13` dispatch count | 564 |
+| `IndexedCopyA13` dispatch count | 298 |
+| `PaddedScanA13` dispatch count | 121 |
+| `SegmentedScanA13` dispatch count | 35 |
 
-`massively/src/core/runtime.rs` の `DeviceVec` は、handle と host の `usize` を保持する。
+GPU kernel aggregateとCriterion wallの大きな差は、robust geometry以外の
+launch、materialization、allocation/binding、encode/submit、host observationを合わせた
+費用が大きいことを強く示唆する。各要因の個別内訳はまだ分離できておらず、後述の
+標準traceで測る必要がある。
 
-```rust
-pub struct DeviceVec<R: Runtime, T> {
-    handle: cubecl::server::Handle,
-    len: usize,
-    // ...
+48回という値は`CopyLastKernel`を伴うselection由来のexact-length観測数であり、
+全host observation数ではない。前処理のbounding-box/finite reductionとcollinearity
+predicateにも少なくとも2回のscalar観測がある。総数は現profileでは未集計であり、
+標準traceで確定する。
+
+GPU選択はWGPU adapter identityで確認し、amdgpu busy counterで実行中のactivityを
+補強した。busy counter単独はadapter identityの証明ではなく、98%が有効な幾何計算
+だったことも意味しない。
+
+## v0.87のprimitiveだけで実装できたもの
+
+次の構成はMassively本体を変更せず実装できた。
+
+1. `map`、`zip`、`permute`、`reduce`による入力正規化と幾何metadata生成。
+2. lexicographic sortと`unique_by_key`による重複点除去。
+3. bit-reversal順序の直接生成。
+4. triangle-major CSRによる未挿入点の保持。
+5. `SegmentIterator`によるsegment先頭winner候補の読み出し。
+6. 固定次数3の`map + permute`によるdeterministic resource claim。
+7. one-hot bucket分類、tuple segmented scan、segment tail、prefix scan、scatterによる
+   CSR再構築。
+8. stable triangle/edge IDと既知destination scatterによるin-place topology update。
+9. epoch-tagged tableによる全table clearの除去。
+10. affected-edge frontierによる疎なlegalization。
+11. dense、full-scan compact、frontierの三schedule。
+12. robust orientation/incircle predicateと決定的なcocircular tie-break。
+
+これは表現力について強い肯定的証拠である。del2dは多数のDelaunay固有CubeCL
+`UnaryOp`を定義しており、それらはMassivelyの生成kernelへ融合される。一方、
+Massively本体にDelaunay専用primitiveや手書きlaunchを追加せず、複雑なmutable
+topology algorithmを有限primitiveへ分解できた。
+
+## 効いた設計
+
+### Stable IDと固定容量topology
+
+triangleとedgeをroundごとに詰め直さず、stable slotとして保持した。入力数`N`から
+安全な容量上限をhostで計算できるため、GPU allocatorは不要だった。
+
+この設計により、incidenceのglobal sort/rebuildを既知destinationへのscatterへ変更
+できた。これはDelaunayに限らず、bounded mutable graph rewriteに有効である。
+
+### Domainの固定次数を使う
+
+triangleが持つedgeは常に3本である。汎用sort/reduceによるclaimではなく、各triangleが
+三候補から直接ownerを選ぶことでglobal claim sortを避けた。
+
+一般的なprimitiveだけを使うことと、domain構造を捨てて常に最も汎用なalgorithmを
+使うことは同義ではない。次数上限、fan-out上限、stable IDは積極的に利用すべきである。
+
+### Epoch tag
+
+winner、illegal edge、changed triangleのtableを毎round zero-fillせず、
+`(epoch, value)`として再利用した。全体clearを局所scatterへ変える一般的な方法である。
+
+epoch wraparound時だけ明示的clearまたはgeneration再初期化が必要になる。
+
+### Triangle-major CSR
+
+未挿入点をtriangle-major CSRでround間に保持したことで、以前のroundごとのcomparison
+sortと`lower_bound`を削除できた。
+
+profile上、`MergePermutation`は91回から6回へ減った。raw offsets、
+`SegmentIterator`、CSRを使うsegmentation algebraが「flat itemとowner groupの関係」を
+表すという判断は、この用途で正しかった。公開`Segmentation` concrete type自体は
+hot loopで構築していない。
+
+### Lazy expression内のfusion
+
+keep flagと三bucket flag、offsetの先頭zero追加、winner由来の追加lengthなどをtuple
+`map`へまとめた。初期CSR版は6〜32%回帰したが、このfusionにより16Kでは旧実装と同等
+か僅かに改善するところまで戻せた。
+
+### Density別schedule
+
+- 小規模: dense処理を4 round enqueueしてから観測。
+- 中規模: 全edgeを検査してwinnerだけcompact。
+- 大規模: affected-edge frontier。
+
+262K点ではfull-scan compactの約641.65 msから、正当性保証を含むfrontierの
+約490.79 msへ約23.5%改善した。
+
+一つのscheduleを全密度へ適用するより、dense/sparseの境界を明示する方が有効だった。
+
+## 効かなかった設計と、その理由
+
+### Sortをsegmented scanへ置き換えるだけでは速くならない
+
+開発中に取得したCSR化前後の16K profileでは、dispatchは約1,214回から約1,219回へ
+微増した。raw traceはrepositoryに保存されていないため、今後の標準traceで再現する。
+global merge passを削除しても、segmented scan、segment tail materialization、
+length scan、scatterが追加されたためである。
+
+これはsegmentation algebraの失敗ではない。work complexityを改善しても、launch
+complexityが改善されなければwall timeは下がらないという結果である。
+
+### 全capacity dispatchは疎なfrontierに弱い
+
+device lengthをhostへ戻さず、常にcapacity全体へdispatchする経路も検討した。
+readbackは減るが、frontierが疎になるほどinactive laneが支配する。
+
+必要なのはdevice countだけではなく、そのcountから実行範囲を作るindirect dispatch
+または同等のsparse execution domainである。
+
+### Hot loopで毎回`Segmentation`を再構築できない
+
+安全な`Segmentation::from_offsets`はoffsetsを検証し、host-exactな`value_count`を
+確定する。通常APIとしては正しいが、roundごとに構築すると同期が累積する。
+
+現在のhot pathはraw offsetsと`SegmentIterator::new`を使う。offsetsが
+
+- 先頭0、
+- 非減少、
+- 末尾がpending count、
+- offset数がtriangle count + 1、
+
+であることをdel2d側の生成規則で保証している。
+
+これは公開unchecked constructorを追加すべき証拠ではない。Massively自身が生成した
+metadataのprovenanceを内部で引き継ぐ余地があることを示す。
+
+### Boundary-only frontierは正しくない
+
+flip winnerが作る四境界辺だけを次frontierにすると、claimに負けた
+「未変更だがillegalなedge」が消える場合がある。manifold検査だけではこの誤りを
+検出できなかった。
+
+現在はsparse waveが停止した時点でfull legality passを行い、
+
+- winnerがなければ完了証明、
+- winnerがあれば次のsparse waveをseed、
+
+としている。
+
+frontier最適化には、未処理itemを保存する規則か、quiescence時の完全なcertificateが
+必要である。性能のためにこの検査を無条件に削除してはならない。
+
+### 汎用`Iteration`は、それだけでは速くしない
+
+Rustの`for`を別の型で包んでも、同じkernel列、allocation、materialization、
+submissionを作るだけなら性能は変わらない。
+
+必要なのは反復という名前ではなく、有限DAG全体を見てprivate extent、scratch、
+fusion、observationをまとめるlowering能力である。
+
+## 学びを分解するための五つの効率
+
+今後は「GPU algorithmが速いか」を少なくとも次の五つへ分解する。
+
+1. **Semantic expressiveness**
+   - algorithmをprimitiveの有限合成として正しく表現できるか。
+2. **Work efficiency**
+   - global sort、全edge scan、inactive laneなど不要な仕事が少ないか。
+3. **Launch efficiency**
+   - 同じ仕事を何dispatch、何submissionで実行するか。
+4. **Observation efficiency**
+   - GPUが生成したscalar/lengthを何回hostが待つか。
+5. **Materialization efficiency**
+   - temporary allocation、copy、gather、scratch再構築がどれだけあるか。
+
+segmentation algebraは主に1と2を改善する。今回残った支配項は3、4、5である。
+
+## Massivelyに提案する抽象
+
+### P0: 標準trace contract
+
+最初に追加すべきものは、意味論を変えない計測基盤である。
+
+一つのtraceから少なくとも次を取得できるようにする。
+
+- primitive名とlowering名。
+- kernel dispatch数。
+- queue submission数。
+- host observation数。
+- observationごとの待ち時間。
+- temporary allocation数とbytes。
+- scratch pool hit/miss。
+- CPU encode/submit時間。
+- GPU timestamp。
+- wall-clock時間。
+
+最適化は「wall timeが下がった」だけでなく、狙ったcounterが因果的に下がったことを
+示す。今回のようにsort passを消して別のscan passを増やした場合も、すぐ判別できる。
+
+### P1: Internal `ExecutionDomain`
+
+Massively v0.87内部には既に次がある。
+
+- `MVal<R, T>`。
+- `LogicalExtent::{Fixed, Device}`。
+- device countを保持する`SelectionControl`。
+- device extentを伝播できる内部map/selection lowering。
+
+不足しているのは、logical extentをkernelの実行範囲へ変換する共通loweringである。
+
+概念的には次の内部viewを導入する。
+
+```rust,ignore
+enum ExecutionDomain<R> {
+    Fixed {
+        len: u32,
+    },
+    Device {
+        count: PrivateDeviceScalar<R, u32>,
+        upper_bound: u32,
+    },
 }
 ```
 
-`MStorage::len` と `MIter::len` も `Result<usize, Error>` を返す。この契約は、固定長の配列、host range による slice、事前 allocation には分かりやすい。一方で、GPU の predicate によって決まる長さを表せない。
+`ExecutionDomain`を`LogicalExtent`と並ぶ第二の保存carrierにはしない。既存
+`LogicalExtent`からlaunch時に一時的に得るlowering view/policyとし、extent identityと
+capacityの正本は増やさない。
 
-### 2. selection が scan の結果を host に戻す
+`ExecutionDomain::Device`は次を行う。
 
-現行 `copy_where` の概略は次の通りである。
+1. device countから`[x, y, z]` indirect argumentsを生成する。
+2. 同じcount storageとblock sizeについてarguments allocation/bindingを再利用する。
+3. count 0を安全なno-opとして扱う。
+4. 最終workgroupではcountによるOOB guardも残す。
+5. indirect dispatch非対応backendではupper-bound dispatchへfallbackする。
 
-```rust
-let capacity = input.len()? as usize;
-let mut output = exec.alloc::<Item>(capacity);
-let len = copy_where_into(exec, input, stencil, output.slice_mut(..))?;
-output.truncate(len as usize);
+0-groupのdata dispatchだけでは、次outputのlength/statusを0へ更新できない。前roundの
+値が残ると空frontierが復活するため、各stepはdata dispatchの有無にかかわらず
+next extentとstep statusを初期化するalways-run control passを持つか、producerが
+0を必ず書く。empty stateが次stepでもemptyである「absorbing state」を実行契約にする。
+countの値はroundごとに変わるため、indirect argumentsの内容はproducer完了後に毎回
+再生成する。再利用できるのはbuffer、binding、lowering planであり、古いargumentsの
+中身ではない。
+
+これは公開`MVal`を要求しない。既存のprivate logical extentを、実際のdispatch policyへ
+接続するexecutor内部の抽象である。
+
+indirect dispatchはinactive laneを減らすが、kernel launch数そのものは減らさない。
+したがって後述のfinite compositionとfusionが同時に必要である。
+
+scan/reductionは一つのindirect dispatchへ置き換えるだけではない。hostはcapacityから
+最大multi-stage DAGを構築し、各stageのdevice group count、zero-stageのcontrol初期化、
+scratchの有効範囲を伝播する必要がある。最初はselectionと単純なindexed copyで
+ExecutionDomainを検証し、その後にhierarchical collectiveへ広げる。
+
+WGPU backendについては、producer kernelが書いた0／非0 countから次kernelを起動する
+実機smoke testをRadeon 680Mで先に行う。backend実装の存在だけでportableな動作を
+仮定しない。
+
+### P3: 条件付き有限`CompositionScope`
+
+今回もっとも検討価値がある新しい境界は、公開device scalarや無制限loopより限定した、
+有限でnon-escapingなcomposition scopeである。ただし、これを公開すればscope内に
+device scalar、dynamic sequence、別の`map`／`select` interfaceを持つことになる。
+したがって、これはv0.87方針と自然に両立する追加ではなく、採用済み判断を限定的に
+再検討する設計変更である。
+
+概念APIは次のようになる。
+
+```rust,ignore
+let status = exec.compose_epoch(8, |scope, state| {
+    // Rust上では有限DAGを構築する。device依存whileは許可しない。
+    let candidates = scope.map(state.frontier(), BuildCandidates);
+    let winners = scope.select(candidates, IsWinner);
+
+    scope.scatter_selected(
+        &winners,
+        BuildTopologyUpdates,
+        state.topology_mut(),
+    );
+
+    let next = scope.expand_fixed::<4>(&winners, EmitAffectedEdges);
+    state.set_frontier(next);
+
+    scope.pack_status(PackEpochStatus)
+})?;
 ```
 
-内部では predicate flag を inclusive scan し、`SelectionControl::from_positions` が `last_u32` を呼ぶ。`last_u32` は末尾を 1 要素の buffer に copy した後、次を実行する。
+これは確定APIではなく、必要な契約を示す。
 
-```rust
-Ok(exec.to_host(&output)?[0])
+- scopeへ入るstorageのphysical capacityはhost-known。
+- scope内の選択数、長さ、真偽値、statusはopaqueなdevice value。
+- scope内の動的sequenceはscope外へescapeできない。
+- DAGは有限で、最大round数またはepoch fuelがhost-known。
+- scope終了時の外部`MVec`は従来どおりhost-exact。
+- 次epochへ渡すsequenceは、terminalのpacked observationに含めた最終lengthで一度
+  resolveするか、recorded planが所有するprivate stateとしてscope内に留める。
+- host observationはterminalのpacked statusまたはexact result確定時に限定する。
+- active countが0になった後の残りroundはindirect count 0またはguard付きno-op。
+- next extent/statusはactive countが0でも必ず0へ更新し、emptyをabsorbing stateにする。
+- capacityは可能な限りhostで構造的に証明する。device依存validationが必要な更新は
+  `validate -> commit`の二相にし、error判定前にstateを部分更新しない。
+- すべてのdevice indexはload/store前にguardする。sticky `DeviceStatus`は診断と
+  terminal報告に使い、memory safetyやtransactionalityの代用にしない。
+- mutable state operationはeffect tokenを入出力し、read/write・write/write dependencyを
+  DAGへ明示する。optimizerはaliasを証明できないstate accessをreorderしない。
+- 「childをmaterializeしてからparent slotをoverwrite」のような順序は、SSA versioned
+  stateまたは明示barrierで保持する。
+- stable order、tie-break、foreign executor、overflow契約を既存APIと共有する。
+
+`pack_status`はdevice上にterminal statusを生成するだけで、closureの途中ではhost readを
+行わない。実際の観測は`compose_epoch`のterminalに一度だけ行う。
+
+scopeのtarget machineにはcountを保持するだけでなく、privateな
+`add`／`mul_const`／`min`／`ceil_div`と、device-produced baseを使う
+`base + counting`、prefix gather/scatterが必要である。Delaunayではwinner countから
+2倍／4倍のchild長とappend baseを作るため、現在のようにsliceのstart/limitがhost値の
+ままではindirect dispatchだけを追加しても同期は消えない。これらはraw scalarとして
+公開せず、scope内のshape/index expressionとして扱う。
+
+この制約は過去の汎用`Iteration`案よりescape/lifetime上の危険を小さくするが、
+scopedな動的制御APIである事実と必要なoperation matrixの大きさは変わらない。差は
+次の限定にある。
+
+- unknown回数のdevice-side `while`を公開しない。
+- GPU allocatorを要求しない。
+- 新しい永続storage型をscope外へ追加しない。
+- 任意closureをpersistent kernelへ入れない。
+- backendはbounded unroll、batched commands、indirect dispatchへloweringできる。
+
+まずMassively内部またはunstable feature-gated prototypeとして作る。16K profileの
+exact-length round境界はinsertion約19回とlegalization約27回の計46回であり、
+8-round epochなら`ceil(19 / 8) + ceil(27 / 8) = 7`回まで減らせる。selection由来の
+前後約2回を残すと、exact-length観測数の目安は48回から約9回である。さらに前処理の
+scalar観測が少なくとも2回あるため、全host observationは少なくとも約11回になる。
+前後処理も同じscopeへ統合できた場合だけさらに減る。
+
+既存のstable APIはhost-exactのまま維持できるが、experimental scope内部は
+host-exactではない。Power Diagram、graph frontier、CSR refinementなど第二の用途で
+効果と安全性を再現し、v0.87方針を変更する合意が得られるまでstable public APIには
+しない。non-escaping scopeはlifetime/escape契約では公開`MVal`／`BoundedVec`より
+限定されるが、必要なmap、selection、scan、scatter、segmented operation、shape演算、
+borrow/effect loweringのmatrixは小さくない。この実装規模も採否判断へ含める。
+
+### P1: Caller-provided outputの一貫化
+
+固定shapeまたはhost-known capacityを持つoperationには、事前確保outputへ書く経路を
+一貫して提供する。
+
+特に必要なのは次である。
+
+- ordinary scan。
+- scan by key。
+- length-preserving segmented algorithm。
+- per-segment summary。
+
+`map`はlazy expressionを`vector::copy`で既存outputへ書けるが、collectiveの一部は
+owned result allocationしか公開されていない。内部には既に`run_into`相当の経路が
+あるため、公開surfaceを増やす場合も新しい意味論は必要ない。
+
+gather/materializeは`lazy::permute + vector::copy`でpreallocated sinkへ既に表現できる
+ため、専用`gather_into`を公開する提案には含めない。
+
+目的は利用者に全scratchを管理させることではない。長寿命のapplication state/outputと
+短寿命のexecutor scratchを分け、前者だけをcallerが再利用できるようにする。
+
+### P2: Proven indexed/predicated sink lowering
+
+read側には`permute(values, indices)`というindexed viewがある。一方、write側の
+scatterは一つのindices列をtuple全体で共有する。
+
+Delaunayのtopology updateでは、同じsource rowから複数の配列へ、それぞれ異なる
+destination indexで書く。現在は複数scatterへ分かれやすい。
+
+write側にもindexed sink表現があれば複数scatterを一つのlowering候補にできる。しかし
+read `permute`との単純な対称ではない。duplicate destinationはwrite raceになり、
+predicated leafは既存値の保持、sink間alias、read/write aliasも扱う必要がある。
+
+```rust,ignore
+// Public API案ではなく、sealedな内部IRの概念。
+let sinks = (
+    Sink::UniqueIndexed(edge_a, proven_unique_a),
+    Sink::UniqueIndexed(edge_b, proven_unique_b),
+    Sink::UniqueIndexed(triangle, proven_unique_triangle),
+);
 ```
 
-この host の `count` は、さらに以下に使われる。
+初期提案はpublic viewではなく、Massively自身が一意性を証明したindices、または
+既存scatterのpreconditionを保持できるsealed provenanceを入力とする内部multi-sink
+loweringに限定する。次の契約を解決する。
 
-- selected index buffer を正確な長さで allocation する。
-- `count == 0` を host で判定する。
-- gather の出力範囲を host range で作る。
-- 返却する `DeviceVec` の `len: usize` を更新する。
+- destination範囲の検査方針。
+- 同一sinkへの重複indexの扱い。
+- zipされたsink間のalias制約。
+- false predicateで既存destinationを保持する方法。
+- inputとoutputがaliasする場合のsnapshot/order契約。
+- stable/deterministic writeが必要な場合のprecondition。
+- input read slotとoutput index slotを合わせたarity上限。
 
-`remove_where` と、`SelectionControl::from_flags` を使う `unique_by_key` も同じ構造を持つ。
+異なるdestinationを持つ複数scatterを実際に一dispatchへloweringできることを
+microbenchmarkで確認し、二つ以上のpublic use caseと安全な検証方法が得られるまで
+公開APIへ昇格しない。
 
-```mermaid
-flowchart LR
-    A["predicate flags"] --> B["inclusive scan"]
-    B --> C["last u32 on GPU"]
-    C -->|"4-byte readback + queue wait"| D["host count"]
-    D --> E["exact allocation / truncate"]
-    D --> F["static dispatch size"]
-    E --> G["gather on GPU"]
-    F --> G
-```
+### P1: Dependency-aware scratch/workspace
 
-### 3. reduction と predicate が host scalar を返す
+current runtimeのmemory poolがallocation自体を再利用しても、各primitiveはhandle、
+logical metadata、small parameter buffer、binding、scan scratchを再構築する。
 
-`vector::reduce` は最終的に `result.read_first(exec)` を実行し、`read_first` は `exec.to_host` を呼ぶ。
+executor内部に、shape/layoutとqueue lifetimeを理解するscratch leaseを追加する。
 
-そのため以下はすべて host synchronization point になる。
+- scan positions/prefixes。
+- selection positions/indices。
+- segmented heads/IDs。
+- temporary SoA columns。
+- indirect dispatch arguments。
+- fixed-size status buffer。
 
-- `reduce -> T`
-- `count_if -> usize`
-- `all_of -> bool`
-- `any_of -> bool`
-- `none_of -> bool`
-- `find_if -> Option<u32>`
+単純な`HashMap<shape, buffer>`では不十分である。同一WGPU queue上の順序付きcommandは
+後続利用との実行順を保証できるため、常にGPU完了fenceが必要なわけではない。必要なのは
+DAG上のliveness/alias、encoderとsubmissionの所有権、CPU map、将来のcross-queue利用を
+含むdependency-aware leaseである。
 
-API の返り値だけを見ると普通の即値なので、呼び出し側から synchronization point であることも見えにくい。
+同じ有限DAGを繰り返す場合は、さらに`RecordedPlan`相当の内部表現で次を再利用する。
 
-### 4. dispatch 数が host length からしか作れない
+- pipeline。
+- bind layout。
+- static parameters。
+- scratch liveness。
+- ping-pong assignment。
+- exact arity。
 
-Massively の `cube_count_1d` は `usize` から `CubeCount::Static` を作る。したがって、前段の GPU kernel が出した長さを次の dispatch 数に使うには、いったん CPU に戻すしかない。
+これはWGPU command bufferを無条件に再submitする意味ではない。pipeline、bind/static
+metadata、scratch liveness planをcacheし、commandsはbackend契約に従って必要な時に
+再encodeする。
 
-CubeCL の現在の依存 revision (`0a62060`) には既に以下がある。
+公開`Iteration`ではなく、executorのexecution policyとして実装する。
 
-- `CubeCount::Dynamic(Binding)`
-- WGPU backend の `dispatch_workgroups_indirect`
-- WGPU allocation の `BufferUsages::INDIRECT`
+### P1: Library-derived segmentation provenance
 
-つまり lower layer の入口は存在するが、Massively の algorithm API から利用できていない。
+公開`Segmentation`の検証は維持する。公開unchecked constructorや
+caller-provided「trusted」flagは追加しない。
 
-### 5. 派生長も host で計算される
+一方、Massively自身のscan、segmented filter、stable routeが生成したoffsetsには、
+次の不変条件をproducerが既に知っている場合がある。
 
-`del2d` では `winner_count * 2`、`triangle_count * 3`、`survivor_count + child_count` のような長さを頻繁に作る。
+- 先頭0。
+- 非減少。
+- terminal countが既知のprivate extentと同一。
+- offset capacityがsegment count + 1。
 
-最初の `winner_count` だけを `MVal<u32>` にしても、次の配列を作るために `usize` へ戻した時点で同期が再発する。device length には、少なくとも以下の伝播が必要である。
+finite scopeまたはcompound lowering内部では、このprovenanceをopaque tokenとして
+引き継ぎ、次のsegmented operationで再materialize・再検証しない経路を持てる。
 
-- 同じ長さを保つ `map`
-- 長さを定数倍する expand / repeat
-- 二つの長さを加える concat
-- predicate で短くなる compact / unique
-- scan/reduction の階層ごとの `ceil_div`
-- device length からの counting range
+tokenだけをmutable offsetsへ付けてはならない。planはoffset storageを所有または凍結し、
+外部mutable aliasを禁止する。更新可能なstorageを使う場合はgenerationを持ち、headsと
+IDsのcacheも同じgenerationへ結び付けてstale metadataを拒否する。
 
-## なぜ 4 byte の readback が高価なのか
+同じpartitionを複数operationで使う場合は、heads、必要ならIDsを一度だけ生成して
+`SegmentationPlan`内部で再利用する。derived representationを常にcacheするのではなく、
+profileで複数回利用が確認された場合だけ、利用回数と分布に基づいてcacheする。
 
-readback のコストは 4 byte の PCIe/UMA 転送時間ではない。CPU が結果を読むためには、その値を生成した kernel だけでなく、同じ queue でそれより前に submit された依存処理が完了していなければならない。
+scope外へ出す時は通常の安全な`Segmentation`へresolveする。
 
-現行の反復は次のように直列化される。
+del2dがraw offsetsを使う間は、debug/test buildで先頭、単調性、terminal count、
+offset countを独立に検査し、application側のproof obligationを実行可能なtestにする。
 
-1. CPU が数個の kernel を enqueue する。
-2. `copy_where` が count を読むため CPU が待つ。
-3. CPU が count を見て allocation と次の dispatch を決める。
-4. 次の数個の kernel を enqueue する。
-5. `any_of` が bool を読むため CPU が再び待つ。
-6. これを多数のラウンドで繰り返す。
+### P1: 既存selection loweringの改善
 
-GPU は小さい dispatch の間で仕事を失い、CPU も GPU の完了待ちになる。さらに exact-size allocation を反復ごとに行うため、scratch allocation と command encoding の負荷も増える。
-
-速くするための優先順位は次の通りである。
-
-1. 中間 scalar の host readback をなくす。
-2. worst-case capacity を事前確保し、ping-pong buffer を再利用する。
-3. device length を下流の全 algorithm に伝播する。
-4. device length に応じて indirect dispatch する。
-5. 反復の停止判定を毎ラウンドではなく epoch 境界まで遅らせる。
-
-indirect dispatch は重要だが、最大 capacity 分を over-dispatch して kernel 内で `index < device_len` を判定するだけでも、まず readback は除去できる。最初の性能改善は synchronization の除去から得られる可能性が高い。
-
-## 目標
-
-- GPU で生成した scalar を、host を経由せず次の Massively operation が消費できる。
-- 物理 allocation の大きさと論理長を分離する。
-- compact 後の vector を map、gather、scan、unique、sort へ渡せる。
-- device length から dispatch workgroup 数を GPU 上で生成できる。
-- 既存の固定長 API と source compatibility を保つ。
-- host synchronization が発生する API を明示的に識別できる。
-- zero length と capacity 境界を安全に扱う。
-- SoA の複数 column が必ず一つの logical extent を共有する。
-
-## 非目標
-
-- GPU から新しい device allocation を作ること。WebGPU の compute shader は Massively の allocator を呼べない。
-- indirect dispatch だけで任意回数の device-side `while` を実現すること。
-- 最初の変更ですべての Massively algorithm を dynamic length 対応にすること。
-- 既存 `DeviceVec::len() -> usize` の意味を変更すること。
-
-## 提案 API
-
-以下の名前と trait 境界は議論用であり、確定案ではない。重要なのは型ごとの責務である。
-
-### 1. `MVal<R, T>`
-
-1 要素の device storage を、通常の vector と区別して表す。
-
-```rust
-pub struct MVal<R: Runtime, T> {
-    // 物理的には 1 要素の device buffer
-    // owner/runtime の検証情報も持つ
-}
-
-impl<R: Runtime, T: MStorageElement> Executor<R> {
-    pub fn scalar(&self, value: T) -> MVal<R, T>;
-    pub fn read_scalar(&self, value: &MVal<R, T>) -> Result<T, Error>;
-}
-
-impl<R: Runtime, T> MVal<R, T> {
-    pub fn as_iter(&self) -> impl MIter<R, Item = T>;
-    pub fn map<U, Op>(
-        &self,
-        exec: &Executor<R>,
-        op: Op,
-    ) -> Result<MVal<R, U>, Error>;
-}
-```
-
-`read_scalar` は明示的な synchronization point として document する。`MVal` の生成、map、kernel argument としての使用は readback しない。
-
-boolean は backend 上の保存形式を単純にするため、初期実装では `MVal<R, u32>` の 0/1 を `DeviceFlag<R>` newtype で表してもよい。
-
-### 2. `DeviceExtent<R>`
-
-dynamic vector の範囲を、host-known capacity と device-known length の組として表す。
-
-```rust
-pub struct DeviceExtent<R: Runtime> {
-    capacity: usize,
-    len: MVal<R, u32>,
-}
-
-impl<R: Runtime> DeviceExtent<R> {
-    pub fn capacity(&self) -> usize;
-    pub fn device_len(&self) -> &MVal<R, u32>;
-
-    // 明示的な同期
-    pub fn read_len(&self, exec: &Executor<R>) -> Result<usize, Error>;
-
-    // host capacity から上限を証明し、device len の演算を enqueue する
-    pub fn scale(
-        &self,
-        exec: &Executor<R>,
-        factor: u32,
-    ) -> Result<DeviceExtent<R>, Error>;
-
-    pub fn concat(
-        &self,
-        exec: &Executor<R>,
-        rhs: &DeviceExtent<R>,
-    ) -> Result<DeviceExtent<R>, Error>;
-}
-```
-
-不変条件は常に `device_len <= capacity <= u32::MAX` とする。`scale` などは capacity 側の overflow を host で事前検査できるため、通常経路では device error の readback は不要である。
-
-長さが同一である複数 column は、同じ `DeviceExtent` handle を共有する。独立に生成した二つの extent を暗黙に `zip` して値を比較することはせず、以下のどちらかにする。
-
-- 同じ extent identity のみ `zip` 可能にする。
-- `zip_min` など、長さの意味を明示した別 API を用意する。
-
-### 3. `DeviceDynVec<R, T>`
-
-物理 storage は capacity 全体を持ち、読み書きする論理範囲だけ `DeviceExtent` で制限する。
-
-```rust
-pub struct DeviceDynVec<R: Runtime, T: MAlloc<R>> {
-    storage: MVec<R, T>,
-    extent: DeviceExtent<R>,
-}
-
-impl<R: Runtime, T: MAlloc<R>> DeviceDynVec<R, T> {
-    pub fn capacity(&self) -> usize;
-    pub fn extent(&self) -> &DeviceExtent<R>;
-    pub fn read(&self) -> DeviceDynIter<'_, R, T>;
-    pub fn write(&mut self) -> DeviceDynOutput<'_, R, T>;
-
-    // 明示的に同期し、従来の host-sized MVec に変換する
-    pub fn into_host_sized(
-        self,
-        exec: &Executor<R>,
-    ) -> Result<MVec<R, T>, Error>;
-}
-
-impl<R: Runtime> Executor<R> {
-    pub fn alloc_dynamic<T: MAlloc<R>>(
-        &self,
-        capacity: usize,
-    ) -> Result<DeviceDynVec<R, T>, Error>;
-}
-```
-
-`DeviceDynVec` に `len() -> usize` や `is_empty() -> bool` は置かない。同期を伴う取得は `extent().read_len(exec)` のように名前から分かる形にする。
-
-`DeviceDynVec` をそのまま既存 `MIter` に実装するのも避ける。現行 `MIter::len() -> usize` は「host が知る正確な長さ」という強い契約を持つためである。初期実装では `DeviceDynIter` / `DeviceDynOutput` を別 trait にし、対応 algorithm を段階的に増やす方が変更範囲を制御しやすい。
-
-### 4. host scalar API と device scalar API を分ける
-
-既存 API は互換性のため残し、device result を返す variant を追加する。
-
-```rust
-pub fn reduce_device<R, Input, Op>(
-    exec: &Executor<R>,
-    input: Input,
-    init: Input::Item,
-    op: Op,
-) -> Result<MVal<R, Input::Item>, Error>;
-
-pub fn count_if_device<R, Input, Pred>(
-    exec: &Executor<R>,
-    input: Input,
-    pred: Pred,
-) -> Result<MVal<R, u32>, Error>;
-
-pub fn any_of_device<R, Input, Pred>(...) -> Result<DeviceFlag<R>, Error>;
-pub fn all_of_device<R, Input, Pred>(...) -> Result<DeviceFlag<R>, Error>;
-```
-
-既存 `reduce` は概念的に次の wrapper にできる。
-
-```rust
-pub fn reduce(...) -> Result<T, Error> {
-    let result = reduce_device(...)?;
-    exec.read_scalar(&result)
-}
-```
-
-将来の major version では `reduce_to_device` / `reduce_to_host` のように両方を明示する案もある。`_async` は Rust の `Future` と混同しやすいため、この用途には使わない。
-
-### 5. dynamic output API
-
-allocation する convenience API と、事前確保 buffer を使う `into` API の両方を用意する。
-
-```rust
-pub fn copy_where_dynamic<R, Input, Item, Stencil>(
-    exec: &Executor<R>,
-    input: DeviceDynIter<'_, R, Item>,
-    stencil: Stencil,
-) -> Result<DeviceDynVec<R, Item>, Error>;
-
-pub fn copy_where_dynamic_into<R, Input, Stencil, Output>(
-    exec: &Executor<R>,
-    input: Input,
-    stencil: Stencil,
-    output: Output,
-) -> Result<(), Error>;
-```
-
-`copy_where_dynamic` の出力 capacity は入力 capacity と同じにする。`copy_where_dynamic_into` は output capacity が input capacity 以上であることを host で検査する。実際の selected count は output の `DeviceExtent` に書く。
-
-同様に以下が必要になる。
-
-- `remove_where_dynamic[_into]`
-- `map_dynamic[_into]`
-- `gather_dynamic[_into]`
-- `scatter_dynamic`
-- `unique_by_key_dynamic[_into]`
-- `radix_sort_by_key_dynamic[_into]`
-- `sort_by_key_dynamic[_into]`、または radix sort で代替できる保証
-- `concat_dynamic[_into]`
-- `lazy::counting(...).take_dynamic(extent)`
-
-buffer 再利用が重要な反復アルゴリズムでは `*_into` を基本形とする。convenience API は scratch pool を使っても、毎ラウンドの allocation churn を完全には避けにくい。
-
-### 6. indirect dispatch 用の型
-
-CubeCL の `CubeCount::Dynamic` は scalar 1 個ではなく、`[x, y, z]` の 3 個の `u32` を持つ binding を要求する。そのため、`MVal<u32>` を直接 `CubeCount::Dynamic` に渡す API にはしない。
-
-```rust
-pub struct DeviceCubeCount<R: Runtime> {
-    // 3 * u32: [x, y, z]
-}
-
-impl<R: Runtime> DeviceExtent<R> {
-    pub fn cube_count_1d(
-        &self,
-        exec: &Executor<R>,
-        items_per_cube: u32,
-    ) -> Result<DeviceCubeCount<R>, Error>;
-}
-```
-
-`cube_count_1d` は GPU kernel で概ね次を生成する。
+現在のstable selectionは概ね次の形になる。
 
 ```text
-groups = ceil(device_len / items_per_cube)
-[x, y, z] = pack_to_backend_limits(groups)
+flags
+  -> inclusive scan
+  -> selected indices materialization
+  -> indexed copy
+  -> last/count observation
 ```
 
-Massively 内部の launch は、その binding を `CubeCount::Dynamic` として CubeCL に渡す。すべての kernel は indirect count に加えて `device_len` 自体も受け取り、最後の workgroup の out-of-bounds を検査する。
+一つのpayloadだけをcopyする場合、true rowをscan positionへ直接stable scatterすれば、
+selected indices bufferと一つのindexed-copy stageを省ける可能性がある。
 
-よく使う block size ごとに args buffer を毎回作るコストが問題になる場合は、selection の count 出力 kernel が length と dispatch args を同時に書く、または `DeviceExtent` が args を cache する最適化を後から追加できる。
+同じselectionを複数terminalが使う場合は、現在の`SelectionControl`を一度作って共有
+した方がよい。tupleの複数columnを一つのterminalへ書く場合はsingle consumerとして
+数える。
 
-## 動的 selection の内部構成
+したがってselection loweringは次をcost modelで選ぶ。
 
-`copy_where_dynamic` は exact allocation をやめ、次のように構成できる。
+- single consumer: direct stable scatter。
+- multi consumer: indices/controlをmaterializeして共有。
+- dense stencil: predicated capacity pass。
+- sparse stencil: compact control + indirect dispatch。
 
-1. 入力 capacity 分の positions scratch を確保する。
-2. `index < input.device_len` の範囲だけ predicate flag を scan する。
-3. `positions[input.device_len - 1]` を device scalar の output count に書く。入力が 0 なら 0 を書く。
-4. selected index buffer は selected count ではなく入力 capacity 分を確保する。
-5. selected count から indirect args を作る。
-6. gather を indirect dispatch し、output の先頭 selected count 要素だけ書く。
-7. output の extent に selected count を設定する。
+公開`copy_where`のstable orderとhost-exact resultは変えない。
 
-```mermaid
-flowchart LR
-    A["flags"] --> B["scan within device_len"]
-    B --> C["MVal selected_count"]
-    C --> D["indirect args"]
-    C --> E["output DeviceExtent"]
-    D --> F["dynamic gather"]
-    A --> F
-    F --> G["capacity-backed DeviceDynVec"]
-    E --> G
+### P2: Barrier-aware fusionとCSE
+
+現在のlazy `map`、`zip`、`permute`は一つのconsumer kernel内で有効にfusionされる。
+一方、scan、selection materialization、gather結果などのterminalでfusionが切れる。
+
+finite planが得られた場合、次を検討する。
+
+- map/permuteを次のscan・scatter・materializeのprologueへ融合。
+- scan最終stageの安全なpointwise epilogue。
+- 同一kernel内の同じpermutation/index loadをload-CSE。
+- kernelを跨ぐ場合は、再計算とmaterialize/reuseをcost modelで比較。
+- 一つのselection controlを複数consumerで共有。
+- 複数のnon-aliasing sinkを一つのdispatchへ統合。
+- 実際のleaf数に合わせたexact-arity kernel。
+
+global barrierを必要とするscan/reductionを無理に一kernelへ畳まない。
+過剰fusionはregister pressure、shader variant、compile timeを増やすため、
+profile-guided cost modelと反証benchmarkを必須にする。
+
+### P2: Segmented stable rebucketの内部specialization
+
+今回のCSR transitionは一般化すると次である。
+
+```text
+classify into fixed K buckets
+  -> one-hot tuple
+  -> segmented scan
+  -> segment tail counts
+  -> destination length scan
+  -> stable scatter
 ```
 
-この経路には host readback がない。selected index と output の未使用領域は未定義のままでよく、下流は extent より後ろを読まない。
+これはCSR refinement、radix split、mesh refinementでも現れる。
 
-## scan、reduction、sort への影響
+しかし現在のprimitiveで意味は完全に表現できるため、直ちに
+`seg::stable_route<K>`を新しい公開primitiveとして追加しない。まずfinite plan上で
+このpatternを認識し、
 
-### Scan
+- flag生成とscan inputの融合、
+- tail countの同時生成、
+- scratch再利用、
+- fixed `K` specialization、
 
-scan の pass 数は、device length ではなく capacity から上限を決めて host で enqueue できる。各階層の実長は device scalar の `ceil_div` で導出し、indirect dispatch または capacity over-dispatch を使う。active range 外の partial は identity として扱う。
+を内部loweringとして実装する。
 
-### Reduction
+第二のapplicationで同じ意味と契約が必要になり、内部pattern matchingでは不安定に
+なる場合だけ、公開route abstractionを再検討する。
 
-reduction も capacity から最大階層数を決める。各 pass の有効 partial 数を device scalar で伝播し、最終結果を `MVal<T>` に残す。empty input は `init` を返す。
+## 現時点で提案しないもの
 
-現行の固定長 reduction も、最終 `read_first` の直前までは GPU 上で完結しているため、まず `reduce_device` を切り出す変更は比較的小さい。ただし dynamic input 対応には各 pass の length 伝播が別途必要である。
+### 公開`MVal`／`MExtent`／`BoundedVec`
 
-### Unique
+v0.87内部には実装部品があり、技術的には可能である。しかし公開すると、
 
-`unique_by_key` は head flag、scan、selection の組み合わせなので、dynamic scan と dynamic selection があれば同じ extent model に乗せられる。
+- dynamic slice base、
+- capacityとlogical lengthの関係、
+- device scalar演算、
+- overflow/status観測、
+- zipのextent identity、
+- 対応algorithmの範囲、
 
-### Radix sort
+まで一度に公開契約になる。
 
-key bit 数に対する pass 数は固定なので、dynamic comparison sort より先に対応しやすい。block scratch の capacity は input capacity から決め、実際の block 数だけ device length から dispatch する。
+まずnon-escaping `CompositionScope`で性能効果と安全性を検証する。scopeでは不足し、
+複数applicationがdynamic sequence自体を交換する必要を示した場合だけ再検討する。
 
-### Comparison sort
+### 汎用`Worklist`／`Iteration`／`fixed_point`
 
-generic comparator sort は最も難しい。現在の sort schedule が host length を前提にしている場合、次のいずれかが必要になる。
+名前だけのrunnerはlaunch、allocation、submissionを減らさない。無制限device loopは
+WebGPUのglobal synchronization、watchdog、portabilityとも相性が悪い。
 
-- capacity から最大 schedule を enqueue し、各 stage が device length を見て無効 pair を除外する。
-- dynamic merge boundaries を device scalar で生成する。
-- 対象 use case を radix-sortable key に限定し、最初の milestone では未対応とする。
+有限scopeをbackendがbounded unroll/epochへloweringするところまでを今回の提案範囲と
+する。
 
-`del2d` は half-edge の複合 key sort を必要とする。現在は compound-key radix permutation の不具合を避けるため comparison sort を使っている。したがって end-to-end の完全な device-length 化には、compound-key radix の修正と dynamic radix 対応、または dynamic comparison sort のどちらかが必要になる。
+### Delaunay固有primitive
 
-## indirect dispatch だけでは GPU 反復にならない
+次はdel2d側に置く。
 
-`dispatch_workgroups_indirect` が決められるのは、一つの dispatch の workgroup 数だけである。GPU が「もう一回この Massively operation 群を実行する」と新しい command を生成する機能ではない。
+- edge frontier。
+- triangle/edge claim。
+- edge flip。
+- topology generation。
+- stale task rejection。
+- Delaunay certificate。
 
-WGPU/CubeCL の command 列は CPU が先に encode するため、次の Rust loop は停止条件を読む限り同期を必要とする。
+`claim`がmatching、mesh、coloringなど第二の用途でも同じ契約を持つことが実証された
+場合は、`atomic scatter arg-min + all resources claimed`という小さいprimitiveへ
+分解して再検討する。
 
-```rust
-loop {
-    enqueue_one_round(...)?;
-    if done.read(exec)? {
-        break;
-    }
-}
+### Public unchecked `Segmentation`
+
+hot loopの同期を避けるためにvalidation責任を一般利用者へ移してはならない。
+library-derived provenanceは内部最適化として扱う。
+
+### Persistent kernelとGPU allocator
+
+今回の容量は入力`N`から上限を計算できる。persistent kernelはgrid全体のbarrierと
+watchdog問題を持つ。どちらも有限compositionより先に導入しない。
+
+### 常時capacity over-dispatch
+
+正しさのfallbackとしては有用だが、疎なfrontierの標準strategyにはしない。
+
+## del2d側で続ける実装上の工夫
+
+Massively側の変更を待たず、次を優先する。
+
+### P0: Losing illegal edgeをfrontierへ持ち越す
+
+次frontierを概念的に
+
+```text
+changed quadrilateralのboundary edges
+  union
+illegalだったがclaimに負けたedges
 ```
 
-現実的な第一案は epoch 実行である。
+とする。
 
-```rust
-loop {
-    for _ in 0..ROUNDS_PER_EPOCH {
-        enqueue_one_round_with_device_extents(...)?;
-    }
+stable edge IDとepoch dedupを使い、loserを落とさずsparse waveを継続できれば、
+full certificateの頻度を下げられる可能性がある。
 
-    // epoch ごとに一度だけ同期
-    let status = state.read_status(exec)?;
-    if status.done {
-        break;
-    }
-}
-```
+ただし、全内部edgeのlocal Delaunay検査で同値性を証明するまで現在のfull certificateを
+残す。
 
-epoch 内では以下のようにする。
+### P0: 一つのgeometry snapshotでmatchingを深くする
 
-- `done` flag が立った後の dispatch は indirect count 0、または kernel 内 no-op にする。
-- worklist length、winner count、error flag は device scalar のまま次の round へ渡す。
-- storage は事前確保した ping-pong buffer を交互に使う。
-- `DidNotConverge` や topology error は sticky device status に記録し、epoch 境界で読む。
+現在はtriangleごとの第一ownerを一段だけ選ぶ。同じlegality snapshot上で、
+既にclaimされたtriangleを除外しながら2〜数段のdeterministic matchingを作れば、
+高価なgeometry再評価とhost roundを減らせる可能性がある。
 
-固定の最大ラウンド数をすべて enqueue すれば最終結果まで readback 0 回にもできるが、上限が大きいアルゴリズムでは不要 command が多すぎる。persistent kernel 内で全反復を行う案は、workgroup 間の global synchronization、GPU watchdog、Massively primitive との合成性に問題がある。まずは 8〜32 round 程度の epoch を benchmark して決めるのが妥当である。
+round数だけでなく、追加claim passと減ったgeometry passの合計を測る。
 
-## `del2d` での利用イメージ
+### P1: Winnerが触るsegmentだけを再分類する
 
-`del2d` は入力 N から主要 storage の安全な上限を host で求められる。
+現在はwinnerのないsegmentを含む全pending pointについてorientationとsegmented scanを
+実行する。
 
-- remaining points: `N`
-- incremental insertion 中の triangles: `1 + 2N`
-- half edges: `3(1 + 2N)`
-- insertion / flip candidate: 元 worklist の定数倍
+- non-empty segmentのfrontierを持つ。
+- winnerが触る1〜2 segmentだけbucket分類する。
+- untouched segmentはblock/segment単位で引き継ぐ。
 
-したがって GPU allocator は不要で、開始時に worst-case capacity の ping-pong buffer を作れる。
+というsparse segmented rewriteを検討する。
 
-概念的な利用コードは次のようになる。
+### P1: Persistent application workspace
 
-```rust
-let mut remaining_a = exec.dynamic_from_fixed(initial_remaining)?;
-let mut remaining_b = exec.alloc_dynamic::<RemainingRow>(n)?;
+triangle/edge容量が固定されたlegalization phaseでは、geometry、owner、children、
+active flagsなどをA/B bufferとして事前確保し、公開済みの`vector::copy`、scatter系APIで
+可能な範囲から再利用する。
 
-let mut triangles_a = exec.dynamic_from_fixed(super_triangle)?;
-let mut triangles_b = exec.alloc_dynamic::<TriangleRow>(1 + 2 * n)?;
+allocation数とbytesを計測し、runtime poolが既に吸収している部分と区別する。
 
-loop {
-    for _ in 0..ROUNDS_PER_EPOCH {
-        select_winners_dynamic_into(
-            &exec,
-            remaining_a.read(),
-            triangles_a.read(),
-            winners.write(),
-        )?;
+### P1: 実frontier密度によるschedule選択
 
-        split_dynamic_into(
-            &exec,
-            triangles_a.read(),
-            remaining_a.read(),
-            winners.read(),
-            triangles_b.write(),
-            remaining_b.write(),
-        )?;
+現在のthresholdは主に入力点数で決めている。既存のhost observationで得たfrontier/
+winner countを追加同期なしで利用し、
 
-        core::mem::swap(&mut triangles_a, &mut triangles_b);
-        core::mem::swap(&mut remaining_a, &mut remaining_b);
-    }
+- frontier density、
+- winner density、
+- edge count、
+- 直近roundの縮小率、
 
-    let status = read_epoch_status(&exec)?;
-    if status.done {
-        break;
-    }
-}
-```
+からdense/full/sparseを切り替える。
 
-実際には edge flip の inner epoch も必要になるが、Massively に必要な primitive は同じである。
+Radeon 680Mの4,096／131,072 thresholdを他hardwareへ固定しない。
 
-## 後方互換性
+### P1: f32 filter + robust fallback
 
-既存の `DeviceVec` / `MIter` は固定長型としてそのまま残す。
+launch/observation問題を改善した後は、Radeon 680Mで高価なf64 predicateを減らす。
 
-既存 API の意味も変更しない。
+1. 元のf32座標に対してf32 determinantと保守的な誤差境界を計算。
+2. 符号が確実なcaseを即決。
+3. ambiguous caseだけ既存のf64 robust predicateへ送る。
 
-- `reduce` は host scalar を返し、同期する。
-- `copy_where` は host-known exact length の `MVec` を返し、同期する。
-- `DeviceVec::len` は即座に `usize` を返す。
+filterの誤差境界は数学的に証明し、ambiguous compactionが新しい同期を作らないことを
+確認する。証明にはWGSL/backendのFMA contraction、subnormal/FTZ、NaN/Infの契約も
+含める。現時点ではkernel時間よりwall overheadが大きいため第一優先ではない。
 
-追加 API は opt-in にする。
+### P2: 複数triangulationの外側batch
 
-- `reduce_device`
-- `copy_where_dynamic`
-- `DeviceDynVec`
-- `DeviceExtent`
+一つのtriangulationは初期roundのactive itemが少ない。独立した複数point cloudを
+外側のSegmentationでflattenし、一つのGPU batchとして実行すれば、初期occupancyと
+固定launch費を改善できる可能性がある。
 
-ただし既存 API の rustdoc には `# Synchronization` を追加し、host readback を行うことを明記したい。新規利用者が scalar-returning API を軽い操作だと誤解しなくなる。
+単一巨大meshだけでなく、GPUが得意なbatch workloadでも仮説を評価する。
+
+### P2: Spatial tile
+
+Morton順tileごとの局所triangulationと境界mergeは、global mutable topologyのround数を
+減らす可能性がある。ただし正当性、degenerate case、merge complexityが大きいため、
+上記の実行系改善後に検討する。
+
+## 検証条件
+
+### Correctness
+
+少なくとも次を検査する。
+
+- 全triangleの正向き。
+- triangle重複なし。
+- edge incidenceが高々2。
+- edge crossingなし。
+- 全内部edgeのlocal Delaunay条件。
+- 非退化入力では、すべてのcanonical unique siteが参照されること。
+- duplicateは最初のoriginal IDへ正しく写像されること。
+- 全点collinear入力ではempty triangulationを返すこと。
+- 同一backend・同一build・同一入力に対するdeterministic output。
+- dense/full/frontierを強制した全schedule。
+- 0点、1点、2点、3点。
+- duplicate後にunique siteが3点未満になる入力。
+- collinear、cocircular、duplicate。
+- NaN、Inf、`-0.0`／`+0.0`、`f32::MAX`近傍、subnormal。
+- grid、cluster、uniform random。
+- edge上への挿入。
+- epoch counter wraparound。
+- 大規模16K以上。
+
+cocircular入力では正しいtriangulationが一意でないため、CPUとのtriangle集合一致だけを
+oracleにしない。
+
+frontier最適化はmanifold検査だけで合格にしてはならない。
+local Delaunay、orientation、incircleのtest oracleはGPUの`UnaryOp`実装を共有せず、
+CPU側の独立predicateまたは高精度property oracleを使い、自己検証を避ける。
+
+### Execution contract
+
+finite composition prototypeでは次を確認する。
+
+- scope内部のhost readが0。
+- terminalでpacked statusを一度だけ読む。
+- device count 0でnext extent/statusが必ず0になり、emptyがabsorbing stateである。
+- capacity上限をhostで証明するか、deviceの`validate -> commit`で部分更新を防ぐ。
+- invalid indexはload/store前にguardされ、sticky statusだけへ安全性を依存しない。
+- state effect tokenがread/write・write/write順序を保持する。
+- foreign executorを拒否する。
+- dynamic extentを持つ値がscope外へescapeしない。
+- indirect非対応backendのfallbackが同じ結果を返す。
+
+### Performance
+
+同一入力、同一build、同一warm-up条件で次を比較する。
+
+1. v0.87 host-exact baseline。
+2. internal selection lowering改善。
+3. scratch/workspace reuse。
+4. indirect execution domain。
+5. finite composition 4／8／16 round epoch。
+6. proven indexed multi-sink lowering / fusion。
+7. del2d algorithm側のfrontier/matching改善。
+
+各段階で次を記録する。
+
+- wall time。
+- GPU kernel aggregate。
+- dispatch。
+- submission。
+- observation回数と待ち時間。
+- temporary allocation数とbytes。
+- active item数とsegment長分布。
+- round数。
+
+16K prototypeの最初の目標は、selection由来のexact-length observationを48回から
+約9回以下へ減らすこととする。前処理のscalar観測を残す場合、総host observationの
+目安は少なくとも約11回である。正確な総数は標準traceで確認する。dispatch削減は
+別の目標として追跡し、readback削減と混同しない。
+
+CPU超えをMassively API単体の受入条件にはしない。CPUとGPUでalgorithmが異なり、
+hardwareにも依存するためである。ただしapplicationとしては常にCPU比較を公開し、
+GPUが遅い間は成功と表現しない。
+
+### Public APIへ昇格する条件
+
+新しい公開抽象は次を満たす場合だけ採用する。
+
+1. 既存primitiveでは意味を表せない、または有限scopeなしでは制御値が必ずhostへ
+   escapeすること。
+2. del2d以外に最低一つの実applicationがあること。
+3. stable order、host-exact terminal、error契約を維持できること。
+4. 狙ったdispatch/observation/allocation counterが因果的に減ること。
+5. application wall timeで有意な改善が再現すること。
+6. WGPU以外のbackendに安全なfallbackがあること。
 
 ## 実装順序
 
-### Phase 0: CubeCL / WGPU の確認
+### Phase 0: 計測
 
-- `[x, y, z]` を GPU kernel で書き、その buffer から次の kernel を `CubeCount::Dynamic` で起動する smoke test を追加する。
-- `device_len = 0`、1、block boundary、複数 workgroup を検証する。
-- 同一 allocation を storage write 後に indirect buffer として使えるか確認する。
-- 現在の CubeCL runtime test には「WGPU は storage buffer を indirect dispatch に bind できない」というコメントがある一方、WGPU backend 自体は `dispatch_workgroups_indirect` と `INDIRECT` usage を持つ。この差を先に解消する。
-- 直接利用できない場合は、storage の args から indirect-only buffer への GPU copy を Massively/CubeCL 内部で行う。
+- 標準trace counterと再現可能な集計script/raw artifact。
+- del2dのuniform/cluster/grid/cocircular benchmark。
+- 全schedule correctness suite。
+- Radeon 680Mでの基準値固定。
 
-### Phase 1: device scalar
+### Phase 1: APIを変えない内部改善
 
-- `MVal<T>` と明示的 `read_scalar`。
-- `reduce_device`、`count_if_device`、`any_of_device`、`all_of_device`。
-- `DeviceExtent` と `DeviceCubeCount`。
-- readback 回数を検査できる test hook または trace。
+- `copy_where` single-consumer direct stable scatter。
+- selection controlの共有。
+- proven-unique indicesに限定したsealed multi-sink lowering prototype。
+- lazy consumer fusionと同一permutationのCSE候補。
+- dependency-aware scratch reuse。
+- exact arityのmicrobenchmark。
 
-### Phase 2: dynamic compaction と基本演算
+### Phase 2: 小さい直交API
 
-- `DeviceDynVec`。
-- `copy_where_dynamic_into`、`remove_where_dynamic_into`。
-- dynamic map、gather、scatter、counting。
-- capacity over-dispatch 版を先に実装し、正しさと同期除去を確認する。
-- indirect dispatch を有効にして差分を計測する。
+- fixed-shape collectiveのcaller-provided output。
+- derived segmentation metadataの内部継承。
 
-### Phase 3: 複合 algorithm
+### Phase 3: Device execution domain
 
-- dynamic scan / reduction。
-- `unique_by_key_dynamic`。
-- dynamic radix sort。
-- comparison sort の方針決定。
-- scratch capacity と ping-pong buffer の再利用。
+- WGPU indirect-dispatch smoke test。
+- `LogicalExtent -> ExecutionDomain` lowering。
+- zero-count、upper-bound、fallback検証。
+- selectionと単純なindexed copyの限定pathへ適用。
+- upper-bound multi-stage DAGを持つscan/reductionは別stepで検証。
 
-### Phase 4: 反復 use case
+### Phase 4: Feature-gated finite composition
 
-- `del2d` の worklist を `DeviceDynVec` に移行する。
-- 1 round ごとの readback を除去する。
-- epoch size を 1、4、8、16、32 で比較する。
-- 必要なら sticky `DeviceStatus` を Massively の共通 API に昇格する。
+- opaque scoped scalar/extent。
+- fixed-capacity scoped sequence。
+- packed status。
+- 4／8／16 round bounded epoch。
+- del2d insertionとlegalizationでA/B比較。
 
-## テストと受け入れ条件
+### Phase 5: 再評価
 
-### 正しさ
-
-- dynamic length が 0、1、capacity と等しい場合。
-- predicate が全 false / 全 true の場合。
-- multi-column row の全 column が同じ extent を共有すること。
-- `scale` / `concat` の capacity overflow が dispatch 前に error になること。
-- foreign executor の scalar/extent を拒否すること。
-- empty reduction が `init` を返すこと。
-- indirect dispatch の最後の partial workgroup が OOB access しないこと。
-
-### 同期
-
-以下の pipeline を、最後の明示的 read まで `client.read_*` なしで実行できること。
-
-```text
-copy_where_dynamic
-  -> map_dynamic
-  -> unique_by_key_dynamic
-  -> count_if_device
-  -> indirect dispatch
-  -> read_scalar
-```
-
-legacy `copy_where` と `reduce` には従来どおり readback があることも確認する。
-
-### 性能
-
-まず Delaunay 全体ではなく、原因を分離できる microbenchmark を追加する。
-
-1. `copy_where` を同じ capacity で 100〜1,000 回連鎖する。
-2. legacy exact-length、dynamic over-dispatch、dynamic indirect-dispatch を比較する。
-3. wall time、GPU timestamp、host readback 回数、allocation 回数を記録する。
-4. dynamic 版では反復中の host readback が 0 であることを受け入れ条件にする。
-5. その後 `del2d` の N = 256、1,024、4,096、16,384 を再計測する。
-
-期待するのは「4 byte の転送を減らす」ことではなく、「GPU queue を細かく待つ回数を減らす」ことである。最終的な speedup は kernel 数、sort、algorithmic round 数にも依存するため、倍率自体は受け入れ条件に固定しない。
-
-## 代替案
-
-### `DeviceVec::len` を直接 device scalar に変える
-
-推奨しない。既存の slice、zip、allocation、全 algorithm の型契約を一度に壊す。固定長 vector と動的長 vector を別型にした方が、同期の有無も API 上で明確になる。
-
-### scalar read を `Future` にするだけ
-
-待つ時刻を遅らせることはできるが、次の dispatch 数や allocation にその値が必要なら結局 CPU 往復になる。下流 algorithm が device scalar を消費できなければ根本解決にならない。
-
-### 常に capacity 全体を static dispatch する
-
-最初の milestone としては有効である。実装が単純で、readback は除去できる。一方、worklist が急速に小さくなる処理では inactive thread が多くなるため、最終形では indirect dispatch が必要になる。
-
-### atomic append だけで compaction する
-
-count は GPU に残せるが、出力順が非決定的になる。Massively の `copy_where` は stable selection であり、`del2d` も deterministic ownership に stable ordering を利用するため、一般的な置き換えにはならない。
-
-### persistent kernel で全反復を行う
-
-単一 workgroup に収まらない処理では dispatch 間相当の global barrier が必要になる。WebGPU の watchdog と portability も問題になるため、Massively の汎用 API としては epoch + indirect dispatch を先に実装する。
-
-## 未決事項
-
-- 名前を `DeviceDynVec`、`DynamicDeviceVec`、`DeviceWorklist` のどれにするか。
-- dynamic iterator を別 trait にするか、内部の `Extent::{Fixed, Device}` で共通化するか。
-- `DeviceFlag` と `MVal<bool>` のどちらを公開するか。
-- `DeviceExtent` の演算を eager kernel とするか、scalar expression として fuse するか。
-- indirect args を extent ごとに cache するか、algorithm ごとに生成するか。
-- WGPU で zero-group indirect dispatch を全 backend 共通契約にできるか。
-- comparison sort の dynamic-length 対応を最初の release scope に含めるか。
-- device-side error/status を Massively が提供するか、利用側に任せるか。
+- Power Diagramまたはgraph frontierへ適用。
+- public化、internal-only継続、または不採用を判断。
+- 効果が小さい場合は抽象を増やさず、del2d algorithm側のspatial/batch設計へ戻る。
 
 ## 結論
 
-現状の問題は、Delaunay 実装が単に「GPU へデータを送っている」ことではなく、GPU で得た小さな制御値を Massively API が host 値としてしか表現できないため、処理途中で queue synchronization を繰り返していることである。
+今回の実装は、Massively v0.87の中心仮説の半分を強く支持した。
 
-最小の根本解決は `MVal` の追加だが、それを実用にするには `DeviceExtent`、capacity-backed `DeviceDynVec`、dynamic algorithm、indirect dispatch までを同じ設計でつなぐ必要がある。実装は over-dispatch から段階的に始められ、CubeCL/WGPU の indirect path を確認した後に dispatch 効率を上げられる。
+`map`、`permute`、`zip`、scan、selection、scatter、`SegmentIterator`を組み合わせれば、
+Delaunayのような複雑なmutable topology algorithmもGPU上の有限並列passとして
+記述できる。triangle-major CSRによってglobal sortを消せたことは、segmentation
+algebra、CSR、`SegmentIterator`の価値を具体的に示している。公開`Segmentation`
+concrete typeのhot-loop適合性を示したものではない。
 
-この基盤が入れば、`del2d` は host を「毎 operation の制御役」ではなく「buffer capacity の決定、command の enqueue、epoch 境界の監視役」に限定できる。これが GPU を継続的に動かすために必要な変更である。
+一方、表現できることと速く実行できることは同じではない。現在はprimitive間の
+materialization、1,219回のdispatch、48回のexact-length観測に加えたscalar観測を持ち、
+524K点でもCPUより3.67倍遅い。各overheadの厳密な寄与率は標準traceで分離する必要が
+ある。
+
+次のMassivelyに必要なのは、より大きなdomain algorithmではなく、有限primitive合成を
+そのまま保ちながら、
+
+- private device extent、
+- indirect execution domain、
+- selection control、
+- segmentation provenance、
+- proven indexed multi-sink lowering、
+- scratch lifetime、
+- packed observation、
+- barrier-aware fusion、
+
+を一つの有限execution boundaryで最適化できる仕組みである。
+
+まず既存API内部のloweringとworkspaceを改善し、それでもhost-exact境界が支配することを
+再確認した後、non-escapingな`CompositionScope`をfeature-gatedで実証する。この順序なら
+v0.87の少数primitiveという哲学を保ちつつ、性能仮説を反証可能な形で次へ進められる。

@@ -449,6 +449,37 @@ where
     }
 }
 
+impl<R, Contexts, Table, Env> StageRead<R, Env> for crate::read::WithTable<Contexts, Table>
+where
+    R: Runtime,
+    Contexts: StageRead<R, Env>,
+    Table: StageRead<R, Contexts::NextEnv>,
+    crate::read::WithTable<Contexts, Table>: BindSlots<Env>,
+{
+    fn logical_len(&self) -> Result<usize, Error> {
+        self.contexts().logical_len()
+    }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.contexts().logical_extent()
+    }
+
+    fn stage_at(
+        &self,
+        client: &ComputeClient<R>,
+        owner: u64,
+        bindings: &mut StagedBindings,
+    ) -> Result<(), Error> {
+        self.contexts().stage_at(client, owner, bindings)?;
+        self.table().stage_at(client, owner, bindings)?;
+
+        let exec = crate::Executor::from_client(client, owner);
+        let table_len = self.table().logical_extent()?.materialize(&exec)?;
+        bindings.push(table_len.handle.clone(), 1, 0);
+        Ok(())
+    }
+}
+
 impl<R, Input, Op, Env> StageRead<R, Env> for Transform<Input, Op>
 where
     R: Runtime,
