@@ -15,6 +15,72 @@ use crate::{core::facade as private, read::SliceExpression};
 
 pub use crate::core::read::Taken;
 
+/// Logical adapter pairing every context item with one shared table view.
+#[derive(Clone, Copy, Debug)]
+pub struct WithTable<Contexts, Table> {
+    contexts: Contexts,
+    table: Table,
+}
+
+impl<Contexts, Table> WithTable<Contexts, Table> {
+    pub const fn new(contexts: Contexts, table: Table) -> Self {
+        Self { contexts, table }
+    }
+
+    /// Returns the iterator that determines the output rows.
+    pub const fn contexts(&self) -> &Contexts {
+        &self.contexts
+    }
+
+    /// Returns the iterator exposed as a shared table view.
+    pub const fn table(&self) -> &Table {
+        &self.table
+    }
+
+    /// Decomposes this adapter into its two inputs.
+    pub fn into_parts(self) -> (Contexts, Table) {
+        (self.contexts, self.table)
+    }
+}
+
+#[doc(hidden)]
+impl<R, Contexts, Table> MIter<R> for WithTable<Contexts, Table>
+where
+    R: Runtime,
+    Contexts: MIter<R>,
+    Table: MIter<R>,
+    crate::read::WithTable<Contexts::Read, Table::Read>: private::KernelInput<R, Item = (Contexts::Item, crate::seg::Segment<Table::Item>)>
+        + private::IterLength
+        + SliceExpression,
+{
+    type Item = (Contexts::Item, crate::seg::Segment<Table::Item>);
+    type Read = crate::read::WithTable<Contexts::Read, Table::Read>;
+    type Slice = crate::read::Slice<R, Self::Read>;
+
+    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice
+    where
+        Bounds: RangeBounds<MIndex>,
+    {
+        let input = self.clone().lower_read();
+        let len = private::IterLength::logical_len(&input)
+            .expect("cannot slice with_table contexts with an invalid length");
+        let (start, count) = crate::api::iter::resolve_iter_range(len, range);
+        crate::read::Slice::new(input.slice_expression(start, count))
+    }
+
+    fn capacity(&self) -> Result<MIndex, Error> {
+        self.contexts.capacity()
+    }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.contexts.logical_extent()
+    }
+
+    fn lower_read(self) -> Self::Read {
+        crate::read::WithTable::new(self.contexts.lower_read(), self.table.lower_read())
+    }
+}
+
 /// Logical lazy permutation lowered only when an algorithm consumes it.
 #[derive(Clone, Copy, Debug)]
 pub struct Permute<Values, Indices> {
@@ -267,6 +333,42 @@ pub fn constant<T>(value: T) -> Constant<T> {
 /// ```
 pub fn counting(start: MIndex) -> Counting {
     Counting { start }
+}
+
+/// Pairs every `contexts` item with a shared view of the entire `table`.
+///
+/// The result has the same length as `contexts`. The table is not copied per
+/// item: the consuming kernel receives a [`crate::seg::Segment`] backed
+/// directly by the table expression.
+///
+/// # Examples
+///
+/// ```
+/// use cubecl::prelude::*;
+/// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+/// use massively::{Executor, lazy, op, seg::Segment, vector::map};
+///
+/// struct Lookup;
+///
+/// #[cubecl::cube]
+/// impl op::UnaryOp<(u32, Segment<u32>)> for Lookup {
+///     type Output = u32;
+///
+///     fn apply(input: (u32, Segment<u32>)) -> u32 {
+///         input.1.at(input.0)
+///     }
+/// }
+///
+/// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+/// let indices = exec.to_device(&[2_u32, 0, 1]);
+/// let table = exec.to_device(&[10_u32, 20, 30]);
+/// let input = lazy::with_table(indices.slice(..), table.slice(..));
+/// let output = map(&exec, input, Lookup).unwrap();
+///
+/// assert_eq!(exec.to_host(&output).unwrap(), vec![30, 10, 20]);
+/// ```
+pub fn with_table<Contexts, Table>(contexts: Contexts, table: Table) -> WithTable<Contexts, Table> {
+    WithTable::new(contexts, table)
 }
 
 /// Lazily applies `op` whenever an algorithm reads an item.

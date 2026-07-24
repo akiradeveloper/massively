@@ -14,7 +14,7 @@ use crate::{
         Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8, Eval9, Eval10, Eval11, Eval12, Eval13,
         IndexedTransformExpr, PermuteExpr, ReverseCount, SegmentIteratorExpr, Slot0, Slot1, Slot2,
         Slot3, Slot4, Slot5, Slot6, Slot7, Slot8, Slot9, Slot10, Slot11, Slot12, TransformExpr,
-        ZipExpr,
+        WithTableExpr, ZipExpr,
     },
     extent::LogicalExtent,
     op::{IndexedBinaryOp, IndexedUnaryOp, UnaryOp},
@@ -428,6 +428,27 @@ impl<Values, Indices> Permute<Values, Indices> {
     }
 }
 
+/// Pairs each context item with a shared view of an entire table expression.
+#[derive(Clone, Copy, Debug)]
+pub struct WithTable<Contexts, Table> {
+    pub(crate) contexts: Contexts,
+    pub(crate) table: Table,
+}
+
+impl<Contexts, Table> WithTable<Contexts, Table> {
+    pub const fn new(contexts: Contexts, table: Table) -> Self {
+        Self { contexts, table }
+    }
+
+    pub const fn contexts(&self) -> &Contexts {
+        &self.contexts
+    }
+
+    pub const fn table(&self) -> &Table {
+        &self.table
+    }
+}
+
 /// A zero-copy logical subrange of a read expression.
 ///
 /// The contained expression has already been sliced according to its own
@@ -551,6 +572,18 @@ where
 {
     type Item = Values::Item;
     type ReadArity = <Values::ReadArity as AddArity<Indices::ReadArity>>::Output;
+}
+
+impl<Contexts, Table> ReadExpression for WithTable<Contexts, Table>
+where
+    Contexts: ReadExpression,
+    Table: ReadExpression,
+    Contexts::ReadArity: AddArity<Table::ReadArity>,
+    <Contexts::ReadArity as AddArity<Table::ReadArity>>::Output: AddArity<A1>,
+{
+    type Item = (Contexts::Item, Segment<Table::Item>);
+    type ReadArity =
+        <<Contexts::ReadArity as AddArity<Table::ReadArity>>::Output as AddArity<A1>>::Output;
 }
 
 impl<Values> ReadExpression for Reverse<Values>
@@ -708,6 +741,20 @@ where
         Permute::new(
             self.values.clone(),
             self.indices.slice_expression(start, len),
+        )
+    }
+}
+
+impl<Contexts, Table> SliceExpression for WithTable<Contexts, Table>
+where
+    Contexts: SliceExpression,
+    Table: ReadExpression + Clone,
+    WithTable<Contexts, Table>: ReadExpression,
+{
+    fn slice_expression(&self, start: usize, len: usize) -> Self {
+        Self::new(
+            self.contexts.slice_expression(start, len),
+            self.table.clone(),
         )
     }
 }
@@ -913,6 +960,20 @@ where
 {
     type Expr = PermuteExpr<Values::Expr, Indices::Expr>;
     type NextEnv = Indices::NextEnv;
+}
+
+impl<Contexts, Table, Env> BindSlots<Env> for WithTable<Contexts, Table>
+where
+    Contexts: ReadExpression + BindSlots<Env>,
+    Table: ReadExpression + BindSlots<Contexts::NextEnv>,
+    Constant<u32>: BindSlots<Table::NextEnv>,
+{
+    type Expr = WithTableExpr<
+        Contexts::Expr,
+        Table::Expr,
+        <Constant<u32> as BindSlots<Table::NextEnv>>::Expr,
+    >;
+    type NextEnv = <Constant<u32> as BindSlots<Table::NextEnv>>::NextEnv;
 }
 
 impl<Values, Env> BindSlots<Env> for Reverse<Values>

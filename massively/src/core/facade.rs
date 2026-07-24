@@ -198,6 +198,19 @@ where
     }
 }
 
+impl<Contexts, Table> IterLength for crate::read::WithTable<Contexts, Table>
+where
+    Contexts: IterLength,
+{
+    fn logical_len(&self) -> Result<usize, Error> {
+        self.contexts().logical_len()
+    }
+
+    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
+        self.contexts().logical_extent()
+    }
+}
+
 impl<Input, Op> IterLength for crate::read::Transform<Input, Op>
 where
     Input: IterLength,

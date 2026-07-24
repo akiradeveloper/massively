@@ -47,12 +47,29 @@ pub struct SegmentIteratorExpr<ValuesExpr, OffsetsExpr> {
     _marker: PhantomData<fn() -> (ValuesExpr, OffsetsExpr)>,
 }
 
+/// Device expression pairing each context item with one shared table view.
+#[doc(hidden)]
+pub struct WithTableExpr<ContextsExpr, TableExpr, TableLenExpr> {
+    _marker: PhantomData<fn() -> (ContextsExpr, TableExpr, TableLenExpr)>,
+}
+
 impl<ValuesExpr, OffsetsExpr, Item> DeviceExpr<Segment<Item>>
     for SegmentIteratorExpr<ValuesExpr, OffsetsExpr>
 where
     Item: CubeType + 'static,
     ValuesExpr: DeviceExpr<Item>,
     OffsetsExpr: DeviceExpr<u32>,
+{
+}
+
+impl<ContextsExpr, TableExpr, TableLenExpr, Context, Item> DeviceExpr<(Context, Segment<Item>)>
+    for WithTableExpr<ContextsExpr, TableExpr, TableLenExpr>
+where
+    Context: CubeType + 'static,
+    Item: CubeType + 'static,
+    ContextsExpr: DeviceExpr<Context>,
+    TableExpr: DeviceExpr<Item>,
+    TableLenExpr: DeviceExpr<u32>,
 {
 }
 
@@ -454,6 +471,84 @@ impl_segment_iterator_eval!(Eval10, eval10, __expand_eval10; L0: slot0, L1: slot
 impl_segment_iterator_eval!(Eval11, eval11, __expand_eval11; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8, L9: slot9, L10: slot10);
 impl_segment_iterator_eval!(Eval12, eval12, __expand_eval12; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8, L9: slot9, L10: slot10, L11: slot11);
 impl_segment_iterator_eval!(Eval13, eval13, __expand_eval13; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8, L9: slot9, L10: slot10, L11: slot11, L12: slot12);
+
+/// Binds a shared table view to the same staged leaves as its context and
+/// backing expression. As with segmented rows, implementations are indexed
+/// only by total read arity.
+macro_rules! impl_with_table_eval {
+    ($trait_name:ident, $method:ident, $expand_method:ident; $( $leaf:ident : $slot:ident ),+ $(,)?) => {
+        impl<Context, Item, ContextsExpr, TableExpr, TableLenExpr, $( $leaf ),+>
+            $trait_name<(Context, Segment<Item>), $( $leaf ),+>
+            for WithTableExpr<ContextsExpr, TableExpr, TableLenExpr>
+        where
+            Context: CubeType + Send + Sync + 'static,
+            Item: CubeType + Send + Sync + 'static,
+            $( $leaf: CubePrimitive + 'static, )+
+            ContextsExpr: $trait_name<Context, $( $leaf ),+>,
+            TableExpr: $trait_name<Item, $( $leaf ),+>,
+            TableLenExpr: $trait_name<u32, $( $leaf ),+>,
+        {
+            fn $method(
+                $( $slot: &[$leaf], )+
+                _slot_offsets: &[u32],
+                _index: usize,
+            ) -> (Context, Segment<Item>) {
+                let _ = ($( $slot, )+);
+                unreachable!("table views are constructed while CubeCL expands a kernel")
+            }
+
+            fn $expand_method(
+                scope: &Scope,
+                $( $slot: &<[$leaf] as CubeType>::ExpandType, )+
+                slot_offsets: &<[u32] as CubeType>::ExpandType,
+                index: <usize as CubeType>::ExpandType,
+            ) -> <(Context, Segment<Item>) as CubeType>::ExpandType {
+                let context = ContextsExpr::$expand_method(
+                    scope,
+                    $( $slot, )+
+                    slot_offsets,
+                    ExpandTypeClone::clone_unchecked(&index),
+                );
+                let end = TableLenExpr::$expand_method(
+                    scope,
+                    $( $slot, )+
+                    slot_offsets,
+                    index,
+                );
+                let start = NativeExpand::from_lit(scope, 0u32);
+
+                $( let $slot = ExpandTypeClone::clone_unchecked($slot); )+
+                let slot_offsets = ExpandTypeClone::clone_unchecked(slot_offsets);
+                let reader: SegmentReader<Item> = Rc::new(move |scope, absolute| {
+                    let absolute = <usize as Cast>::__expand_cast_from(scope, absolute);
+                    TableExpr::$expand_method(
+                        scope,
+                        $( &$slot, )+
+                        &slot_offsets,
+                        absolute,
+                    )
+                });
+                let table = SegmentExpand::from_bounds(scope, reader, start, end);
+
+                (context, table)
+            }
+        }
+    };
+}
+
+impl_with_table_eval!(Eval1, eval1, __expand_eval1; L0: slot0);
+impl_with_table_eval!(Eval2, eval2, __expand_eval2; L0: slot0, L1: slot1);
+impl_with_table_eval!(Eval3, eval3, __expand_eval3; L0: slot0, L1: slot1, L2: slot2);
+impl_with_table_eval!(Eval4, eval4, __expand_eval4; L0: slot0, L1: slot1, L2: slot2, L3: slot3);
+impl_with_table_eval!(Eval5, eval5, __expand_eval5; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4);
+impl_with_table_eval!(Eval6, eval6, __expand_eval6; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5);
+impl_with_table_eval!(Eval7, eval7, __expand_eval7; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6);
+impl_with_table_eval!(Eval8, eval8, __expand_eval8; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7);
+impl_with_table_eval!(Eval9, eval9, __expand_eval9; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8);
+impl_with_table_eval!(Eval10, eval10, __expand_eval10; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8, L9: slot9);
+impl_with_table_eval!(Eval11, eval11, __expand_eval11; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8, L9: slot9, L10: slot10);
+impl_with_table_eval!(Eval12, eval12, __expand_eval12; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8, L9: slot9, L10: slot10, L11: slot11);
+impl_with_table_eval!(Eval13, eval13, __expand_eval13; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8, L9: slot9, L10: slot10, L11: slot11, L12: slot12);
 
 macro_rules! impl_slot_eval {
     (
