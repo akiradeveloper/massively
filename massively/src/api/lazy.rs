@@ -43,29 +43,49 @@ impl<Contexts, Table> WithTable<Contexts, Table> {
     }
 }
 
+type SingleTableSegment<Table> = crate::seg::SegmentIterator<Table, Taken<Stride>>;
+type RepeatedTableSegment<Table> = Permute<SingleTableSegment<Table>, Taken<Constant<MIndex>>>;
+type WithTableComposition<Contexts, Table> =
+    crate::api::iter::Zipped<Contexts, RepeatedTableSegment<Table>>;
+
+impl<Contexts, Table> WithTable<Contexts, Table> {
+    fn compose<R>(self) -> WithTableComposition<Contexts, Table>
+    where
+        R: Runtime,
+        Contexts: MIter<R>,
+        Table: MIter<R>,
+    {
+        let context_len = self
+            .contexts
+            .len()
+            .expect("with_table contexts must have a host-visible length");
+        let table_len = self
+            .table
+            .len()
+            .expect("with_table table must have a host-visible length");
+        let table = crate::seg::SegmentIterator::new(self.table, stride(0, table_len).take(2));
+        let repeated = permute(table, constant(0).take(context_len));
+        crate::zip2(self.contexts, repeated)
+    }
+}
+
 #[doc(hidden)]
 impl<R, Contexts, Table> MIter<R> for WithTable<Contexts, Table>
 where
     R: Runtime,
     Contexts: MIter<R>,
     Table: MIter<R>,
-    crate::read::WithTable<Contexts::Read, Table::Read>:
-        private::KernelInput<R> + private::IterLength + SliceExpression,
+    WithTableComposition<Contexts, Table>: MIter<R>,
 {
-    type Item =
-        <crate::read::WithTable<Contexts::Read, Table::Read> as crate::read::ReadExpression>::Item;
-    type Read = crate::read::WithTable<Contexts::Read, Table::Read>;
-    type Slice = crate::read::Slice<R, Self::Read>;
+    type Item = <WithTableComposition<Contexts, Table> as MIter<R>>::Item;
+    type Read = <WithTableComposition<Contexts, Table> as MIter<R>>::Read;
+    type Slice = <WithTableComposition<Contexts, Table> as MIter<R>>::Slice;
 
     fn slice<Bounds>(&self, range: Bounds) -> Self::Slice
     where
         Bounds: RangeBounds<MIndex>,
     {
-        let input = self.clone().lower_read();
-        let len = private::IterLength::logical_len(&input)
-            .expect("cannot slice with_table contexts with an invalid length");
-        let (start, count) = crate::api::iter::resolve_iter_range(len, range);
-        crate::read::Slice::new(input.slice_expression(start, count))
+        self.clone().compose::<R>().slice(range)
     }
 
     fn capacity(&self) -> Result<MIndex, Error> {
@@ -77,7 +97,7 @@ where
     }
 
     fn lower_read(self) -> Self::Read {
-        crate::read::WithTable::new(self.contexts.lower_read(), self.table.lower_read())
+        self.compose::<R>().lower_read()
     }
 }
 
@@ -269,6 +289,20 @@ impl Counting {
     }
 }
 
+/// An unbounded arithmetic progression of [`MIndex`] values.
+#[derive(Clone, Copy, Debug)]
+pub struct Stride {
+    start: MIndex,
+    step: MIndex,
+}
+
+impl Stride {
+    /// Limits this source to `len` logical items.
+    pub fn take(self, len: MIndex) -> Taken<Self> {
+        Taken::new(self, len as usize)
+    }
+}
+
 impl<T> crate::read::TakenSource for Constant<T>
 where
     T: MStorageElement,
@@ -289,6 +323,25 @@ impl crate::read::TakenSource for Counting {
             self.start
                 .checked_add(offset)
                 .expect("counting start overflow"),
+            len,
+        )
+    }
+}
+
+impl crate::read::TakenSource for Stride {
+    type Read = crate::read::Stride;
+
+    fn lower(&self, offset: usize, len: usize) -> Self::Read {
+        let offset = u32::try_from(offset).expect("stride offset exceeds u32");
+        crate::read::Stride::new(
+            self.start
+                .checked_add(
+                    offset
+                        .checked_mul(self.step)
+                        .expect("stride offset overflow"),
+                )
+                .expect("stride start overflow"),
+            self.step,
             len,
         )
     }
@@ -335,12 +388,35 @@ pub fn counting(start: MIndex) -> Counting {
     Counting { start }
 }
 
+/// Creates an unbounded arithmetic progression.
+///
+/// Item `i` is `start + i * step`. Call
+/// [`.take(len)`](Stride::take) before passing it to an algorithm.
+///
+/// # Examples
+///
+/// ```
+/// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+/// use massively::{Executor, lazy, op, vector::map};
+///
+/// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+/// let values = map(&exec, lazy::stride(2, 3).take(4), op::Identity).unwrap();
+///
+/// assert_eq!(exec.to_host(&values).unwrap(), vec![2, 5, 8, 11]);
+/// ```
+pub fn stride(start: MIndex, step: MIndex) -> Stride {
+    Stride { start, step }
+}
+
 /// Appends a shared view of the entire `table` to every `contexts` item.
 ///
 /// The result has the same length as `contexts`. The table is not copied per
 /// item: the consuming kernel receives a [`crate::seg::Segment`] backed
 /// directly by the table expression. Flat context tuples stay flat, so calling
 /// this twice produces `(T, Segment<A>, Segment<B>)`.
+///
+/// This is lowered as the ordinary composition of a one-segment
+/// [`crate::seg::SegmentIterator`], [`permute`], and [`crate::zip2`].
 ///
 /// # Examples
 ///

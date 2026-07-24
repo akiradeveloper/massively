@@ -147,10 +147,9 @@ where
     /// Returns mapped storage with an exact host-visible logical length.
     pub fn emit(self, exec: &Executor<R>) -> Result<MVec<R, Map::Output>, Error> {
         let capacity = self.traversal.control.capacity as usize;
-        let mut output = exec.alloc::<Map::Output>(capacity);
+        let output = exec.alloc::<Map::Output>(capacity);
         let len = self.emit_into(exec, output.slice_mut(..))?;
-        output.set_fixed_len(len.read(exec)?);
-        Ok(output)
+        crate::api::iter::into_exact_prefix::<R, Map::Output>(exec, output, len.read(exec)?)
     }
 
     /// Writes one mapped item per traversed edge into caller-provided storage.
@@ -316,7 +315,7 @@ where
     {
         let capacity = self.traversal.control.capacity as usize;
         let infinity = exec.value(infinity)?;
-        let mut next = exec.alloc::<u32>(capacity);
+        let next = exec.alloc::<u32>(capacity);
         let len = self.relax_min_by_destination_into(
             exec,
             infinity,
@@ -324,8 +323,7 @@ where
             state_output,
             next.slice_mut(..),
         )?;
-        next.set_fixed_len(len.read(exec)?);
-        Ok(next)
+        crate::api::iter::into_exact_prefix::<R, u32>(exec, next, len.read(exec)?)
     }
 
     /// Stateful caller-provided output variant of [`Self::relax_min_by_destination`].

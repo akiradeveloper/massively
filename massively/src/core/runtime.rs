@@ -194,7 +194,7 @@ pub struct DeviceVec<R: Runtime, T> {
     pub(crate) handle: cubecl::server::Handle,
     len: usize,
     pub(crate) owner: u64,
-    pub(crate) extent: LogicalExtent,
+    extent: LogicalExtent,
     _runtime: PhantomData<fn() -> (R, T)>,
 }
 
@@ -211,13 +211,12 @@ impl<R: Runtime, T> Clone for DeviceVec<R, T> {
 }
 
 impl<R: Runtime, T> DeviceVec<R, T> {
-    /// Returns the host-visible logical item count.
+    /// Returns the number of allocated rows.
+    ///
+    /// Publicly returned owned vectors are always exactly sized, so this is
+    /// also their logical length.
     pub fn len(&self) -> crate::MIndex {
-        let len = self
-            .extent
-            .host_len()
-            .expect("device-produced length escaped the synchronous API boundary");
-        crate::MIndex::try_from(len).expect("device vector length does not fit in MIndex")
+        crate::MIndex::try_from(self.len).expect("device vector length does not fit in MIndex")
     }
 
     pub fn is_empty(&self) -> bool {
@@ -236,24 +235,6 @@ impl<R: Runtime, T> DeviceVec<R, T> {
     pub(crate) fn set_logical_extent(&mut self, extent: LogicalExtent) {
         debug_assert!(extent.upper_bound() <= self.len);
         self.extent = extent;
-    }
-
-    /// Shrinks the logical length without copying or reallocating device memory.
-    ///
-    /// The underlying allocation remains unchanged and returns to the runtime's
-    /// memory pool at its original size when the final handle is dropped.
-    pub fn truncate(&mut self, len: crate::MIndex) {
-        self.truncate_usize(len as usize);
-    }
-
-    pub(crate) fn truncate_usize(&mut self, len: usize) {
-        assert!(
-            len <= self.len,
-            "cannot truncate a DeviceVec of length {} to {len}",
-            self.len,
-        );
-        self.extent = self.extent.slice(0, len);
-        self.len = len;
     }
 
     /// Creates an internal read-expression leaf over the whole allocation.

@@ -9,47 +9,47 @@ These are approximate, machine-specific values rather than performance guarantee
 | GPU | AMD Radeon 680M |
 | Runtime | CubeCL WGPU default device |
 | Rust | `rustc 1.96.0 (ac68faa20 2026-05-25)` |
-| Revision | `eaea0688-dirty` |
-| Measured | 2026-07-22 |
+| Revision | `a957c839-dirty` |
+| Measured | 2026-07-24 |
 
 | API | Time |
 |---|---:|
-| `all_of` | 471 us |
-| `any_of` | 400 us |
-| `copy_where` | 5.71 ms |
-| `count_if` | 411 us |
-| `exclusive_scan` | 3.63 ms |
-| `exclusive_scan_by_key` | 7.50 ms |
-| `find_if` | 414 us |
-| `gather` | 2.41 ms |
-| `gather_where` | 7.72 ms |
-| `inclusive_scan` | 3.54 ms |
-| `inclusive_scan_by_key` | 5.42 ms |
-| `is_partitioned` | 542 us |
-| `lower_bound` | 65.7 ms |
-| `max_element` | 263 us |
-| `merge` | 6.20 ms |
-| `merge_by_key` | 10.2 ms |
-| `min_element` | 248 us |
-| `minmax_element` | 626 us |
-| `none_of` | 416 us |
-| `partition` | 6.95 ms |
+| `all_of` | 434 us |
+| `any_of` | 418 us |
+| `copy_where` | 6.47 ms |
+| `count_if` | 428 us |
+| `exclusive_scan` | 3.62 ms |
+| `exclusive_scan_by_key` | 7.41 ms |
+| `find_if` | 440 us |
+| `gather` | 2.37 ms |
+| `gather_where` | 7.83 ms |
+| `inclusive_scan` | 3.58 ms |
+| `inclusive_scan_by_key` | 5.54 ms |
+| `is_partitioned` | 477 us |
+| `lower_bound` | 66.7 ms |
+| `map` | 1.64 ms |
+| `max_element` | 267 us |
+| `merge` | 6.23 ms |
+| `merge_by_key` | 10.1 ms |
+| `min_element` | 279 us |
+| `minmax_element` | 613 us |
+| `none_of` | 402 us |
+| `partition` | 7.19 ms |
 | `radix_sort_by_key` | 138 ms |
 | `reduce` | 1.08 ms |
-| `reduce_by_key` | 11.2 ms |
-| `remove_where` | 5.89 ms |
-| `scatter` | 2.36 ms |
+| `reduce_by_key` | 11.6 ms |
+| `remove_where` | 6.46 ms |
+| `scatter` | 2.41 ms |
 | `scatter_reduce` | 54.4 ms |
-| `scatter_where` | 6.60 ms |
-| `set_difference` | 8.79 ms |
-| `set_intersection` | 8.83 ms |
-| `set_union` | 12.6 ms |
-| `sort` | 43.2 ms |
-| `sort_by_key` | 199 ms |
-| `map` | 1.67 ms |
-| `unique` | 6.37 ms |
-| `unique_by_key` | 6.43 ms |
-| `upper_bound` | 66.8 ms |
+| `scatter_where` | 6.80 ms |
+| `set_difference` | 9.44 ms |
+| `set_intersection` | 9.40 ms |
+| `set_union` | 14.6 ms |
+| `sort` | 42.8 ms |
+| `sort_by_key` | 200 ms |
+| `unique` | 6.58 ms |
+| `unique_by_key` | 6.59 ms |
+| `upper_bound` | 66.9 ms |
 
 ## Conditions
 

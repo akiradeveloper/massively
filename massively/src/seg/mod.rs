@@ -1317,7 +1317,7 @@ macro_rules! impl_owned_compacting {
                 exec: &Executor<R>,
                 input: SegmentIterator<Input, InputOffsets>,
             ) -> Result<Self::Output, Error> {
-                let mut values = exec.alloc::<Input::Item>(input.values().capacity()? as usize);
+                let values = exec.alloc::<Input::Item>(input.values().capacity()? as usize);
                 let offsets = exec.alloc::<MIndex>(input.offsets().capacity()? as usize);
                 let written = CompactingExecutableInto::run_into(
                     self,
@@ -1326,7 +1326,8 @@ macro_rules! impl_owned_compacting {
                     SegmentedMut::new(values.slice_mut(..), offsets.slice_mut(..)),
                 )?;
                 let written = MVal::from_storage(written)?.read(exec)?;
-                values.set_fixed_len(written);
+                let values =
+                    crate::api::iter::into_exact_prefix::<R, Input::Item>(exec, values, written)?;
                 Ok(SegmentIterator::new(values, offsets))
             }
         }

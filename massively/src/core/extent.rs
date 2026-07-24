@@ -1,4 +1,4 @@
-//! Device-resident logical sequence extents.
+//! Device-resident active-prefix extents for internal scratch storage.
 
 use std::{fmt, sync::Arc};
 
@@ -13,13 +13,17 @@ pub(crate) struct DeviceExtentSource {
     upper_bound: usize,
 }
 
-/// Logical item count carried by a device range.
+/// Active item count carried by an internal upper-bound allocation.
 ///
 /// `Fixed` is used when the host already knows the exact count. `Device`
 /// keeps a one-element `u32` allocation produced by GPU work. `start` and
 /// `limit` make ordinary host range slicing composable without reading that
 /// scalar back: the represented value is
 /// `min(source.saturating_sub(start), limit)`.
+///
+/// This metadata is never used to make a public owned vector appear smaller
+/// than its allocation. Public length-changing APIs compact their initialized
+/// prefix into exact storage before returning.
 #[derive(Clone)]
 pub(crate) enum LogicalExtent {
     Fixed(usize),

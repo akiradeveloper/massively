@@ -150,10 +150,9 @@ where
     Equal: BinaryPredicateOp<Item>,
 {
     let capacity = input.capacity()? as usize;
-    let mut output = exec.alloc::<Item>(capacity);
+    let output = exec.alloc::<Item>(capacity);
     let len = unique_into(exec, input, equal, output.slice_mut(..))?;
-    output.set_fixed_len(len.read(exec)?);
-    Ok(output)
+    crate::api::iter::into_exact_prefix::<R, Item>(exec, output, len.read(exec)?)
 }
 
 /// Removes consecutive duplicates into caller-provided storage.

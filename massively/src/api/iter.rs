@@ -11,7 +11,12 @@ use crate::{
     read::SliceExpression,
 };
 
-/// Owned device storage for one flat logical row type.
+/// Exactly allocated owned device storage for one flat logical row type.
+///
+/// The number of allocated rows always equals [`MStorage::len`]. A borrowed
+/// slice may cover only part of that allocation, but an owned result never
+/// carries spare logical capacity. Backend byte alignment, minimum allocation
+/// size, and memory-pool bucketing are not exposed as additional rows.
 #[allow(private_interfaces)]
 pub trait MStorage<R: Runtime>: Sized {
     type Item: CubeType + Send + Sync + 'static;
@@ -38,13 +43,12 @@ pub trait MStorage<R: Runtime>: Sized {
     #[doc(hidden)]
     fn allocate(exec: &Executor<R>, len: usize) -> Self;
 
-    /// Returns the host-visible logical item count.
+    /// Returns the number of allocated logical rows.
+    ///
+    /// Owned storage is always exactly sized, so this is also the physical
+    /// allocation length expressed in rows.
     fn len(&self) -> Result<MIndex, Error> {
-        let len = self
-            .logical_extent()
-            .host_len()
-            .ok_or(Error::UnresolvedLength)?;
-        logical_len(len)
+        self.capacity()
     }
 
     fn is_empty(&self) -> Result<bool, Error> {
@@ -54,22 +58,6 @@ pub trait MStorage<R: Runtime>: Sized {
     /// Returns the host-known physical allocation bound used internally.
     #[doc(hidden)]
     fn capacity(&self) -> Result<MIndex, Error>;
-
-    /// Shrinks the logical length without copying or reallocating device memory.
-    ///
-    /// Multi-column storage truncates every physical column to the same length.
-    fn truncate(&mut self, len: MIndex);
-
-    /// Records an already-verified host length as exact.
-    ///
-    /// This is reserved for explicit synchronization boundaries that first
-    /// read the device-resident length. Ordinary GPU pipelines must preserve
-    /// the original device extent instead.
-    #[doc(hidden)]
-    fn set_fixed_len(&mut self, len: MIndex) {
-        self.truncate(len);
-        self.set_logical_extent(crate::extent::LogicalExtent::fixed(len as usize));
-    }
 
     #[doc(hidden)]
     fn logical_extent(&self) -> crate::extent::LogicalExtent;
@@ -323,6 +311,38 @@ where
     Ok(output)
 }
 
+/// Converts an upper-bound allocation into an exactly sized owned result.
+///
+/// Length-changing kernels may use `storage` as internal scratch while the
+/// produced row count remains on the device. Once that count is read at the
+/// public API boundary, this function either returns the already exact
+/// allocation or copies the initialized prefix into a new exact allocation.
+pub(crate) fn into_exact_prefix<R, Item>(
+    exec: &Executor<R>,
+    mut storage: crate::MVec<R, Item>,
+    len: MIndex,
+) -> Result<crate::MVec<R, Item>, Error>
+where
+    R: Runtime,
+    Item: MAlloc<R>,
+{
+    let capacity = storage.capacity()?;
+    if len > capacity {
+        return Err(Error::OutputTooShort {
+            input: len as usize,
+            output: capacity as usize,
+        });
+    }
+    if len == capacity {
+        storage.set_logical_extent(crate::extent::LogicalExtent::fixed(len as usize));
+        return Ok(storage);
+    }
+
+    let output = exec.alloc::<Item>(len as usize);
+    crate::api::algorithm::transform::copy(exec, storage.slice(..len), output.slice_mut(..))?;
+    Ok(output)
+}
+
 /// Internal marker for values supported by the physical storage ABI.
 ///
 /// This is deliberately not required by [`MIter`]; read-only semantic values
@@ -378,7 +398,7 @@ where
 #[doc(hidden)]
 pub use MAlloc as MItem;
 
-/// Owned device storage for a flat row type.
+/// Exactly allocated owned device storage for a flat row type.
 pub type MVec<R, Item> = <Item as MAlloc<R>>::Owned;
 
 trait RadixKeyArity {}
@@ -568,7 +588,11 @@ pub trait MIter<R: Runtime>: Clone + Sized {
     where
         Bounds: RangeBounds<MIndex>;
 
-    /// Returns the host-visible logical item count.
+    /// Returns the host-visible logical item count without synchronizing.
+    ///
+    /// Public iterator values always have a host-known length. Internal GPU
+    /// pipelines may temporarily carry a device-resident active prefix; this
+    /// method reports [`Error::UnresolvedLength`] instead of waiting for it.
     fn len(&self) -> Result<MIndex, Error> {
         let len = self
             .logical_extent()?
@@ -1317,6 +1341,22 @@ mod tests {
         assert_type_eq_all!(<ExactRead as ReadExpression>::ReadArity, A1);
         assert_type_eq_all!(<TwoColumnRead as ReadExpression>::ReadArity, A2);
         assert_type_eq_all!(<Fixed as ReadExpression>::ReadArity, A13);
+    }
+
+    #[test]
+    fn exact_prefix_reallocates_every_physical_column() {
+        let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+        let storage = exec.full(8, (11_u32, 22_u32)).unwrap();
+        let exact = into_exact_prefix::<WgpuRuntime, (u32, u32)>(&exec, storage, 3).unwrap();
+
+        assert_eq!(exact.len().unwrap(), 3);
+        let (left, right) = exact.into_columns();
+        let left_bytes = exec.client().read_one(left.handle.clone()).unwrap();
+        let right_bytes = exec.client().read_one(right.handle.clone()).unwrap();
+        assert_eq!(left_bytes.len(), 3 * core::mem::size_of::<u32>());
+        assert_eq!(right_bytes.len(), 3 * core::mem::size_of::<u32>());
+        assert_eq!(exec.to_host(&left).unwrap(), vec![11; 3]);
+        assert_eq!(exec.to_host(&right).unwrap(), vec![22; 3]);
     }
 
     #[test]

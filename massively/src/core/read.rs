@@ -13,8 +13,8 @@ use crate::{
         AdjacentExpr, AdjacentIndexedTransformExpr, Broadcast, Count, DeviceExpr, Direct, Eval1,
         Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8, Eval9, Eval10, Eval11, Eval12, Eval13,
         IndexedTransformExpr, PermuteExpr, ReverseCount, SegmentIteratorExpr, Slot0, Slot1, Slot2,
-        Slot3, Slot4, Slot5, Slot6, Slot7, Slot8, Slot9, Slot10, Slot11, Slot12, TransformExpr,
-        WithTableExpr, ZipExpr,
+        Slot3, Slot4, Slot5, Slot6, Slot7, Slot8, Slot9, Slot10, Slot11, Slot12, StrideCount,
+        TransformExpr, ZipExpr,
     },
     extent::LogicalExtent,
     op::{IndexedBinaryOp, IndexedUnaryOp, UnaryOp},
@@ -90,13 +90,9 @@ impl<T> DeviceSlice<T> {
         self
     }
 
-    /// Returns the host-visible logical item count.
+    /// Returns the number of rows covered by this view.
     pub fn len(&self) -> MIndex {
-        let len = self
-            .extent
-            .host_len()
-            .expect("device-produced length escaped the synchronous API boundary");
-        MIndex::try_from(len).expect("device slice length does not fit in MIndex")
+        MIndex::try_from(self.len).expect("device slice length does not fit in MIndex")
     }
 
     pub fn is_empty(&self) -> bool {
@@ -220,6 +216,14 @@ pub struct Counting {
     pub len: usize,
 }
 
+/// A `u32` arithmetic progression leaf.
+#[derive(Clone, Copy, Debug)]
+pub struct Stride {
+    pub start: u32,
+    pub step: u32,
+    pub len: usize,
+}
+
 /// A descending `u32` index leaf yielding `len - 1 - index`.
 #[derive(Clone, Copy, Debug)]
 pub struct ReverseCounting {
@@ -264,6 +268,12 @@ impl<Values> Reverse<Values> {
 impl Counting {
     pub const fn new(start: u32, len: usize) -> Self {
         Self { start, len }
+    }
+}
+
+impl Stride {
+    pub const fn new(start: u32, step: u32, len: usize) -> Self {
+        Self { start, step, len }
     }
 }
 
@@ -428,27 +438,6 @@ impl<Values, Indices> Permute<Values, Indices> {
     }
 }
 
-/// Appends a shared view of an entire table expression to each context row.
-#[derive(Clone, Copy, Debug)]
-pub struct WithTable<Contexts, Table> {
-    pub(crate) contexts: Contexts,
-    pub(crate) table: Table,
-}
-
-impl<Contexts, Table> WithTable<Contexts, Table> {
-    pub const fn new(contexts: Contexts, table: Table) -> Self {
-        Self { contexts, table }
-    }
-
-    pub const fn contexts(&self) -> &Contexts {
-        &self.contexts
-    }
-
-    pub const fn table(&self) -> &Table {
-        &self.table
-    }
-}
-
 /// A zero-copy logical subrange of a read expression.
 ///
 /// The contained expression has already been sliced according to its own
@@ -492,6 +481,11 @@ where
 }
 
 impl ReadExpression for Counting {
+    type Item = crate::MIndex;
+    type ReadArity = A1;
+}
+
+impl ReadExpression for Stride {
     type Item = crate::MIndex;
     type ReadArity = A1;
 }
@@ -574,26 +568,6 @@ where
     type ReadArity = <Values::ReadArity as AddArity<Indices::ReadArity>>::Output;
 }
 
-impl<Contexts, Table> ReadExpression for WithTable<Contexts, Table>
-where
-    Contexts: ReadExpression,
-    Table: ReadExpression,
-    Contexts::ReadArity: AddArity<Table::ReadArity>,
-    <Contexts::ReadArity as AddArity<Table::ReadArity>>::Output: AddArity<A1>,
-    Contexts::Item: ReadRow,
-    Segment<Table::Item>: ReadRow,
-    <Contexts::Item as ReadLayout>::ReadLeaves: ReadFlatLeaves<Item = Contexts::Item>
-        + Concat<<Segment<Table::Item> as ReadLayout>::ReadLeaves>,
-    <Segment<Table::Item> as ReadLayout>::ReadLeaves: ReadFlatLeaves<Item = Segment<Table::Item>>,
-    <<Contexts::Item as ReadLayout>::ReadLeaves as Concat<
-        <Segment<Table::Item> as ReadLayout>::ReadLeaves,
-    >>::Output: ReadFlatLeaves,
-{
-    type Item = JoinedReadRow<Contexts::Item, Segment<Table::Item>>;
-    type ReadArity =
-        <<Contexts::ReadArity as AddArity<Table::ReadArity>>::Output as AddArity<A1>>::Output;
-}
-
 impl<Values> ReadExpression for Reverse<Values>
 where
     Values: ReadExpression,
@@ -656,6 +630,23 @@ impl SliceExpression for Counting {
             self.start
                 .checked_add(start)
                 .expect("counting slice start overflow"),
+            len,
+        )
+    }
+}
+
+impl SliceExpression for Stride {
+    fn slice_expression(&self, start: usize, len: usize) -> Self {
+        let start = u32::try_from(start).expect("stride slice start exceeds u32");
+        Self::new(
+            self.start
+                .checked_add(
+                    start
+                        .checked_mul(self.step)
+                        .expect("stride slice offset overflow"),
+                )
+                .expect("stride slice start overflow"),
+            self.step,
             len,
         )
     }
@@ -749,20 +740,6 @@ where
         Permute::new(
             self.values.clone(),
             self.indices.slice_expression(start, len),
-        )
-    }
-}
-
-impl<Contexts, Table> SliceExpression for WithTable<Contexts, Table>
-where
-    Contexts: SliceExpression,
-    Table: ReadExpression + Clone,
-    WithTable<Contexts, Table>: ReadExpression,
-{
-    fn slice_expression(&self, start: usize, len: usize) -> Self {
-        Self::new(
-            self.contexts.slice_expression(start, len),
-            self.table.clone(),
         )
     }
 }
@@ -878,6 +855,11 @@ macro_rules! impl_leaf_binding {
             type NextEnv = $counting_next;
         }
 
+        impl<$( $env_ty ),*> BindSlots<$env> for Stride {
+            type Expr = $slot<u32, StrideCount>;
+            type NextEnv = $counting_next;
+        }
+
         impl<$( $env_ty ),*> BindSlots<$env> for ReverseCounting {
             type Expr = $slot<u32, ReverseCount>;
             type NextEnv = $counting_next;
@@ -968,22 +950,6 @@ where
 {
     type Expr = PermuteExpr<Values::Expr, Indices::Expr>;
     type NextEnv = Indices::NextEnv;
-}
-
-impl<Contexts, Table, Env> BindSlots<Env> for WithTable<Contexts, Table>
-where
-    Contexts: ReadExpression + BindSlots<Env>,
-    Table: ReadExpression + BindSlots<Contexts::NextEnv>,
-    Constant<u32>: BindSlots<Table::NextEnv>,
-{
-    type Expr = WithTableExpr<
-        Contexts::Expr,
-        Table::Expr,
-        <Constant<u32> as BindSlots<Table::NextEnv>>::Expr,
-        Contexts::Item,
-        Table::Item,
-    >;
-    type NextEnv = <Constant<u32> as BindSlots<Table::NextEnv>>::NextEnv;
 }
 
 impl<Values, Env> BindSlots<Env> for Reverse<Values>

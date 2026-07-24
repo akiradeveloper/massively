@@ -10,8 +10,8 @@ use massively::{
 
 pub(crate) type Result<T> = std::result::Result<T, massively::Error>;
 
-/// Explicit synchronization boundary used by these host-controlled reference
-/// algorithms when they need an exact-length fixed vector.
+/// Verifies the exact owned length expected by these host-controlled
+/// reference algorithms.
 pub(crate) fn materialize_exact<R, Storage>(
     _exec: &Executor<R>,
     storage: Storage,

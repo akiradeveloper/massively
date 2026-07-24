@@ -43,11 +43,12 @@
 //! # Synchronization model
 //!
 //! Scalar-returning algorithms expose ordinary host values, and
-//! data-dependent sequence algorithms return storage with an exact
-//! host-visible length. Such functions may synchronize once at their return
-//! boundary. Length-preserving operations and operations writing into
+//! data-dependent sequence algorithms return exactly allocated owned storage.
+//! Such functions may synchronize once at their return boundary to determine
+//! the allocation size. Reading a public vector or iterator length never
+//! synchronizes. Length-preserving operations and operations writing into
 //! preallocated fixed storage do not read a scalar back. Device scalars and
-//! logical extents remain private implementation details and are propagated
+//! active-prefix extents remain private scratch metadata and are propagated
 //! between internal GPU stages without intermediate synchronization.
 
 mod api;
@@ -63,7 +64,7 @@ pub(crate) use core::allocation::{RowAlloc, RowStorage};
 pub(crate) use core::arity::{A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13};
 pub(crate) use core::iter::Zip;
 pub(crate) use core::read::{
-    Column, Constant, Counting, Permute, ReadExpression, ReverseCounting, Taken, Transform,
+    Column, Constant, Counting, Permute, ReadExpression, ReverseCounting, Stride, Taken, Transform,
 };
 pub(crate) use core::reduce::Dispatch;
 pub(crate) use core::storage::{S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, S12, StorageLayout};

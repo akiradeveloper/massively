@@ -8,7 +8,7 @@ use cubecl::prelude::*;
 use crate::allocation::CopyStorage;
 use crate::{
     A13, Column, Constant, Counting, Error, Executor, MStorageElement, Permute, ReadExpression,
-    ReverseCounting, RowStorage, S12, StorageLayout, Taken, Transform, Zip,
+    ReverseCounting, RowStorage, S12, StorageLayout, Stride, Taken, Transform, Zip,
     eval::Eval13,
     launch::cube_count_1d,
     op::UnaryOp,
@@ -328,6 +328,27 @@ macro_rules! impl_leaf_staging {
             }
         }
 
+        impl<R, $( $env_ty ),*> StageRead<R, $env> for Stride
+        where
+            R: Runtime,
+            Stride: BindSlots<$env>,
+        {
+            fn logical_len(&self) -> Result<usize, Error> {
+                Ok(self.len)
+            }
+
+            fn stage_at(
+                &self,
+                client: &ComputeClient<R>,
+                _owner: u64,
+                bindings: &mut StagedBindings,
+            ) -> Result<(), Error> {
+                let handle = client.create_from_slice(u32::as_bytes(&[self.start, self.step]));
+                bindings.push(handle, 2, 0);
+                Ok(())
+            }
+        }
+
         impl<R, $( $env_ty ),*> StageRead<R, $env> for ReverseCounting
         where
             R: Runtime,
@@ -446,37 +467,6 @@ where
     ) -> Result<(), Error> {
         self.values().stage_at(client, owner, bindings)?;
         self.offsets().stage_at(client, owner, bindings)
-    }
-}
-
-impl<R, Contexts, Table, Env> StageRead<R, Env> for crate::read::WithTable<Contexts, Table>
-where
-    R: Runtime,
-    Contexts: StageRead<R, Env>,
-    Table: StageRead<R, Contexts::NextEnv>,
-    crate::read::WithTable<Contexts, Table>: BindSlots<Env>,
-{
-    fn logical_len(&self) -> Result<usize, Error> {
-        self.contexts().logical_len()
-    }
-
-    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
-        self.contexts().logical_extent()
-    }
-
-    fn stage_at(
-        &self,
-        client: &ComputeClient<R>,
-        owner: u64,
-        bindings: &mut StagedBindings,
-    ) -> Result<(), Error> {
-        self.contexts().stage_at(client, owner, bindings)?;
-        self.table().stage_at(client, owner, bindings)?;
-
-        let exec = crate::Executor::from_client(client, owner);
-        let table_len = self.table().logical_extent()?.materialize(&exec)?;
-        bindings.push(table_len.handle.clone(), 1, 0);
-        Ok(())
     }
 }
 

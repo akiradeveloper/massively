@@ -150,6 +150,12 @@ impl IterLength for crate::read::Counting {
     }
 }
 
+impl IterLength for crate::read::Stride {
+    fn logical_len(&self) -> Result<usize, Error> {
+        Ok(self.len)
+    }
+}
+
 impl IterLength for crate::read::ReverseCounting {
     fn logical_len(&self) -> Result<usize, Error> {
         Ok(self.len)
@@ -195,19 +201,6 @@ where
             .offsets()
             .logical_extent()?
             .slice(1, self.logical_len()?))
-    }
-}
-
-impl<Contexts, Table> IterLength for crate::read::WithTable<Contexts, Table>
-where
-    Contexts: IterLength,
-{
-    fn logical_len(&self) -> Result<usize, Error> {
-        self.contexts().logical_len()
-    }
-
-    fn logical_extent(&self) -> Result<crate::extent::LogicalExtent, Error> {
-        self.contexts().logical_extent()
     }
 }
 

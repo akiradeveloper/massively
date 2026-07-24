@@ -59,10 +59,9 @@ macro_rules! set_api {
             let left_len = left.len()? as usize;
             let right_len = right.len()? as usize;
             let capacity = ($capacity)(left_len, right_len)?;
-            let mut output = exec.alloc::<Item>(capacity);
+            let output = exec.alloc::<Item>(capacity);
             let len = $into_name(exec, left, right, less, output.slice_mut(..))?;
-            output.set_fixed_len(len.read(exec)?);
-            Ok(output)
+            crate::api::iter::into_exact_prefix::<R, Item>(exec, output, len.read(exec)?)
         }
 
         #[doc = concat!("Caller-provided output variant of [`", stringify!($name), "`].")]

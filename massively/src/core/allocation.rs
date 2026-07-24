@@ -36,7 +36,6 @@ pub trait RowStorage<R: Runtime> {
         + FillOutput<R>;
 
     fn len(&self) -> Result<usize, Error>;
-    fn truncate(&mut self, len: usize);
     fn logical_extent(&self) -> crate::extent::LogicalExtent;
     fn set_logical_extent(&mut self, extent: crate::extent::LogicalExtent);
     fn read(&self) -> Self::Read;
@@ -66,9 +65,6 @@ where
 
     fn len(&self) -> Result<usize, Error> {
         Ok(self.capacity())
-    }
-    fn truncate(&mut self, len: usize) {
-        DeviceVec::truncate_usize(self, len);
     }
     fn logical_extent(&self) -> crate::extent::LogicalExtent {
         DeviceVec::logical_extent(self)
@@ -170,10 +166,6 @@ where
         }
     }
 
-    fn truncate(&mut self, len: usize) {
-        self.0.truncate(len);
-        self.1.truncate(len);
-    }
     fn logical_extent(&self) -> crate::extent::LogicalExtent {
         RowStorage::logical_extent(&self.0)
             .zipped(&RowStorage::logical_extent(&self.1))
@@ -715,10 +707,6 @@ where
         crate::api::iter::logical_len(self.capacity())
     }
 
-    fn truncate(&mut self, len: crate::MIndex) {
-        DeviceVec::truncate(self, len);
-    }
-
     fn logical_extent(&self) -> crate::extent::LogicalExtent {
         DeviceVec::logical_extent(self)
     }
@@ -782,11 +770,6 @@ where
 
     fn capacity(&self) -> Result<crate::MIndex, Error> {
         crate::api::iter::logical_len(RowStorage::len(self)?)
-    }
-
-    fn truncate(&mut self, len: crate::MIndex) {
-        self.0.truncate(len);
-        self.1.truncate(len);
     }
 
     fn logical_extent(&self) -> crate::extent::LogicalExtent {

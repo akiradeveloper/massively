@@ -11,6 +11,7 @@ struct Sum;
 struct LookupTable;
 struct LookupPairTable;
 struct LookupTwoTables;
+struct TableLen;
 
 #[cubecl::cube]
 impl UnaryOp<massively::MIndex> for Double {
@@ -56,6 +57,15 @@ impl UnaryOp<(u32, Segment<u32>, Segment<u32>)> for LookupTwoTables {
     }
 }
 
+#[cubecl::cube]
+impl UnaryOp<(u32, Segment<u32>)> for TableLen {
+    type Output = u32;
+
+    fn apply(input: (u32, Segment<u32>)) -> u32 {
+        input.1.len()
+    }
+}
+
 #[test]
 fn public_lazy_constructors_compose_as_miter() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
@@ -80,6 +90,15 @@ fn public_lazy_constructors_compose_as_miter() {
 }
 
 #[test]
+fn stride_is_a_sliceable_arithmetic_progression() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let input = lazy::stride(2, 3).take(6).slice(1..5).slice(1..3);
+    let output = map(&exec, input, massively::op::Identity).unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![8, 11]);
+}
+
+#[test]
 fn with_table_shares_an_entire_lazy_iterator_with_every_context() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let indices = exec.to_device(&[3_u32, 0, 2, 1]);
@@ -91,6 +110,21 @@ fn with_table_shares_an_entire_lazy_iterator_with_every_context() {
     let output = map(&exec, input, LookupTable).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![40, 10, 30, 20]);
+}
+
+#[test]
+fn with_table_broadcasts_an_empty_segment() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let contexts = exec.to_device(&[1_u32, 2, 3]);
+    let table = exec.to_device::<u32>(&[]);
+    let output = map(
+        &exec,
+        lazy::with_table(contexts.slice(..), table.slice(..)),
+        TableLen,
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![0, 0, 0]);
 }
 
 #[test]
@@ -154,16 +188,14 @@ fn with_table_matches_permuted_single_segment_iterators() {
     let indices = exec.to_device(&[2_u32, 0, 1]);
     let first = exec.to_device(&[1_u32, 2, 3]);
     let second = exec.to_device(&[10_u32, 20, 30]);
-    let table_offsets = exec.to_device(&[0_u32, 3]);
-    let repeated_index = exec.to_device(&[0_u32, 0, 0]);
 
     let first_table = lazy::permute(
-        SegmentIterator::new(first.slice(..), table_offsets.slice(..)),
-        repeated_index.slice(..),
+        SegmentIterator::new(first.slice(..), lazy::stride(0, first.len()).take(2)),
+        lazy::constant(0).take(indices.len()),
     );
     let second_table = lazy::permute(
-        SegmentIterator::new(second.slice(..), table_offsets.slice(..)),
-        repeated_index.slice(..),
+        SegmentIterator::new(second.slice(..), lazy::stride(0, second.len()).take(2)),
+        lazy::constant(0).take(indices.len()),
     );
     let composed = massively::zip3(indices.slice(..), first_table, second_table);
     let nested = lazy::with_table(

@@ -697,8 +697,8 @@ where
             right: value_len as usize,
         });
     }
-    let mut key_output = exec.alloc::<KeyItem>(capacity as usize);
-    let mut value_output = exec.alloc::<ValueItem>(capacity as usize);
+    let key_output = exec.alloc::<KeyItem>(capacity as usize);
+    let value_output = exec.alloc::<ValueItem>(capacity as usize);
     let init = exec.value(init)?;
     let len = reduce_by_key_into(
         exec,
@@ -711,9 +711,10 @@ where
         value_output.slice_mut(..),
     )?;
     let len = len.read(exec)?;
-    key_output.set_fixed_len(len);
-    value_output.set_fixed_len(len);
-    Ok((key_output, value_output))
+    Ok((
+        crate::api::iter::into_exact_prefix::<R, KeyItem>(exec, key_output, len)?,
+        crate::api::iter::into_exact_prefix::<R, ValueItem>(exec, value_output, len)?,
+    ))
 }
 
 /// Reduces by key into caller-provided storage.
@@ -816,10 +817,9 @@ where
             right: value_len as usize,
         });
     }
-    let mut value_output = exec.alloc::<Values::Item>(capacity as usize);
+    let value_output = exec.alloc::<Values::Item>(capacity as usize);
     let len = unique_by_key_into(exec, keys, values, equal, value_output.slice_mut(..))?;
-    value_output.set_fixed_len(len.read(exec)?);
-    Ok(value_output)
+    crate::api::iter::into_exact_prefix::<R, Values::Item>(exec, value_output, len.read(exec)?)
 }
 
 /// Keeps the first value of each unique key run in caller-provided storage.

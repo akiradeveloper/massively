@@ -157,10 +157,9 @@ where
     Stencil: MIter<R, Item = bool>,
 {
     let capacity = input.len()? as usize;
-    let mut output = exec.alloc::<Item>(capacity);
+    let output = exec.alloc::<Item>(capacity);
     let len = copy_where_into(exec, input, stencil, output.slice_mut(..))?;
-    output.set_fixed_len(len.read(exec)?);
-    Ok(output)
+    crate::api::iter::into_exact_prefix::<R, Item>(exec, output, len.read(exec)?)
 }
 
 /// Copies rows whose stencil is true into caller-provided storage.
@@ -215,10 +214,9 @@ where
     Stencil: MIter<R, Item = bool>,
 {
     let capacity = input.len()? as usize;
-    let mut output = exec.alloc::<Item>(capacity);
+    let output = exec.alloc::<Item>(capacity);
     let len = remove_where_into(exec, input, stencil, output.slice_mut(..))?;
-    output.set_fixed_len(len.read(exec)?);
-    Ok(output)
+    crate::api::iter::into_exact_prefix::<R, Item>(exec, output, len.read(exec)?)
 }
 
 /// Copies rows whose stencil is false into caller-provided storage.
@@ -435,4 +433,25 @@ where
         op,
         stencil,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+
+    #[test]
+    fn copy_where_returns_an_exact_physical_allocation() {
+        let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+        let input = exec.to_device(&[10_u32, 20, 30, 40, 50]);
+        let flags = exec.to_device(&[1_u32, 0, 1, 0, 1]);
+        let stencil = crate::lazy::map(flags.slice(..), crate::op::NonZero);
+
+        let output = copy_where(&exec, input.slice(..), stencil).unwrap();
+        let bytes = exec.client().read_one(output.handle.clone()).unwrap();
+
+        assert_eq!(output.len(), 3);
+        assert_eq!(bytes.len(), 3 * core::mem::size_of::<u32>());
+        assert_eq!(exec.to_host(&output).unwrap(), vec![10, 30, 50]);
+    }
 }

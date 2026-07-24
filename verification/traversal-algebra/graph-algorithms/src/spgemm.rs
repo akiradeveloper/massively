@@ -37,7 +37,7 @@ pub fn solve<R: Runtime>(
 
     let capacity =
         graph::traverse(exec, rhs.csr(), lhs.destinations().slice(..), 0)?.edge_count(exec)?;
-    let mut destinations = exec.alloc::<u32>(capacity as usize);
+    let destinations = exec.alloc::<u32>(capacity as usize);
     let offsets = exec.alloc::<u32>(n as usize + 1);
     let mut output_len = 0u32;
 
@@ -84,8 +84,13 @@ pub fn solve<R: Runtime>(
         common::indices(lazy::constant(n).take(1)),
         offsets.slice_mut(..),
     )?;
-    destinations.truncate(output_len);
-    DeviceCsr::from_parts(destinations, offsets)
+    let exact_destinations = exec.alloc::<u32>(output_len as usize);
+    vector::copy(
+        exec,
+        destinations.slice(..output_len),
+        exact_destinations.slice_mut(..),
+    )?;
+    DeviceCsr::from_parts(exact_destinations, offsets)
 }
 
 #[cfg(test)]
