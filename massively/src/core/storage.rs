@@ -224,6 +224,18 @@ pub trait StorageLayout: CubeType + Sized + Send + Sync + 'static {
     fn from_storage_leaves(leaves: Self::StorageLeaves) -> Self;
 }
 
+/// Describes the ordered semantic fields of a read-only row.
+///
+/// Unlike [`StorageLayout`], a read layout may contain values such as
+/// [`crate::seg::Segment`] that exist only while a kernel is being expanded
+/// and therefore cannot own physical storage.
+#[doc(hidden)]
+pub trait ReadLayout: CubeType + Sized + Send + Sync + 'static {
+    type ReadLeaves: CubeType + Send + Sync + 'static;
+    type ReadDeviceLayout: Decompose<Self, Leaves = Self::ReadLeaves>
+        + Recompose<Self, Leaves = Self::ReadLeaves>;
+}
+
 macro_rules! impl_scalar_layout {
     ($($ty:ty),+ $(,)?) => {
         $(
@@ -240,11 +252,44 @@ macro_rules! impl_scalar_layout {
                     leaves.value
                 }
             }
+
+            impl ReadLayout for $ty {
+                type ReadLeaves = Last<Self>;
+                type ReadDeviceLayout = ScalarLayout<Self>;
+            }
         )+
     };
 }
 
 impl_scalar_layout!(bool, usize, u8, u16, u32, u64, i8, i16, i32, i64, f32, f64);
+
+impl<T> ReadLayout for crate::seg::Segment<T>
+where
+    T: CubeType + Send + Sync + 'static,
+{
+    type ReadLeaves = Last<Self>;
+    type ReadDeviceLayout = ScalarLayout<Self>;
+}
+
+/// One indivisible field in a read-only flat row.
+#[doc(hidden)]
+pub trait ReadElement:
+    ReadLayout<ReadLeaves = Last<Self>, ReadDeviceLayout = ScalarLayout<Self>>
+    + Copy
+    + Send
+    + Sync
+    + 'static
+{
+}
+
+impl<T> ReadElement for T where
+    T: ReadLayout<ReadLeaves = Last<Self>, ReadDeviceLayout = ScalarLayout<Self>>
+        + Copy
+        + Send
+        + Sync
+        + 'static
+{
+}
 
 /// A scalar that may participate in a flat logical row.
 ///
@@ -269,6 +314,15 @@ impl<T> FlatElement for T where
         + Sync
         + 'static
 {
+}
+
+impl<Left, Right> ReadLayout for (Left, Right)
+where
+    Left: ReadElement,
+    Right: ReadElement,
+{
+    type ReadLeaves = Leaves2<Left, Right>;
+    type ReadDeviceLayout = PairLayout<ScalarLayout<Left>, ScalarLayout<Right>>;
 }
 
 impl<Left, Right> StorageLayout for (Left, Right)
@@ -323,6 +377,14 @@ macro_rules! impl_flat_tuple_layout {
             fn from_storage_leaves($source: Self::StorageLeaves) -> Self {
                 $rebuild
             }
+        }
+
+        impl<$( $leaf ),+> ReadLayout for ($( $leaf, )+)
+        where
+            $( $leaf: ReadElement, )+
+        {
+            type ReadLeaves = $leaves;
+            type ReadDeviceLayout = FlatTupleLayout<($( $leaf, )+)>;
         }
 
         #[cubecl::cube]
@@ -427,9 +489,22 @@ pub trait FlatLeaves: CubeType {
     type Item: StorageLayout<StorageLeaves = Self>;
 }
 
+/// Maps an ordered semantic leaf list to its unique flat read-only row type.
+#[doc(hidden)]
+pub trait ReadFlatLeaves: CubeType {
+    type Item: ReadLayout<ReadLeaves = Self>;
+}
+
 impl<T> FlatLeaves for Last<T>
 where
     T: FlatElement,
+{
+    type Item = T;
+}
+
+impl<T> ReadFlatLeaves for Last<T>
+where
+    T: ReadElement,
 {
     type Item = T;
 }
@@ -439,6 +514,13 @@ macro_rules! impl_flat_leaves {
         impl<$( $leaf ),+> FlatLeaves for $leaves
         where
             $( $leaf: FlatElement, )+
+        {
+            type Item = ($( $leaf, )+);
+        }
+
+        impl<$( $leaf ),+> ReadFlatLeaves for $leaves
+        where
+            $( $leaf: ReadElement, )+
         {
             type Item = ($( $leaf, )+);
         }
@@ -457,7 +539,18 @@ impl_flat_leaves!(Leaves10<A, B, C, D, E, F, G, H, I, J> => (A, B, C, D, E, F, G
 impl_flat_leaves!(Leaves11<A, B, C, D, E, F, G, H, I, J, K> => (A, B, C, D, E, F, G, H, I, J, K));
 impl_flat_leaves!(Leaves12<A, B, C, D, E, F, G, H, I, J, K, L> => (A, B, C, D, E, F, G, H, I, J, K, L));
 
-/// A scalar or native tuple whose public shape already is flat.
+/// A scalar-like value or native tuple whose read-only shape already is flat.
+#[doc(hidden)]
+pub trait ReadRow: ReadLayout<ReadLeaves: ReadFlatLeaves<Item = Self>> {}
+
+impl<Item> ReadRow for Item
+where
+    Item: ReadLayout,
+    Item::ReadLeaves: ReadFlatLeaves<Item = Item>,
+{
+}
+
+/// A storable scalar or native tuple whose public shape already is flat.
 #[doc(hidden)]
 pub trait FlatRow: StorageLayout<StorageLeaves: FlatLeaves<Item = Self>> {}
 
@@ -473,6 +566,12 @@ where
 pub type JoinedRow<Left, Right> = <<<Left as StorageLayout>::StorageLeaves as Concat<
     <Right as StorageLayout>::StorageLeaves,
 >>::Output as FlatLeaves>::Item;
+
+/// The flat logical row obtained by concatenating two read-only row schemas.
+#[doc(hidden)]
+pub type JoinedReadRow<Left, Right> = <<<Left as ReadLayout>::ReadLeaves as Concat<
+    <Right as ReadLayout>::ReadLeaves,
+>>::Output as ReadFlatLeaves>::Item;
 
 /// Device-side layout marker for one physical leaf.
 #[doc(hidden)]

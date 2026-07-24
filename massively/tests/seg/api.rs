@@ -71,6 +71,7 @@ struct LexicographicalBytes;
 
 struct SliceLength;
 struct PairSliceLength;
+struct SegmentPairLengths;
 struct ContextForEmptySegment;
 struct AddU32Pair;
 struct EmptyContextExpand;
@@ -92,6 +93,15 @@ impl UnaryOp<Segment<(u32, u32)>> for PairSliceLength {
 
     fn apply(value: Segment<(u32, u32)>) -> u32 {
         value.len()
+    }
+}
+
+#[cubecl::cube]
+impl UnaryOp<(Segment<u32>, Segment<u32>)> for SegmentPairLengths {
+    type Output = u32;
+
+    fn apply(value: (Segment<u32>, Segment<u32>)) -> u32 {
+        value.0.len() * 10u32 + value.1.len()
     }
 }
 
@@ -691,4 +701,27 @@ fn segment_iterator_is_an_miter_of_shared_read_only_segments() {
         right_offsets.slice(..),
     );
     assert!(equal(&exec, left, right, SlicesEqual).unwrap());
+}
+
+#[test]
+fn segment_iterators_zip_into_a_flat_read_only_row() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let left_values = exec.to_device(&[1_u32, 2, 3]);
+    let left_offsets = exec.to_device(&[0_u32, 1, 3]);
+    let right_values = exec.to_device(&[10_u32, 20, 30, 40]);
+    let right_offsets = exec.to_device(&[0_u32, 3, 4]);
+
+    let rows = zip2(
+        SegmentIterator::new(left_values.slice(..), left_offsets.slice(..)),
+        SegmentIterator::new(right_values.slice(..), right_offsets.slice(..)),
+    );
+
+    fn assert_item<R: Runtime, Input: MIter<R, Item = (Segment<u32>, Segment<u32>)>>(
+        _input: &Input,
+    ) {
+    }
+    assert_item::<WgpuRuntime, _>(&rows);
+
+    let lengths = vector_map(&exec, rows, SegmentPairLengths).unwrap();
+    assert_eq!(exec.to_host(&lengths).unwrap(), vec![13, 21]);
 }

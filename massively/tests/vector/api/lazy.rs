@@ -1,6 +1,6 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::seg::Segment;
+use massively::seg::{Segment, SegmentIterator};
 use massively::{
     Executor, MIter, MStorage, lazy, op::ReductionOp, op::UnaryOp, vector::gather, vector::map,
     vector::reduce, zip2, zip7,
@@ -48,12 +48,11 @@ impl UnaryOp<(u32, Segment<(u32, u32)>)> for LookupPairTable {
 }
 
 #[cubecl::cube]
-impl UnaryOp<((u32, Segment<u32>), Segment<u32>)> for LookupTwoTables {
+impl UnaryOp<(u32, Segment<u32>, Segment<u32>)> for LookupTwoTables {
     type Output = u32;
 
-    fn apply(input: ((u32, Segment<u32>), Segment<u32>)) -> u32 {
-        let index = input.0.0;
-        input.0.1.at(index) + input.1.at(index)
+    fn apply(input: (u32, Segment<u32>, Segment<u32>)) -> u32 {
+        input.1.at(input.0) + input.2.at(input.0)
     }
 }
 
@@ -138,9 +137,47 @@ fn with_table_can_be_nested_without_materializing_intermediates() {
         second.slice(..),
     );
 
+    fn assert_flat_item<R: Runtime, Input: MIter<R, Item = (u32, Segment<u32>, Segment<u32>)>>(
+        _input: &Input,
+    ) {
+    }
+    assert_flat_item::<WgpuRuntime, _>(&input);
+
     let output = map(&exec, input, LookupTwoTables).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![33, 11, 22]);
+}
+
+#[test]
+fn with_table_matches_permuted_single_segment_iterators() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let indices = exec.to_device(&[2_u32, 0, 1]);
+    let first = exec.to_device(&[1_u32, 2, 3]);
+    let second = exec.to_device(&[10_u32, 20, 30]);
+    let table_offsets = exec.to_device(&[0_u32, 3]);
+    let repeated_index = exec.to_device(&[0_u32, 0, 0]);
+
+    let first_table = lazy::permute(
+        SegmentIterator::new(first.slice(..), table_offsets.slice(..)),
+        repeated_index.slice(..),
+    );
+    let second_table = lazy::permute(
+        SegmentIterator::new(second.slice(..), table_offsets.slice(..)),
+        repeated_index.slice(..),
+    );
+    let composed = massively::zip3(indices.slice(..), first_table, second_table);
+    let nested = lazy::with_table(
+        lazy::with_table(indices.slice(..), first.slice(..)),
+        second.slice(..),
+    );
+
+    let composed_output = map(&exec, composed, LookupTwoTables).unwrap();
+    let nested_output = map(&exec, nested, LookupTwoTables).unwrap();
+
+    assert_eq!(
+        exec.to_host(&composed_output).unwrap(),
+        exec.to_host(&nested_output).unwrap()
+    );
 }
 
 #[test]

@@ -7,6 +7,7 @@ pub trait MStorageElement:
     CubePrimitive
     + CubeElement
     + crate::StorageLayout<StorageArity = crate::S1, StorageLeaves = crate::storage::Last<Self>>
+    + crate::storage::ReadElement
     + Copy
     + Send
     + Sync

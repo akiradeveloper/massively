@@ -5,12 +5,12 @@ use cubecl::prelude::*;
 use std::rc::Rc;
 
 use crate::{
-    StorageLayout,
     op::{IndexedBinaryOp, IndexedUnaryOp, UnaryOp},
     reduce::ReductionOp,
     seg::{Segment, SegmentExpand, SegmentReader},
     storage::{
-        Concat, ConcatExpand, Decompose, FlatLeaves, FlatRow, JoinedRow, Recompose, SelectLeaves,
+        Concat, ConcatExpand, Decompose, JoinedReadRow, ReadFlatLeaves, ReadLayout, ReadRow,
+        Recompose, SelectLeaves,
     },
 };
 
@@ -47,10 +47,10 @@ pub struct SegmentIteratorExpr<ValuesExpr, OffsetsExpr> {
     _marker: PhantomData<fn() -> (ValuesExpr, OffsetsExpr)>,
 }
 
-/// Device expression pairing each context item with one shared table view.
+/// Device expression appending one shared table view to each context row.
 #[doc(hidden)]
-pub struct WithTableExpr<ContextsExpr, TableExpr, TableLenExpr> {
-    _marker: PhantomData<fn() -> (ContextsExpr, TableExpr, TableLenExpr)>,
+pub struct WithTableExpr<ContextsExpr, TableExpr, TableLenExpr, Context, Item> {
+    _marker: PhantomData<fn() -> (ContextsExpr, TableExpr, TableLenExpr, Context, Item)>,
 }
 
 impl<ValuesExpr, OffsetsExpr, Item> DeviceExpr<Segment<Item>>
@@ -62,11 +62,19 @@ where
 {
 }
 
-impl<ContextsExpr, TableExpr, TableLenExpr, Context, Item> DeviceExpr<(Context, Segment<Item>)>
-    for WithTableExpr<ContextsExpr, TableExpr, TableLenExpr>
+impl<ContextsExpr, TableExpr, TableLenExpr, Context, Item>
+    DeviceExpr<JoinedReadRow<Context, Segment<Item>>>
+    for WithTableExpr<ContextsExpr, TableExpr, TableLenExpr, Context, Item>
 where
-    Context: CubeType + 'static,
-    Item: CubeType + 'static,
+    Context: ReadRow + 'static,
+    Item: CubeType + Send + Sync + 'static,
+    Segment<Item>: ReadRow + CubeType<ExpandType = SegmentExpand<Item>>,
+    <Context as ReadLayout>::ReadLeaves:
+        ReadFlatLeaves<Item = Context> + Concat<<Segment<Item> as ReadLayout>::ReadLeaves>,
+    <Segment<Item> as ReadLayout>::ReadLeaves: ReadFlatLeaves<Item = Segment<Item>>,
+    <<Context as ReadLayout>::ReadLeaves as Concat<
+        <Segment<Item> as ReadLayout>::ReadLeaves,
+    >>::Output: ReadFlatLeaves,
     ContextsExpr: DeviceExpr<Context>,
     TableExpr: DeviceExpr<Item>,
     TableLenExpr: DeviceExpr<u32>,
@@ -129,14 +137,14 @@ pub struct ZipExpr<Left, Right, LeftItem, RightItem> {
     _marker: PhantomData<fn() -> (Left, Right, LeftItem, RightItem)>,
 }
 
-impl<Left, Right, LeftItem, RightItem> DeviceExpr<JoinedRow<LeftItem, RightItem>>
+impl<Left, Right, LeftItem, RightItem> DeviceExpr<JoinedReadRow<LeftItem, RightItem>>
     for ZipExpr<Left, Right, LeftItem, RightItem>
 where
-    LeftItem: FlatRow + 'static,
-    RightItem: FlatRow + 'static,
-    LeftItem::StorageLeaves: FlatLeaves<Item = LeftItem> + Concat<RightItem::StorageLeaves>,
-    RightItem::StorageLeaves: FlatLeaves<Item = RightItem>,
-    <LeftItem::StorageLeaves as Concat<RightItem::StorageLeaves>>::Output: FlatLeaves,
+    LeftItem: ReadRow + 'static,
+    RightItem: ReadRow + 'static,
+    LeftItem::ReadLeaves: ReadFlatLeaves<Item = LeftItem> + Concat<RightItem::ReadLeaves>,
+    RightItem::ReadLeaves: ReadFlatLeaves<Item = RightItem>,
+    <LeftItem::ReadLeaves as Concat<RightItem::ReadLeaves>>::Output: ReadFlatLeaves,
     Left: DeviceExpr<LeftItem>,
     Right: DeviceExpr<RightItem>,
 {
@@ -231,15 +239,15 @@ macro_rules! define_eval {
 
         #[cubecl::cube]
         impl<LeftItem, RightItem, LeftExpr, RightExpr, $( $leaf ),+>
-            $trait_name<JoinedRow<LeftItem, RightItem>, $( $leaf ),+>
+            $trait_name<JoinedReadRow<LeftItem, RightItem>, $( $leaf ),+>
             for ZipExpr<LeftExpr, RightExpr, LeftItem, RightItem>
         where
-            LeftItem: FlatRow + 'static,
-            RightItem: FlatRow + 'static,
-            LeftItem::StorageLeaves:
-                FlatLeaves<Item = LeftItem> + Concat<RightItem::StorageLeaves>,
-            RightItem::StorageLeaves: FlatLeaves<Item = RightItem>,
-            <LeftItem::StorageLeaves as Concat<RightItem::StorageLeaves>>::Output: FlatLeaves,
+            LeftItem: ReadRow + 'static,
+            RightItem: ReadRow + 'static,
+            LeftItem::ReadLeaves:
+                ReadFlatLeaves<Item = LeftItem> + Concat<RightItem::ReadLeaves>,
+            RightItem::ReadLeaves: ReadFlatLeaves<Item = RightItem>,
+            <LeftItem::ReadLeaves as Concat<RightItem::ReadLeaves>>::Output: ReadFlatLeaves,
             $( $leaf: CubePrimitive, )+
             LeftExpr: $trait_name<LeftItem, $( $leaf ),+>,
             RightExpr: $trait_name<RightItem, $( $leaf ),+>,
@@ -248,15 +256,15 @@ macro_rules! define_eval {
                 $( $slot: &[$leaf], )+
                 slot_offsets: &[u32],
                 index: usize,
-            ) -> JoinedRow<LeftItem, RightItem> {
-                let left = LeftItem::DeviceLayout::decompose(
+            ) -> JoinedReadRow<LeftItem, RightItem> {
+                let left = LeftItem::ReadDeviceLayout::decompose(
                     LeftExpr::$method($( $slot, )+ slot_offsets, index),
                 );
-                let right = RightItem::DeviceLayout::decompose(
+                let right = RightItem::ReadDeviceLayout::decompose(
                     RightExpr::$method($( $slot, )+ slot_offsets, index),
                 );
-                <<JoinedRow<LeftItem, RightItem> as StorageLayout>::DeviceLayout as Recompose<
-                    JoinedRow<LeftItem, RightItem>,
+                <<JoinedReadRow<LeftItem, RightItem> as ReadLayout>::ReadDeviceLayout as Recompose<
+                    JoinedReadRow<LeftItem, RightItem>,
                 >>::recompose(left.concat(right))
             }
         }
@@ -478,11 +486,18 @@ impl_segment_iterator_eval!(Eval13, eval13, __expand_eval13; L0: slot0, L1: slot
 macro_rules! impl_with_table_eval {
     ($trait_name:ident, $method:ident, $expand_method:ident; $( $leaf:ident : $slot:ident ),+ $(,)?) => {
         impl<Context, Item, ContextsExpr, TableExpr, TableLenExpr, $( $leaf ),+>
-            $trait_name<(Context, Segment<Item>), $( $leaf ),+>
-            for WithTableExpr<ContextsExpr, TableExpr, TableLenExpr>
+            $trait_name<JoinedReadRow<Context, Segment<Item>>, $( $leaf ),+>
+            for WithTableExpr<ContextsExpr, TableExpr, TableLenExpr, Context, Item>
         where
-            Context: CubeType + Send + Sync + 'static,
+            Context: ReadRow + 'static,
             Item: CubeType + Send + Sync + 'static,
+            Segment<Item>: ReadRow + CubeType<ExpandType = SegmentExpand<Item>>,
+            <Context as ReadLayout>::ReadLeaves:
+                ReadFlatLeaves<Item = Context> + Concat<<Segment<Item> as ReadLayout>::ReadLeaves>,
+            <Segment<Item> as ReadLayout>::ReadLeaves: ReadFlatLeaves<Item = Segment<Item>>,
+            <<Context as ReadLayout>::ReadLeaves as Concat<
+                <Segment<Item> as ReadLayout>::ReadLeaves,
+            >>::Output: ReadFlatLeaves,
             $( $leaf: CubePrimitive + 'static, )+
             ContextsExpr: $trait_name<Context, $( $leaf ),+>,
             TableExpr: $trait_name<Item, $( $leaf ),+>,
@@ -492,7 +507,7 @@ macro_rules! impl_with_table_eval {
                 $( $slot: &[$leaf], )+
                 _slot_offsets: &[u32],
                 _index: usize,
-            ) -> (Context, Segment<Item>) {
+            ) -> JoinedReadRow<Context, Segment<Item>> {
                 let _ = ($( $slot, )+);
                 unreachable!("table views are constructed while CubeCL expands a kernel")
             }
@@ -502,7 +517,7 @@ macro_rules! impl_with_table_eval {
                 $( $slot: &<[$leaf] as CubeType>::ExpandType, )+
                 slot_offsets: &<[u32] as CubeType>::ExpandType,
                 index: <usize as CubeType>::ExpandType,
-            ) -> <(Context, Segment<Item>) as CubeType>::ExpandType {
+            ) -> <JoinedReadRow<Context, Segment<Item>> as CubeType>::ExpandType {
                 let context = ContextsExpr::$expand_method(
                     scope,
                     $( $slot, )+
@@ -530,7 +545,17 @@ macro_rules! impl_with_table_eval {
                 });
                 let table = SegmentExpand::from_bounds(scope, reader, start, end);
 
-                (context, table)
+                let context =
+                    <Context as ReadLayout>::ReadDeviceLayout::__expand_decompose(scope, context);
+                let table = <Segment<Item> as ReadLayout>::ReadDeviceLayout::__expand_decompose(
+                    scope,
+                    table,
+                );
+                let leaves = context.__expand_concat_method(scope, table);
+                <JoinedReadRow<Context, Segment<Item>> as ReadLayout>::ReadDeviceLayout::__expand_recompose(
+                    scope,
+                    leaves,
+                )
             }
         }
     };

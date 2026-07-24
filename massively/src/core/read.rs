@@ -20,7 +20,7 @@ use crate::{
     op::{IndexedBinaryOp, IndexedUnaryOp, UnaryOp},
     reduce::ReductionOp,
     seg::Segment,
-    storage::{Concat, FlatLeaves, FlatRow, JoinedRow, StorageLayout},
+    storage::{Concat, JoinedReadRow, ReadFlatLeaves, ReadLayout, ReadRow, StorageLayout},
     value::MStorageElement,
 };
 
@@ -428,7 +428,7 @@ impl<Values, Indices> Permute<Values, Indices> {
     }
 }
 
-/// Pairs each context item with a shared view of an entire table expression.
+/// Appends a shared view of an entire table expression to each context row.
 #[derive(Clone, Copy, Debug)]
 pub struct WithTable<Contexts, Table> {
     pub(crate) contexts: Contexts,
@@ -514,16 +514,16 @@ where
     Left: ReadExpression,
     Right: ReadExpression,
     Left::ReadArity: AddArity<Right::ReadArity>,
-    Left::Item: FlatRow,
-    Right::Item: FlatRow,
-    <Left::Item as StorageLayout>::StorageLeaves:
-        FlatLeaves<Item = Left::Item> + Concat<<Right::Item as StorageLayout>::StorageLeaves>,
-    <Right::Item as StorageLayout>::StorageLeaves: FlatLeaves<Item = Right::Item>,
-    <<Left::Item as StorageLayout>::StorageLeaves as Concat<
-        <Right::Item as StorageLayout>::StorageLeaves,
-    >>::Output: FlatLeaves,
+    Left::Item: ReadRow,
+    Right::Item: ReadRow,
+    <Left::Item as ReadLayout>::ReadLeaves:
+        ReadFlatLeaves<Item = Left::Item> + Concat<<Right::Item as ReadLayout>::ReadLeaves>,
+    <Right::Item as ReadLayout>::ReadLeaves: ReadFlatLeaves<Item = Right::Item>,
+    <<Left::Item as ReadLayout>::ReadLeaves as Concat<
+        <Right::Item as ReadLayout>::ReadLeaves,
+    >>::Output: ReadFlatLeaves,
 {
-    type Item = JoinedRow<Left::Item, Right::Item>;
+    type Item = JoinedReadRow<Left::Item, Right::Item>;
     type ReadArity = <Left::ReadArity as AddArity<Right::ReadArity>>::Output;
 }
 
@@ -580,8 +580,16 @@ where
     Table: ReadExpression,
     Contexts::ReadArity: AddArity<Table::ReadArity>,
     <Contexts::ReadArity as AddArity<Table::ReadArity>>::Output: AddArity<A1>,
+    Contexts::Item: ReadRow,
+    Segment<Table::Item>: ReadRow,
+    <Contexts::Item as ReadLayout>::ReadLeaves: ReadFlatLeaves<Item = Contexts::Item>
+        + Concat<<Segment<Table::Item> as ReadLayout>::ReadLeaves>,
+    <Segment<Table::Item> as ReadLayout>::ReadLeaves: ReadFlatLeaves<Item = Segment<Table::Item>>,
+    <<Contexts::Item as ReadLayout>::ReadLeaves as Concat<
+        <Segment<Table::Item> as ReadLayout>::ReadLeaves,
+    >>::Output: ReadFlatLeaves,
 {
-    type Item = (Contexts::Item, Segment<Table::Item>);
+    type Item = JoinedReadRow<Contexts::Item, Segment<Table::Item>>;
     type ReadArity =
         <<Contexts::ReadArity as AddArity<Table::ReadArity>>::Output as AddArity<A1>>::Output;
 }
@@ -972,6 +980,8 @@ where
         Contexts::Expr,
         Table::Expr,
         <Constant<u32> as BindSlots<Table::NextEnv>>::Expr,
+        Contexts::Item,
+        Table::Item,
     >;
     type NextEnv = <Constant<u32> as BindSlots<Table::NextEnv>>::NextEnv;
 }

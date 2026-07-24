@@ -15,7 +15,7 @@ use crate::{core::facade as private, read::SliceExpression};
 
 pub use crate::core::read::Taken;
 
-/// Logical adapter pairing every context item with one shared table view.
+/// Logical adapter appending one shared table view to every context row.
 #[derive(Clone, Copy, Debug)]
 pub struct WithTable<Contexts, Table> {
     contexts: Contexts,
@@ -49,11 +49,11 @@ where
     R: Runtime,
     Contexts: MIter<R>,
     Table: MIter<R>,
-    crate::read::WithTable<Contexts::Read, Table::Read>: private::KernelInput<R, Item = (Contexts::Item, crate::seg::Segment<Table::Item>)>
-        + private::IterLength
-        + SliceExpression,
+    crate::read::WithTable<Contexts::Read, Table::Read>:
+        private::KernelInput<R> + private::IterLength + SliceExpression,
 {
-    type Item = (Contexts::Item, crate::seg::Segment<Table::Item>);
+    type Item =
+        <crate::read::WithTable<Contexts::Read, Table::Read> as crate::read::ReadExpression>::Item;
     type Read = crate::read::WithTable<Contexts::Read, Table::Read>;
     type Slice = crate::read::Slice<R, Self::Read>;
 
@@ -335,11 +335,12 @@ pub fn counting(start: MIndex) -> Counting {
     Counting { start }
 }
 
-/// Pairs every `contexts` item with a shared view of the entire `table`.
+/// Appends a shared view of the entire `table` to every `contexts` item.
 ///
 /// The result has the same length as `contexts`. The table is not copied per
 /// item: the consuming kernel receives a [`crate::seg::Segment`] backed
-/// directly by the table expression.
+/// directly by the table expression. Flat context tuples stay flat, so calling
+/// this twice produces `(T, Segment<A>, Segment<B>)`.
 ///
 /// # Examples
 ///
